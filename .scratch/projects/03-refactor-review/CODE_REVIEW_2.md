@@ -720,6 +720,169 @@ This eliminates the awkward connection/lock passing in `__main__.py` and the `Ev
 
 ---
 
+Here are additional ideas beyond R18-R23, focused specifically on reducing the number of concepts a developer needs to hold in their head:                                                 
+                                                    
+---                                                                                                                                                                                        
+#### R24. Collapse the two event dispatch systems into one                                                                                                                                      
+                                                                                                                                                                                        
+Right now there are two parallel event routing mechanisms that a developer must understand:                                                                                                
+                                                                                                                                                                                    
+1. EventBus — in-memory, immediate, type-based (bus.subscribe(EventType, handler))
+2. SubscriptionRegistry + trigger queue — persisted, pattern-matched, deferred (SubscriptionPattern → asyncio.Queue → runner)
+
+The EventBus serves the web SSE stream. The SubscriptionRegistry serves agent triggers. But they're both doing the same conceptual job: "when this event happens, notify these listeners."
+The fact that one is in-memory and one is persisted is an implementation detail, not a conceptual distinction.
+
+A unified system would have one subscription model where each subscriber declares:
+- What events to match (pattern)
+- How to deliver (immediate callback vs. queued trigger vs. SSE push)
+- Whether to persist the subscription across restarts
+
+This eliminates a whole layer of the mental model. Currently EventStore.append() does three things: persist to SQLite, emit to EventBus, and fan-out to trigger queue. That's three
+dispatch paths from a single entry point.
+
+---
+#### R25. Replace the bundle/workspace provisioning pipeline with a tool registry
+
+The current tool delivery path is complex:
+
+bundle dirs on disk → workspace_service.provision_bundle() copies files into per-agent cairn workspace
+→ runner calls discover_tools() which reads from workspace → each .pym is written to a temp dir
+→ grail.load() parses it → GrailTool wraps it
+
+This means: to understand how an agent gets its tools, you need to understand bundles, workspace provisioning, cairn, grail loading, AND temp directory lifecycle. Five concepts for "agent
+has tools."
+
+Alternative: a ToolRegistry that loads each tool script once at startup (or lazily), caches the parsed GrailScript, and hands out GrailTool instances per-turn with the appropriate
+externals injected. Bundles become a simple mapping of bundle_name → list[tool_name] in config, not a filesystem layout that gets copied around.
+
+This removes cairn workspaces as a tool delivery mechanism entirely. Workspaces would only be used for agent-specific data (scratch files, state), which is their natural purpose.
+
+---
+#### R26. Make the runner a pipeline of composable stages
+
+_execute_turn is a 70-line monolithic function that does 10 distinct things sequentially: resolve node, set status, build workspace, read bundle config, build externals, discover tools,
+build prompt, create kernel, run kernel, emit completion event. If any step changes, you need to understand the whole function.
+
+A stage pipeline would make each step explicit and independently testable:
+
+stages = [
+ResolveNode(),
+SetRunningStatus(),
+LoadBundleConfig(),
+BuildAgentContext(),     # replaces _build_externals
+DiscoverTools(),
+BuildPrompt(),
+ExecuteKernel(),
+EmitCompletionEvent(),
+TransitionStatus(),      # respects state machine
+]
+
+async def execute_turn(trigger, stages):
+ctx = TurnContext(trigger)
+for stage in stages:
+    ctx = await stage.run(ctx)
+
+Each stage has a single responsibility, can be tested in isolation, and the overall flow is visible from the stage list. Adding behavior (logging, metrics, rate limiting) means adding a
+stage, not modifying the monolith.
+
+---
+#### R27. Eliminate the Trigger → _execute_turn indirection by making agents self-scheduling actors
+
+Currently the flow is: event → subscription match → trigger queue → runner dequeues → runner creates asyncio.Task → _execute_turn. The runner is a central coordinator managing all agents.
+
+In an actor model, each agent would be a lightweight actor that:
+- Has its own mailbox (small asyncio.Queue)
+- Manages its own cooldown, depth tracking, and status
+- Processes messages sequentially (no concurrent turns for the same agent)
+
+The runner becomes a thin dispatcher that just routes events to agent mailboxes. This eliminates the global _cooldowns and _depths dicts (each actor owns its own), eliminates the
+fire-and-forget create_task problem, and makes the per-agent lifecycle self-contained and testable.
+
+class AgentActor:
+def __init__(self, node_id: str, ...):
+    self._mailbox: asyncio.Queue[Event] = asyncio.Queue()
+    self._last_triggered: float = 0
+    self._depth: int = 0
+
+async def run(self):
+    while True:
+        event = await self._mailbox.get()
+        if not self._should_trigger(event):
+            continue
+        await self._execute_turn(event)
+
+---
+#### R28. Replace CodeNode dict serialization with a proper repository pattern
+
+Currently, CodeNode has to_row()/from_row() methods that hand-roll JSON serialization. NodeStore does raw SQL with manual column mapping. EventStore does the same for events. Every query
+method repeats the lock → thread → SQL → deserialize → commit pattern.
+
+A repository pattern with a proper ORM-lite layer (or even just Pydantic's own serialization + a thin query builder) would mean:
+
+- Model classes define their schema once
+- The repository handles all persistence concerns
+- No hand-rolled json.dumps/json.loads for list fields
+- No to_row/from_row — the repository maps between domain and storage representations
+
+This pairs naturally with R2 (async SQLite layer) and R23 (unified storage), but is a distinct concept: separating domain logic from persistence mechanics.
+
+---
+#### R29. Make configuration hierarchical with per-node-type overrides
+
+Currently Config is flat — one set of values for the entire runtime. But different node types need different behavior: Python functions might want different bundles, max_turns, models,
+and cooldowns than Markdown sections or TOML tables. This leads to config being scattered across Config, bundle.yaml, and hardcoded defaults in the runner.
+
+A hierarchical config would let you express:
+
+defaults:
+model: gpt-4
+max_turns: 4
+
+node_types:
+function:
+bundle: code-agent
+max_turns: 8
+section:
+bundle: docs-agent
+model: gpt-3.5-turbo
+max_turns: 2
+
+This eliminates the bundle.yaml filesystem convention as the primary way to configure agent behavior, and makes the relationship between node types and their capabilities explicit in one
+place.
+
+---
+#### R30. Consider dropping the graph edge system entirely
+
+The edges table and Edge dataclass exist, but:
+- Discovery doesn't populate edges (no call-graph analysis)
+- caller_ids/callee_ids on CodeNode are always empty lists for new nodes
+- The only edges are created via the runner externals, which are barely used
+- The web UI fetches edges per-node but typically gets nothing
+
+The edge system adds a table, a dataclass, N+1 API calls in the frontend, and mental model overhead — all for a feature that doesn't currently work. Either invest in making it real
+(static call-graph analysis during discovery) or remove it entirely and add it back when there's actual data to populate it. Dead abstractions are worse than missing abstractions.
+
+---
+#### R31. Split the project into two packages: remora-core and remora
+
+The core pipeline (discovery → projection → events → storage) has no dependency on LLM kernels, Grail tools, web servers, or LSP. The runtime layer (runner, web, LSP) depends on all the
+external services.
+
+Splitting would:
+- Make the dependency tree explicit (core has minimal deps, runtime adds structured-agents/grail/starlette/pygls)
+- Allow using discovery+graph without the agent runtime (useful for tooling, analysis, IDE integrations)
+- Force clean interfaces between the layers (no reaching into internals)
+- Reduce the "all or nothing" mental model — you can understand remora-core without knowing anything about LLMs or web servers
+
+---
+These all target the same goal: reducing the number of concepts you need to hold simultaneously to understand any given behavior in the system. The current codebase has a lot of "to
+understand X, you also need to understand Y, Z, and W" chains. Each of these ideas tries to break one of those chains.
+
+
+
+---
+
 ## Summary: Priority Matrix
 
 | Priority | Fix | Effort | Impact |
