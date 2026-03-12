@@ -130,9 +130,15 @@ def test_discover_empty_dir(tmp_path: Path) -> None:
     assert nodes == []
 
 
-def test_language_not_in_registry_is_skipped(tmp_path: Path) -> None:
+def test_configured_language_not_in_registry_raises(tmp_path: Path) -> None:
     write_file(tmp_path / "x.foo", "hello")
-    nodes = discover([tmp_path], language_map={".foo": "unknown"})
+    with pytest.raises(ValueError, match="unknown"):
+        discover([tmp_path], language_map={".foo": "unknown"})
+
+
+def test_unconfigured_extension_is_skipped(tmp_path: Path) -> None:
+    write_file(tmp_path / "x.foo", "hello")
+    nodes = discover([tmp_path], language_map={".py": "python"})
     assert nodes == []
 
 

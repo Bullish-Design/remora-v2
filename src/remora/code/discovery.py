@@ -59,13 +59,13 @@ def discover(
     for source_file in walk_source_files(paths, ignore_patterns):
         ext = source_file.suffix.lower()
         language_name = effective_language_map.get(ext)
-        plugin = None
-        if language_name is not None:
-            plugin = language_registry.get_by_name(language_name)
-        if plugin is None:
-            plugin = language_registry.get_by_extension(ext)
-        if plugin is None:
+        if language_name is None:
             continue
+        plugin = language_registry.get_by_name(language_name)
+        if plugin is None:
+            raise ValueError(
+                f"Configured language '{language_name}' not found for extension '{ext}'"
+            )
         if requested_languages is not None and plugin.name not in requested_languages:
             continue
         nodes.extend(_parse_file(source_file, plugin, effective_query_paths))
