@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 from structured_agents import Message
 from structured_agents.types import ToolResult, ToolSchema
 
 from remora.code.reconciler import FileReconciler
+from remora.core.actor import Outbox, Trigger
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import (
@@ -19,7 +19,7 @@ from remora.core.events import (
     HumanChatEvent,
 )
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.runner import AgentRunner, Trigger
+from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
 from tests.factories import write_file
 
@@ -89,12 +89,6 @@ async def _setup_runtime(tmp_path: Path):
     )
     code_nodes = await reconciler.full_scan()
     runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
-    routed: list[tuple[str, Any]] = []
-
-    def capture_route(agent_id: str, event: Any) -> None:
-        routed.append((agent_id, event))
-
-    event_store.dispatcher.router = capture_route
 
     return {
         "source_path": source_path,
@@ -108,7 +102,6 @@ async def _setup_runtime(tmp_path: Path):
         "reconciler": reconciler,
         "nodes": code_nodes,
         "config": config,
-        "routed": routed,
     }
 
 
@@ -121,12 +114,8 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     assert await workspace.exists("_bundle/bundle.yaml")
     assert await workspace.exists("_bundle/tools/rewrite_self.pym")
 
-    await runtime["event_store"].append(
-        HumanChatEvent(to_agent=node.node_id, message="please rewrite")
-    )
-    assert len(runtime["routed"]) >= 1
-    trigger_node_id, trigger_event = runtime["routed"][-1]
-    assert trigger_node_id == node.node_id
+    trigger_event = HumanChatEvent(to_agent=node.node_id, message="please rewrite")
+    await runtime["event_store"].append(trigger_event)
 
     class MockKernel:
         def __init__(self, tools):
@@ -150,7 +139,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
             return None
 
     monkeypatch.setattr(
-        "remora.core.runner.create_kernel",
+        "remora.core.actor.create_kernel",
         lambda **kwargs: MockKernel(kwargs.get("tools", [])),
     )
     class FakeRewriteTool:
@@ -181,13 +170,20 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     async def fake_discover_tools(_workspace, externals):  # noqa: ANN001, ANN202
         return [FakeRewriteTool(externals)]
 
-    monkeypatch.setattr("remora.core.runner.discover_tools", fake_discover_tools)
-    await runtime["runner"]._execute_turn(
+    monkeypatch.setattr("remora.core.actor.discover_tools", fake_discover_tools)
+    actor = runtime["runner"].get_or_create_actor(node.node_id)
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=runtime["event_store"],
+        correlation_id="corr-e2e",
+    )
+    await actor._execute_turn(
         Trigger(
             node_id=node.node_id,
             correlation_id="corr-e2e",
             event=trigger_event,
-        )
+        ),
+        outbox,
     )
 
     updated_source = runtime["source_path"].read_text(encoding="utf-8")
@@ -197,6 +193,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     events_after = await runtime["event_store"].get_events(limit=50)
     assert any(event["event_type"] == "ContentChangedEvent" for event in events_after)
 
+    await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
     runtime["db"].close()
 
@@ -208,14 +205,15 @@ async def test_e2e_agent_message_chain(tmp_path: Path) -> None:
     source = nodes[0].node_id
     target = nodes[1].node_id
 
+    actor = runtime["runner"].get_or_create_actor(target)
+    await actor.stop()
     await runtime["event_store"].append(
         AgentMessageEvent(from_agent=source, to_agent=target, content="hello")
     )
-    assert len(runtime["routed"]) >= 1
-    routed_agent_id, routed_event = runtime["routed"][-1]
-    assert routed_agent_id == target
-    assert routed_event.event_type == "AgentMessageEvent"
+    assert target in runtime["runner"].actors
+    assert actor.inbox.qsize() >= 1
 
+    await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
     runtime["db"].close()
 
@@ -225,15 +223,14 @@ async def test_e2e_file_change_triggers(tmp_path: Path) -> None:
     runtime = await _setup_runtime(tmp_path)
     node = runtime["nodes"][0]
 
+    actor = runtime["runner"].get_or_create_actor(node.node_id)
+    await actor.stop()
     await runtime["event_store"].append(
         ContentChangedEvent(path=node.file_path, change_type="modified")
     )
-    matching = [
-        (agent_id, event)
-        for agent_id, event in runtime["routed"]
-        if agent_id == node.node_id and event.event_type == "ContentChangedEvent"
-    ]
-    assert len(matching) >= 1
+    assert node.node_id in runtime["runner"].actors
+    assert actor.inbox.qsize() >= 1
 
+    await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
     runtime["db"].close()

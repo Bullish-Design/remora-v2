@@ -72,7 +72,7 @@ class RuntimeServices:
         if self.reconciler is not None:
             self.reconciler.stop()
         if self.runner is not None:
-            self.runner.stop()
+            await self.runner.stop_and_wait()
         await self.workspace_service.close()
         self.db.close()
 
