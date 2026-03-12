@@ -26,6 +26,7 @@ from remora.core.events import (
     Event,
     EventStore,
     SubscriptionPattern,
+    TriggerDispatcher,
 )
 from remora.core.grail import discover_tools
 from remora.core.graph import NodeStore
@@ -54,8 +55,10 @@ class AgentRunner:
         node_store: NodeStore,
         workspace_service: CairnWorkspaceService,
         config: Config,
+        dispatcher: TriggerDispatcher | None = None,
     ):
         self._event_store = event_store
+        self._dispatcher = dispatcher or event_store.dispatcher
         self._node_store = node_store
         self._workspace_service = workspace_service
         self._config = config
@@ -68,7 +71,7 @@ class AgentRunner:
         """Consume triggers from EventStore until stopped."""
         self._running = True
         try:
-            async for node_id, event in self._event_store.get_triggers():
+            async for node_id, event in self._dispatcher.get_triggers():
                 if not self._running:
                     break
                 correlation_id = event.correlation_id or str(uuid.uuid4())

@@ -15,7 +15,7 @@ from remora.code.discovery import discover as discover_nodes
 from remora.code.reconciler import FileReconciler
 from remora.core.config import load_config
 from remora.core.db import AsyncDB
-from remora.core.events import EventBus, EventStore, SubscriptionRegistry
+from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.graph import NodeStore
 from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
@@ -98,11 +98,11 @@ async def _start(
     await node_store.create_tables()
 
     subscriptions = SubscriptionRegistry(db)
-    await subscriptions.create_tables()
+    dispatcher = TriggerDispatcher(subscriptions)
     event_store = EventStore(
         db=db,
-        subscriptions=subscriptions,
         event_bus=event_bus,
+        dispatcher=dispatcher,
     )
     await event_store.create_tables()
 

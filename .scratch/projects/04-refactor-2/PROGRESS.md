@@ -9,8 +9,8 @@
 - [x] Phase 0 testing
 - [x] Phase 1 implementation
 - [x] Phase 1 testing
-- [ ] Phase 2 implementation
-- [ ] Phase 2 testing
+- [x] Phase 2 implementation
+- [x] Phase 2 testing
 - [ ] Phase 3 implementation
 - [ ] Phase 3 testing
 - [ ] Phase 4 implementation
@@ -37,3 +37,5 @@
 - Phase 0 tests passing: `tests/unit/test_runner.py tests/unit/test_runner_externals.py tests/unit/test_web_server.py tests/unit/test_reconciler.py`.
 - Phase 1 complete: introduced `AsyncDB`, migrated `NodeStore`, `SubscriptionRegistry`, `EventStore`, updated startup wiring, and migrated tests to shared `db` fixture / AsyncDB constructors.
 - Phase 1 tests passing: `tests/unit -q` and `tests/integration/test_e2e.py tests/integration/test_performance.py -q`.
+- Phase 2 complete: decomposed events into `core/events/` package (`types`, `bus`, `subscriptions`, `store`, `dispatcher`) and migrated trigger queue ownership to `TriggerDispatcher`.
+- Phase 2 tests passing: `tests/unit -q` plus focused event/runner/reconciler suites.
