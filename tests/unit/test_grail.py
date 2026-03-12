@@ -7,7 +7,7 @@ import grail
 import pytest
 from structured_agents.types import ToolCall
 
-from remora.core.grail import GrailTool, _build_parameters, discover_tools
+from remora.core.grail import GrailTool, _build_parameters, _load_script_from_source, discover_tools
 
 SCRIPT_SOURCE = """
 from grail import Input, external
@@ -137,3 +137,9 @@ async def test_discover_tools_empty() -> None:
     workspace = _WorkspaceStub({}, missing_tools_dir=True)
     tools = await discover_tools(workspace, externals={})
     assert tools == []
+
+
+def test_load_script_from_source_uses_cache() -> None:
+    first = _load_script_from_source(SCRIPT_SOURCE, "demo")
+    second = _load_script_from_source(SCRIPT_SOURCE, "demo")
+    assert first is second

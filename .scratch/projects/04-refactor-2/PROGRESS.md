@@ -19,8 +19,8 @@
 - [x] Phase 5 testing
 - [x] Phase 6 implementation
 - [x] Phase 6 testing
-- [ ] Phase 7 implementation
-- [ ] Phase 7 testing
+- [x] Phase 7 implementation
+- [x] Phase 7 testing
 - [ ] Phase 8 implementation
 - [ ] Phase 8 testing
 - [ ] Phase 9 implementation
@@ -47,3 +47,5 @@
 - Phase 5 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 6 complete: removed remaining proposal event model, kept direct span-based rewrite as the only path, and enriched `ContentChangedEvent` metadata (`agent_id`, `old_hash`, `new_hash`) for future VCS wrapping.
 - Phase 6 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 7 complete: centralized path logic in `code/paths.py`, introduced plugin-based language registry in `code/languages.py`, refactored discovery/reconciler/CLI to use shared path/plugin modules, and added Grail script caching by content hash.
+- Phase 7 tests passing: `tests/unit -q` and integration smoke suites.

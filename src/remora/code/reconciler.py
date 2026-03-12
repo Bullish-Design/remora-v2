@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import fnmatch
 import hashlib
 import logging
 from pathlib import Path
 
 from remora.code.discovery import discover
+from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk_source_files
 from remora.code.projections import project_nodes
 from remora.core.config import Config
 from remora.core.events import (
@@ -88,7 +88,11 @@ class FileReconciler:
 
     def _collect_file_mtimes(self) -> dict[str, int]:
         mtimes: dict[str, int] = {}
-        for file_path in self._iter_source_files():
+        discovery_paths = resolve_discovery_paths(self._config, self._project_root)
+        for file_path in walk_source_files(
+            discovery_paths,
+            self._config.workspace_ignore_patterns,
+        ):
             try:
                 mtimes[str(file_path)] = file_path.stat().st_mtime_ns
             except FileNotFoundError:
@@ -99,7 +103,7 @@ class FileReconciler:
         discovered = discover(
             [Path(file_path)],
             language_map=self._config.language_map,
-            query_paths=self._resolve_query_paths(),
+            query_paths=resolve_query_paths(self._config, self._project_root),
             ignore_patterns=self._config.workspace_ignore_patterns,
             languages=(
                 list(self._config.discovery_languages)
@@ -196,57 +200,4 @@ class FileReconciler:
     async def _ensure_agent(self, node: CodeNode) -> None:
         if await self._agent_store.get_agent(node.node_id) is None:
             await self._agent_store.upsert_agent(node.to_agent())
-
-    def _iter_source_files(self) -> list[Path]:
-        ignore_patterns = tuple(
-            pattern.strip()
-            for pattern in self._config.workspace_ignore_patterns
-            if pattern.strip()
-        )
-        files: list[Path] = []
-        seen: set[Path] = set()
-
-        def ignored(path: Path) -> bool:
-            parts = set(path.parts)
-            text = path.as_posix()
-            for pattern in ignore_patterns:
-                if pattern in parts:
-                    return True
-                if path.match(pattern) or fnmatch.fnmatch(text, pattern):
-                    return True
-                if fnmatch.fnmatch(text, f"*/{pattern}/*"):
-                    return True
-            return False
-
-        for configured_path in self._config.discovery_paths:
-            candidate = Path(configured_path)
-            if not candidate.is_absolute():
-                candidate = self._project_root / candidate
-            candidate = candidate.resolve()
-            if not candidate.exists():
-                continue
-            if candidate.is_file():
-                if candidate not in seen and not ignored(candidate):
-                    seen.add(candidate)
-                    files.append(candidate)
-                continue
-
-            for file_path in candidate.rglob("*"):
-                if not file_path.is_file():
-                    continue
-                if ignored(file_path):
-                    continue
-                if file_path not in seen:
-                    seen.add(file_path)
-                    files.append(file_path)
-        return sorted(files)
-
-    def _resolve_query_paths(self) -> list[Path]:
-        resolved: list[Path] = []
-        for query_path in self._config.query_paths:
-            candidate = Path(query_path)
-            if not candidate.is_absolute():
-                candidate = self._project_root / candidate
-            resolved.append(candidate.resolve())
-        return resolved
 __all__ = ["FileReconciler"]

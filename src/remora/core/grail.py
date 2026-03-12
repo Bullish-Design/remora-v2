@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import tempfile
@@ -23,6 +24,8 @@ _TYPE_MAP = {
     "bool": "boolean",
 }
 
+_SCRIPT_CACHE: dict[str, grail.GrailScript] = {}
+
 
 def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
     """Build JSON Schema parameters from Grail input declarations."""
@@ -42,11 +45,18 @@ def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
 
 
 def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
+    content_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+    cached = _SCRIPT_CACHE.get(content_hash)
+    if cached is not None:
+        return cached
+
     filename = f"{name}.pym" if not name.endswith(".pym") else name
     with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
         script_path = Path(temp_dir) / filename
         script_path.write_text(source, encoding="utf-8")
-        return grail.load(script_path)
+        script = grail.load(script_path)
+    _SCRIPT_CACHE[content_hash] = script
+    return script
 
 
 class GrailTool:

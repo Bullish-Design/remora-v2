@@ -12,6 +12,7 @@ import uvicorn
 
 from remora.code.discovery import CSTNode
 from remora.code.discovery import discover as discover_nodes
+from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.code.reconciler import FileReconciler
 from remora.core.config import load_config
 from remora.core.db import AsyncDB
@@ -173,18 +174,8 @@ async def _discover(
 ) -> list[CSTNode]:
     project_root = project_root.resolve()
     config = load_config(config_path)
-    discovery_paths: list[Path] = []
-    for configured_path in config.discovery_paths:
-        candidate = Path(configured_path)
-        if not candidate.is_absolute():
-            candidate = project_root / candidate
-        discovery_paths.append(candidate)
-    query_paths: list[Path] = []
-    for configured_query_path in config.query_paths:
-        query_candidate = Path(configured_query_path)
-        if not query_candidate.is_absolute():
-            query_candidate = project_root / query_candidate
-        query_paths.append(query_candidate)
+    discovery_paths = resolve_discovery_paths(config, project_root)
+    query_paths = resolve_query_paths(config, project_root)
 
     return discover_nodes(
         discovery_paths,

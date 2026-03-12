@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import fnmatch
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import tree_sitter_markdown
-import tree_sitter_python
-import tree_sitter_toml
 from pydantic import BaseModel, ConfigDict
-from tree_sitter import Language, Parser, Query, QueryCursor
+from tree_sitter import Parser, Query, QueryCursor
+
+from remora.code.languages import LanguagePlugin, LanguageRegistry
+from remora.code.paths import walk_source_files
 
 
 class CSTNode(BaseModel):
@@ -31,12 +30,6 @@ class CSTNode(BaseModel):
     end_byte: int
     parent_id: str | None = None
 
-
-_GRAMMAR_REGISTRY: dict[str, Any] = {
-    "python": tree_sitter_python,
-    "markdown": tree_sitter_markdown,
-    "toml": tree_sitter_toml,
-}
 
 _DEFAULT_LANGUAGE_MAP: dict[str, str] = {
     ".py": "python",
@@ -60,101 +53,66 @@ def discover(
         for ext, name in (language_map or _DEFAULT_LANGUAGE_MAP).items()
     }
     effective_query_paths = [path.resolve() for path in (query_paths or [])]
+    language_registry = LanguageRegistry()
 
     nodes: list[CSTNode] = []
-    for source_file in _walk_source_files(paths, ignore_patterns):
-        language = _detect_language(source_file, effective_language_map)
-        if language is None:
+    for source_file in walk_source_files(paths, ignore_patterns):
+        ext = source_file.suffix.lower()
+        language_name = effective_language_map.get(ext)
+        plugin = None
+        if language_name is not None:
+            plugin = language_registry.get_by_name(language_name)
+        if plugin is None:
+            plugin = language_registry.get_by_extension(ext)
+        if plugin is None:
             continue
-        if requested_languages is not None and language not in requested_languages:
+        if requested_languages is not None and plugin.name not in requested_languages:
             continue
-        if language not in _GRAMMAR_REGISTRY:
-            continue
-        nodes.extend(_parse_file(source_file, language, effective_query_paths))
+        nodes.extend(_parse_file(source_file, plugin, effective_query_paths))
 
     return sorted(nodes, key=lambda node: (node.file_path, node.start_byte, node.node_id))
 
 
-def _walk_source_files(paths: list[Path], ignore_patterns: tuple[str, ...]) -> list[Path]:
-    """Collect source files while respecting ignore patterns."""
-    discovered: list[Path] = []
-    seen: set[Path] = set()
-    normalized_patterns = tuple(pattern.strip() for pattern in ignore_patterns if pattern.strip())
-
-    def ignored(path: Path) -> bool:
-        text = path.as_posix()
-        parts = set(path.parts)
-        for pattern in normalized_patterns:
-            if pattern in parts:
-                return True
-            if fnmatch.fnmatch(text, pattern) or fnmatch.fnmatch(path.name, pattern):
-                return True
-            if fnmatch.fnmatch(text, f"*/{pattern}/*"):
-                return True
-        return False
-
-    for raw in paths:
-        root = raw.resolve()
-        if not root.exists():
-            continue
-        if root.is_file():
-            if root not in seen and not ignored(root):
-                seen.add(root)
-                discovered.append(root)
-            continue
-        for candidate in root.rglob("*"):
-            if not candidate.is_file():
-                continue
-            if ignored(candidate):
-                continue
-            if candidate not in seen:
-                seen.add(candidate)
-                discovered.append(candidate)
-
-    return sorted(discovered)
-
-
-def _detect_language(path: Path, language_map: dict[str, str]) -> str | None:
-    """Resolve a file extension into a registered language name."""
-    return language_map.get(path.suffix.lower())
-
-
 @lru_cache(maxsize=16)
-def _get_language(name: str) -> Language:
-    module = _GRAMMAR_REGISTRY[name]
-    return Language(module.language())
+def _get_registry_plugin(name: str) -> LanguagePlugin:
+    plugin = LanguageRegistry().get_by_name(name)
+    if plugin is None:
+        raise ValueError(f"Unknown language plugin: {name}")
+    return plugin
 
 
 @lru_cache(maxsize=16)
 def _get_parser(language: str) -> Parser:
-    return Parser(_get_language(language))
+    plugin = _get_registry_plugin(language)
+    return Parser(plugin.get_language())
 
 
 @lru_cache(maxsize=64)
 def _load_query(language: str, query_file: str) -> Query:
+    plugin = _get_registry_plugin(language)
     query_text = Path(query_file).read_text(encoding="utf-8")
-    return Query(_get_language(language), query_text)
+    return Query(plugin.get_language(), query_text)
 
 
-def _resolve_query_file(language: str, query_paths: list[Path]) -> Path:
+def _resolve_query_file(plugin: LanguagePlugin, query_paths: list[Path]) -> Path:
     for query_dir in query_paths:
-        candidate = query_dir / f"{language}.scm"
+        candidate = query_dir / f"{plugin.name}.scm"
         if candidate.exists():
             return candidate
 
-    default_candidate = Path(__file__).parent / "queries" / f"{language}.scm"
+    default_candidate = plugin.get_default_query_path()
     if default_candidate.exists():
         return default_candidate
-    raise FileNotFoundError(f"No query file found for language '{language}'")
+    raise FileNotFoundError(f"No query file found for language '{plugin.name}'")
 
 
-def _parse_file(path: Path, language: str, query_paths: list[Path]) -> list[CSTNode]:
+def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> list[CSTNode]:
     source_bytes = path.read_bytes()
-    parser = _get_parser(language)
+    parser = _get_parser(plugin.name)
     tree = parser.parse(source_bytes)
 
-    query_file = _resolve_query_file(language, query_paths)
-    query = _load_query(language, str(query_file.resolve()))
+    query_file = _resolve_query_file(plugin, query_paths)
+    query = _load_query(plugin.name, str(query_file.resolve()))
     matches = QueryCursor(query).matches(tree.root_node)
 
     entries: list[dict[str, Any]] = []
@@ -223,7 +181,7 @@ def _parse_file(path: Path, language: str, query_paths: list[Path]) -> list[CSTN
         cst_nodes.append(
             CSTNode(
                 node_id=candidate_id,
-                node_type=_resolve_node_type(language, node),
+                node_type=plugin.resolve_node_type(node),
                 name=name,
                 full_name=full_name,
                 file_path=file_path,
@@ -237,47 +195,6 @@ def _parse_file(path: Path, language: str, query_paths: list[Path]) -> list[CSTN
         )
 
     return cst_nodes
-
-
-def _resolve_node_type(language: str, node: Any) -> str:
-    if language == "python":
-        if node.type == "class_definition":
-            return "class"
-        if node.type == "function_definition":
-            return "method" if _has_class_ancestor(node) else "function"
-        if node.type == "decorated_definition":
-            target = _decorated_target(node)
-            if target is not None and target.type == "class_definition":
-                return "class"
-            if target is not None and target.type == "function_definition":
-                return "method" if _has_class_ancestor(node) else "function"
-            return "function"
-        return "function"
-    if language == "markdown":
-        return "section"
-    if language == "toml":
-        return "table"
-    return node.type
-
-
-def _has_class_ancestor(node: Any) -> bool:
-    current = node.parent
-    while current is not None:
-        if current.type in {"class_definition", "decorated_definition"}:
-            target = _decorated_target(current)
-            if current.type == "class_definition" or (
-                target is not None and target.type == "class_definition"
-            ):
-                return True
-        current = current.parent
-    return False
-
-
-def _decorated_target(node: Any) -> Any | None:
-    for child in node.children:
-        if child.type in {"function_definition", "class_definition"}:
-            return child
-    return None
 
 
 def _build_name_from_tree(
