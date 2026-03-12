@@ -1,0 +1,7 @@
+{
+  "_description": "Summarize source code",
+  "code": {
+    "type": "str",
+    "description": "The source code to summarize"
+  }
+}

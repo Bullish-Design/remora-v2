@@ -1,0 +1,22 @@
+{
+  "externals": [
+    {
+      "name": "event_emit",
+      "async": true,
+      "parameters": [
+        {
+          "name": "event_type",
+          "type": "str",
+          "default": null
+        },
+        {
+          "name": "payload",
+          "type": "dict",
+          "default": null
+        }
+      ],
+      "return_type": "bool",
+      "docstring": null
+    }
+  ]
+}

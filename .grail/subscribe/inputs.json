@@ -1,0 +1,22 @@
+{
+  "inputs": [
+    {
+      "name": "event_types",
+      "type": "str",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "from_agents",
+      "type": "str",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "path_glob",
+      "type": "str",
+      "required": false,
+      "default": ""
+    }
+  ]
+}

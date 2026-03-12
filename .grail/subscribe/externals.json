@@ -1,0 +1,27 @@
+{
+  "externals": [
+    {
+      "name": "event_subscribe",
+      "async": true,
+      "parameters": [
+        {
+          "name": "event_types",
+          "type": "list[str] | None",
+          "default": null
+        },
+        {
+          "name": "from_agents",
+          "type": "list[str] | None",
+          "default": null
+        },
+        {
+          "name": "path_glob",
+          "type": "str | None",
+          "default": null
+        }
+      ],
+      "return_type": "int",
+      "docstring": null
+    }
+  ]
+}

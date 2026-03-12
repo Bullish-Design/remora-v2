@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "name": "pattern",
+      "type": "str",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "content",
+      "type": "str",
+      "required": true,
+      "default": null
+    }
+  ]
+}

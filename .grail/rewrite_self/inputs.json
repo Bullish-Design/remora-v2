@@ -1,0 +1,10 @@
+{
+  "inputs": [
+    {
+      "name": "new_source",
+      "type": "str",
+      "required": true,
+      "default": null
+    }
+  ]
+}

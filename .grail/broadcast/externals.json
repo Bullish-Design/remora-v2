@@ -1,0 +1,22 @@
+{
+  "externals": [
+    {
+      "name": "broadcast",
+      "async": true,
+      "parameters": [
+        {
+          "name": "pattern",
+          "type": "str",
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "str",
+          "default": null
+        }
+      ],
+      "return_type": "str",
+      "docstring": null
+    }
+  ]
+}

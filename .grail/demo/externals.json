@@ -1,0 +1,17 @@
+{
+  "externals": [
+    {
+      "name": "echo",
+      "async": true,
+      "parameters": [
+        {
+          "name": "text",
+          "type": "str",
+          "default": null
+        }
+      ],
+      "return_type": "str",
+      "docstring": null
+    }
+  ]
+}

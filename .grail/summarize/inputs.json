@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "name": "node_id",
+      "type": "str",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "history_limit",
+      "type": "int",
+      "required": false,
+      "default": 10
+    }
+  ]
+}

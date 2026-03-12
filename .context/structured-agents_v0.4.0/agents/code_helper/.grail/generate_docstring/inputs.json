@@ -1,0 +1,12 @@
+{
+  "_description": "Generate a docstring for source code",
+  "code": {
+    "type": "str",
+    "description": "The source code to generate a docstring for"
+  },
+  "function_name": {
+    "type": "str | None",
+    "description": "Optional specific function name to document",
+    "default": null
+  }
+}

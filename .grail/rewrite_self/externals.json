@@ -1,0 +1,17 @@
+{
+  "externals": [
+    {
+      "name": "propose_rewrite",
+      "async": true,
+      "parameters": [
+        {
+          "name": "new_source",
+          "type": "str",
+          "default": null
+        }
+      ],
+      "return_type": "str",
+      "docstring": null
+    }
+  ]
+}

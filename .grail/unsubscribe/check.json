@@ -1,0 +1,14 @@
+{
+  "file": "bundles/system/tools/unsubscribe.pym",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "info": {
+    "externals_count": 1,
+    "inputs_count": 1,
+    "lines_of_code": 13,
+    "monty_features_used": [
+      "f_string"
+    ]
+  }
+}

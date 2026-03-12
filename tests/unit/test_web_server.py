@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import sqlite3
+from pathlib import Path
+
+import httpx
+import pytest
+import pytest_asyncio
+
+from remora.core.events import EventBus, EventStore, HumanChatEvent, RewriteProposalEvent
+from remora.core.graph import NodeStore
+from remora.core.node import CodeNode
+from remora.web.server import create_app
+
+
+def _node(node_id: str, file_path: str, source_code: str, status: str = "idle") -> CodeNode:
+    name = node_id.split("::", maxsplit=1)[-1]
+    return CodeNode(
+        node_id=node_id,
+        node_type="function",
+        name=name,
+        full_name=name,
+        file_path=file_path,
+        start_line=1,
+        end_line=2,
+        source_code=source_code,
+        source_hash=f"hash-{node_id}-{status}",
+        status=status,
+    )
+
+
+@pytest_asyncio.fixture
+async def web_env(tmp_path: Path):
+    conn = sqlite3.connect(str(tmp_path / "web.db"), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    lock = asyncio.Lock()
+
+    event_bus = EventBus()
+    node_store = NodeStore(conn, lock)
+    await node_store.create_tables()
+    event_store = EventStore(connection=conn, lock=lock, event_bus=event_bus)
+    await event_store.initialize()
+
+    source_path = tmp_path / "src" / "app.py"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text("def a():\n    return 1\n", encoding="utf-8")
+
+    node = _node("src/app.py::a", str(source_path), "def a():\n    return 1\n")
+    await node_store.upsert_node(node)
+
+    app = create_app(
+        event_store,
+        node_store,
+        event_bus,
+        project_root=tmp_path,
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client, node_store, event_store, source_path
+
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_api_nodes_returns_list(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.get("/api/nodes")
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert payload and payload[0]["node_id"] == "src/app.py::a"
+
+
+@pytest.mark.asyncio
+async def test_api_node_by_id(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.get("/api/nodes/src/app.py::a")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["node_id"] == "src/app.py::a"
+
+
+@pytest.mark.asyncio
+async def test_api_node_not_found(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.get("/api/nodes/missing")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_api_edges(web_env) -> None:
+    client, node_store, _event_store, source_path = web_env
+    other = _node("src/app.py::b", str(source_path), "def b():\n    return 2\n")
+    await node_store.upsert_node(other)
+    await node_store.add_edge("src/app.py::a", "src/app.py::b", "calls")
+
+    response = await client.get("/api/nodes/src/app.py::a/edges")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload and payload[0]["edge_type"] == "calls"
+
+
+@pytest.mark.asyncio
+async def test_api_chat_sends_event(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+    response = await client.post(
+        "/api/chat",
+        json={"node_id": "src/app.py::a", "message": "hello"},
+    )
+    assert response.status_code == 200
+
+    events = await event_store.get_events(limit=10)
+    assert any(
+        event["event_type"] == "HumanChatEvent"
+        and event["payload"].get("to_agent") == "src/app.py::a"
+        and event["payload"].get("message") == "hello"
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_api_events(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+    await event_store.append(HumanChatEvent(to_agent="src/app.py::a", message="ping"))
+
+    response = await client.get("/api/events")
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert payload and payload[0]["event_type"] == "HumanChatEvent"
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_connected(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+
+    async with client.stream("GET", "/sse?once=1") as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+
+
+@pytest.mark.asyncio
+async def test_sse_receives_events(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+
+    async def read_one_data_line(response: httpx.Response) -> str:
+        async for line in response.aiter_lines():
+            if line.startswith("data: "):
+                return line
+        raise AssertionError("SSE stream closed before data line was received")
+
+    await event_store.append(HumanChatEvent(to_agent="src/app.py::a", message="from-sse-test"))
+    async with client.stream("GET", "/sse?once=1&replay=5") as response:
+        data_line = await asyncio.wait_for(read_one_data_line(response), timeout=2.0)
+
+    payload = json.loads(data_line.removeprefix("data: ").strip())
+    assert payload["event_type"] == "HumanChatEvent"
+    assert payload["message"] == "from-sse-test"
+
+
+@pytest.mark.asyncio
+async def test_api_approve_proposal(web_env) -> None:
+    client, node_store, event_store, source_path = web_env
+    proposal_id = "abc123"
+    new_source = "def a():\n    return 99\n"
+    await node_store.set_status("src/app.py::a", "pending_approval")
+    await event_store.append(
+        RewriteProposalEvent(
+            agent_id="src/app.py::a",
+            proposal_id=proposal_id,
+            file_path=str(source_path),
+            old_source="def a():\n    return 1\n",
+            new_source=new_source,
+        )
+    )
+
+    response = await client.post("/api/approve", json={"proposal_id": proposal_id})
+    assert response.status_code == 200
+    assert source_path.read_text(encoding="utf-8") == new_source
+    updated = await node_store.get_node("src/app.py::a")
+    assert updated is not None
+    assert updated.status == "idle"
+
+
+@pytest.mark.asyncio
+async def test_api_reject_proposal(web_env) -> None:
+    client, node_store, event_store, source_path = web_env
+    proposal_id = "reject-1"
+    await node_store.set_status("src/app.py::a", "pending_approval")
+    await event_store.append(
+        RewriteProposalEvent(
+            agent_id="src/app.py::a",
+            proposal_id=proposal_id,
+            file_path=str(source_path),
+            old_source="def a():\n    return 1\n",
+            new_source="def a():\n    return -1\n",
+        )
+    )
+
+    response = await client.post("/api/reject", json={"proposal_id": proposal_id})
+    assert response.status_code == 200
+    updated = await node_store.get_node("src/app.py::a")
+    assert updated is not None
+    assert updated.status == "idle"

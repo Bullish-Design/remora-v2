@@ -1,0 +1,30 @@
+from grail import Input, external
+
+node_id: str = Input("node_id", default="")
+history_limit: int = Input("history_limit", default=20)
+
+
+@external
+async def event_get_history(target_id: str, limit: int) -> list[dict]: ...
+
+
+@external
+async def read_file(path: str) -> str: ...
+
+
+@external
+async def write_file(path: str, content: str) -> bool: ...
+
+
+history = await event_get_history(node_id, history_limit)
+
+existing = ""
+try:
+    existing = await read_file("notes/reflection.md")
+except Exception:
+    existing = ""
+
+entry = "\n---\nReviewed recent activity.\n"
+entry = entry + f"Events observed: {len(history)}\n"
+await write_file("notes/reflection.md", existing + entry)
+return "Reflection recorded"

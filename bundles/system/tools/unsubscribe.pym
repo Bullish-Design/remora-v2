@@ -1,0 +1,13 @@
+from grail import Input, external
+
+subscription_id: int = Input("subscription_id")
+
+
+@external
+async def event_unsubscribe(subscription_id: int) -> bool: ...
+
+
+result = await event_unsubscribe(subscription_id)
+if result:
+    return f"Unsubscribed: {subscription_id}"
+return f"Subscription not found: {subscription_id}"

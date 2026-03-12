@@ -1,0 +1,10 @@
+{
+  "inputs": [
+    {
+      "name": "node_type",
+      "type": "str",
+      "required": false,
+      "default": ""
+    }
+  ]
+}

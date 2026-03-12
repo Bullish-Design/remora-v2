@@ -1,0 +1,17 @@
+{
+  "externals": [
+    {
+      "name": "event_unsubscribe",
+      "async": true,
+      "parameters": [
+        {
+          "name": "subscription_id",
+          "type": "int",
+          "default": null
+        }
+      ],
+      "return_type": "bool",
+      "docstring": null
+    }
+  ]
+}

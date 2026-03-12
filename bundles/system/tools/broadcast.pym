@@ -1,0 +1,11 @@
+from grail import Input, external
+
+pattern: str = Input("pattern")
+content: str = Input("content")
+
+
+@external
+async def broadcast(pattern: str, content: str) -> str: ...
+
+
+return await broadcast(pattern, content)

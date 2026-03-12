@@ -1,0 +1,29 @@
+from grail import Input, external
+
+event_types: str = Input("event_types", default="")
+from_agents: str = Input("from_agents", default="")
+path_glob: str = Input("path_glob", default="")
+
+
+@external
+async def event_subscribe(
+    event_types: list[str] | None,
+    from_agents: list[str] | None,
+    path_glob: str | None,
+) -> int: ...
+
+
+event_types_value: list[str] | None = (
+    [part.strip() for part in event_types.split(",") if part.strip()]
+    if event_types.strip()
+    else None
+)
+from_agents_value: list[str] | None = (
+    [part.strip() for part in from_agents.split(",") if part.strip()]
+    if from_agents.strip()
+    else None
+)
+path_value: str | None = path_glob.strip() if path_glob.strip() else None
+
+subscription_id = await event_subscribe(event_types_value, from_agents_value, path_value)
+return f"Subscription {subscription_id} registered"

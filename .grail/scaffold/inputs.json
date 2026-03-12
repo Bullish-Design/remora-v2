@@ -1,0 +1,22 @@
+{
+  "inputs": [
+    {
+      "name": "intent",
+      "type": "str",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "element_type",
+      "type": "str",
+      "required": false,
+      "default": "function"
+    },
+    {
+      "name": "agent_id",
+      "type": "str",
+      "required": false,
+      "default": ""
+    }
+  ]
+}

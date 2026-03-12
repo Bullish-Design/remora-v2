@@ -1,0 +1,14 @@
+{
+  "file": "bundles/companion/tools/reflect.pym",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "info": {
+    "externals_count": 3,
+    "inputs_count": 2,
+    "lines_of_code": 30,
+    "monty_features_used": [
+      "f_string"
+    ]
+  }
+}
