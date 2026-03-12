@@ -1,0 +1,34 @@
+{
+  "externals": [
+    {
+      "name": "graph_query_nodes",
+      "async": true,
+      "parameters": [
+        {
+          "name": "node_type",
+          "type": "str | None",
+          "default": "Constant(value=None)"
+        },
+        {
+          "name": "status",
+          "type": "str | None",
+          "default": "Constant(value=None)"
+        },
+        {
+          "name": "file_path",
+          "type": "str | None",
+          "default": "Constant(value=None)"
+        }
+      ],
+      "return_type": "list[dict]",
+      "docstring": null
+    },
+    {
+      "name": "my_node_id",
+      "async": true,
+      "parameters": [],
+      "return_type": "str",
+      "docstring": null
+    }
+  ]
+}

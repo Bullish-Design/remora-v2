@@ -1,0 +1,10 @@
+{
+  "inputs": [
+    {
+      "name": "message",
+      "type": "str",
+      "required": true,
+      "default": null
+    }
+  ]
+}

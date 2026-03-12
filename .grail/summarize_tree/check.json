@@ -1,0 +1,15 @@
+{
+  "file": "bundles/directory-agent/tools/summarize_tree.pym",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "info": {
+    "externals_count": 2,
+    "inputs_count": 1,
+    "lines_of_code": 43,
+    "monty_features_used": [
+      "f_string",
+      "for_loop"
+    ]
+  }
+}

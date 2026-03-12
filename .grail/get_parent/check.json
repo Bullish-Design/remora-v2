@@ -1,0 +1,14 @@
+{
+  "file": "bundles/directory-agent/tools/get_parent.pym",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "info": {
+    "externals_count": 2,
+    "inputs_count": 0,
+    "lines_of_code": 21,
+    "monty_features_used": [
+      "f_string"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "externals": [
+    {
+      "name": "graph_get_node",
+      "async": true,
+      "parameters": [
+        {
+          "name": "target_id",
+          "type": "str",
+          "default": null
+        }
+      ],
+      "return_type": "dict",
+      "docstring": null
+    },
+    {
+      "name": "my_node_id",
+      "async": true,
+      "parameters": [],
+      "return_type": "str",
+      "docstring": null
+    }
+  ]
+}

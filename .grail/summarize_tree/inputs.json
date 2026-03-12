@@ -1,0 +1,10 @@
+{
+  "inputs": [
+    {
+      "name": "max_depth",
+      "type": "int",
+      "required": false,
+      "default": 3
+    }
+  ]
+}
