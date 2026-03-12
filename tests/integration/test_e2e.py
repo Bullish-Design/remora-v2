@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from structured_agents import Message
@@ -89,6 +89,12 @@ async def _setup_runtime(tmp_path: Path):
     )
     code_nodes = await reconciler.full_scan()
     runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
+    routed: list[tuple[str, Any]] = []
+
+    def capture_route(agent_id: str, event: Any) -> None:
+        routed.append((agent_id, event))
+
+    event_store.dispatcher.router = capture_route
 
     return {
         "source_path": source_path,
@@ -102,6 +108,7 @@ async def _setup_runtime(tmp_path: Path):
         "reconciler": reconciler,
         "nodes": code_nodes,
         "config": config,
+        "routed": routed,
     }
 
 
@@ -117,8 +124,8 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     await runtime["event_store"].append(
         HumanChatEvent(to_agent=node.node_id, message="please rewrite")
     )
-    trigger_iter = runtime["event_store"].get_triggers()
-    trigger_node_id, trigger_event = await asyncio.wait_for(trigger_iter.__anext__(), timeout=1.0)
+    assert len(runtime["routed"]) >= 1
+    trigger_node_id, trigger_event = runtime["routed"][-1]
     assert trigger_node_id == node.node_id
 
     class MockKernel:
@@ -204,10 +211,10 @@ async def test_e2e_agent_message_chain(tmp_path: Path) -> None:
     await runtime["event_store"].append(
         AgentMessageEvent(from_agent=source, to_agent=target, content="hello")
     )
-    trigger_iter = runtime["event_store"].get_triggers()
-    trigger_node_id, trigger_event = await asyncio.wait_for(trigger_iter.__anext__(), timeout=1.0)
-    assert trigger_node_id == target
-    assert trigger_event.event_type == "AgentMessageEvent"
+    assert len(runtime["routed"]) >= 1
+    routed_agent_id, routed_event = runtime["routed"][-1]
+    assert routed_agent_id == target
+    assert routed_event.event_type == "AgentMessageEvent"
 
     await runtime["workspace_service"].close()
     runtime["db"].close()
@@ -221,10 +228,12 @@ async def test_e2e_file_change_triggers(tmp_path: Path) -> None:
     await runtime["event_store"].append(
         ContentChangedEvent(path=node.file_path, change_type="modified")
     )
-    trigger_iter = runtime["event_store"].get_triggers()
-    trigger_node_id, trigger_event = await asyncio.wait_for(trigger_iter.__anext__(), timeout=1.0)
-    assert trigger_node_id == node.node_id
-    assert trigger_event.event_type == "ContentChangedEvent"
+    matching = [
+        (agent_id, event)
+        for agent_id, event in runtime["routed"]
+        if agent_id == node.node_id and event.event_type == "ContentChangedEvent"
+    ]
+    assert len(matching) >= 1
 
     await runtime["workspace_service"].close()
     runtime["db"].close()

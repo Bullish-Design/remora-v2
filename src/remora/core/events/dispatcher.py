@@ -2,29 +2,41 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import Callable
 
 from remora.core.events.subscriptions import SubscriptionRegistry
 from remora.core.events.types import Event
 
 
 class TriggerDispatcher:
-    """Routes persisted events to agent trigger queues via subscription matching."""
+    """Routes persisted events to agent inboxes via subscription matching.
 
-    def __init__(self, subscriptions: SubscriptionRegistry):
+    The dispatcher resolves which agents care about an event, then
+    delivers the event to each agent's inbox via a router callback.
+    """
+
+    def __init__(
+        self,
+        subscriptions: SubscriptionRegistry,
+        router: Callable[[str, Event], None] | None = None,
+    ):
         self._subscriptions = subscriptions
-        self._queue: asyncio.Queue[tuple[str, Event]] = asyncio.Queue()
+        self._router = router
+
+    @property
+    def router(self) -> Callable[[str, Event], None] | None:
+        return self._router
+
+    @router.setter
+    def router(self, value: Callable[[str, Event], None]) -> None:
+        self._router = value
 
     async def dispatch(self, event: Event) -> None:
-        """Match event against subscriptions and enqueue triggers."""
+        """Match event against subscriptions and route to agent inboxes."""
+        if self._router is None:
+            return
         for agent_id in await self._subscriptions.get_matching_agents(event):
-            self._queue.put_nowait((agent_id, event))
-
-    async def get_triggers(self) -> AsyncIterator[tuple[str, Event]]:
-        """Yield queued (agent_id, event) pairs forever."""
-        while True:
-            yield await self._queue.get()
+            self._router(agent_id, event)
 
     @property
     def subscriptions(self) -> SubscriptionRegistry:

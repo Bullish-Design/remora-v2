@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 from remora.core.db import AsyncDB
@@ -131,11 +130,5 @@ class EventStore:
         for row in result:
             row["payload"] = json.loads(row["payload"])
         return result
-
-    async def get_triggers(self) -> AsyncIterator[tuple[str, Event]]:
-        """Backward-compatible trigger iterator."""
-        async for item in self._dispatcher.get_triggers():
-            yield item
-
 
 __all__ = ["EventStore"]

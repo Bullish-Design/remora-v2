@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,7 @@ from remora.core.db import AsyncDB
 from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
+    Event,
     EventBus,
     EventStore,
     SubscriptionPattern,
@@ -62,13 +62,15 @@ async def test_eventstore_trigger_flow(tmp_path: Path) -> None:
     store = EventStore(db=db)
     await store.create_tables()
     await store.subscriptions.register("agent-b", SubscriptionPattern(to_agent="b"))
+    routed: list[tuple[str, Event]] = []
+    store.dispatcher.router = lambda agent_id, event: routed.append((agent_id, event))
 
     event = AgentMessageEvent(from_agent="a", to_agent="b", content="hello")
     await store.append(event)
 
-    agent_id, trigger_event = await asyncio.wait_for(anext(store.get_triggers()), timeout=1.0)
-    assert agent_id == "agent-b"
-    assert trigger_event == event
+    assert len(routed) == 1
+    assert routed[0][0] == "agent-b"
+    assert routed[0][1] == event
     db.close()
 
 
