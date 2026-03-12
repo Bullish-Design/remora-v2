@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -165,11 +166,16 @@ class AgentContext:
             full_text = full_bytes.decode("utf-8", errors="replace")
             next_text = full_text.replace(node.source_code, new_source, 1)
 
+        old_hash = hashlib.sha256(full_bytes).hexdigest()
+        new_hash = hashlib.sha256(next_text.encode("utf-8")).hexdigest()
         file_path.write_text(next_text, encoding="utf-8")
         await self._event_store.append(
             ContentChangedEvent(
                 path=str(file_path),
                 change_type="modified",
+                agent_id=self.node_id,
+                old_hash=old_hash,
+                new_hash=new_hash,
                 correlation_id=self.correlation_id,
             )
         )

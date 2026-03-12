@@ -96,15 +96,9 @@ class NodeChangedEvent(Event):
 class ContentChangedEvent(Event):
     path: str
     change_type: ChangeType = ChangeType.MODIFIED
-
-
-class RewriteProposalEvent(Event):
-    agent_id: str
-    proposal_id: str
-    file_path: str
-    old_source: str
-    new_source: str
-    diff: str = ""
+    agent_id: str | None = None
+    old_hash: str | None = None
+    new_hash: str | None = None
 
 
 class CustomEvent(Event):
@@ -135,7 +129,6 @@ __all__ = [
     "NodeRemovedEvent",
     "NodeChangedEvent",
     "ContentChangedEvent",
-    "RewriteProposalEvent",
     "CustomEvent",
     "ToolResultEvent",
     "EventHandler",

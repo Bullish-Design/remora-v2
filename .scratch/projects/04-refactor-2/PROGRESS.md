@@ -17,8 +17,8 @@
 - [x] Phase 4 testing
 - [x] Phase 5 implementation
 - [x] Phase 5 testing
-- [ ] Phase 6 implementation
-- [ ] Phase 6 testing
+- [x] Phase 6 implementation
+- [x] Phase 6 testing
 - [ ] Phase 7 implementation
 - [ ] Phase 7 testing
 - [ ] Phase 8 implementation
@@ -45,3 +45,5 @@
 - Phase 4 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 5 complete: moved tool externals into `AgentContext` (`core/externals.py`), removed runner inline-closure externals, and migrated externals tests to direct `AgentContext` coverage.
 - Phase 5 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 6 complete: removed remaining proposal event model, kept direct span-based rewrite as the only path, and enriched `ContentChangedEvent` metadata (`agent_id`, `old_hash`, `new_hash`) for future VCS wrapping.
+- Phase 6 tests passing: `tests/unit -q` and integration smoke suites.

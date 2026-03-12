@@ -13,7 +13,6 @@ from remora.core.events import (
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
-    RewriteProposalEvent,
     ToolResultEvent,
 )
 
@@ -60,14 +59,12 @@ def test_all_event_types_instantiate() -> None:
             name="f",
         ),
         NodeChangedEvent(node_id="src/app.py::f", old_hash="old", new_hash="new"),
-        ContentChangedEvent(path="src/app.py", change_type="modified"),
-        RewriteProposalEvent(
+        ContentChangedEvent(
+            path="src/app.py",
+            change_type="modified",
             agent_id="a",
-            proposal_id="p1",
-            file_path="src/app.py",
-            old_source="old",
-            new_source="new",
-            diff="@@",
+            old_hash="old",
+            new_hash="new",
         ),
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
     ]
