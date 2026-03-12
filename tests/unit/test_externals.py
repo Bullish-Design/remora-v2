@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from tests.factories import make_node
 
-from remora.core.actor import RecordingOutbox
+from remora.core.actor import Outbox, RecordingOutbox
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.externals import AgentContext
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
-from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -42,7 +42,10 @@ async def _context(
     agent_store: AgentStore,
     event_store: EventStore,
     correlation_id: str = "corr-1",
+    outbox=None,
 ) -> AgentContext:
+    if outbox is None:
+        outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
     return AgentContext(
         node_id=node_id,
         workspace=workspace,
@@ -50,6 +53,7 @@ async def _context(
         node_store=node_store,
         agent_store=agent_store,
         event_store=event_store,
+        outbox=outbox,
     )
 
 

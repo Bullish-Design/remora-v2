@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 
-from remora.core.actor import AgentActor, Trigger
+from remora.core.actor import AgentActor
 from remora.core.config import Config
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
@@ -112,6 +112,4 @@ class AgentRunner:
         return dict(self._actors)
 
 
-# Re-export Trigger for backwards compatibility with tests
-# that import it from runner. This will be removed after test migration.
-__all__ = ["AgentRunner", "Trigger"]
+__all__ = ["AgentRunner"]

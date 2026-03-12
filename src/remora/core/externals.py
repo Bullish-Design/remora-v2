@@ -7,7 +7,12 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from remora.core.events import AgentMessageEvent, ContentChangedEvent, CustomEvent, SubscriptionPattern
+from remora.core.events import (
+    AgentMessageEvent,
+    ContentChangedEvent,
+    CustomEvent,
+    SubscriptionPattern,
+)
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import AgentStore, NodeStore
@@ -26,7 +31,7 @@ class AgentContext:
         node_store: NodeStore,
         agent_store: AgentStore,
         event_store: EventStore,
-        outbox: Any | None = None,
+        outbox: Any,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace
@@ -37,10 +42,8 @@ class AgentContext:
         self._outbox = outbox
 
     async def _emit(self, event: Event) -> int:
-        """Emit an event through outbox if available, otherwise direct to store."""
-        if self._outbox is not None:
-            return await self._outbox.emit(event)
-        return await self._event_store.append(event)
+        """Emit an event through the outbox."""
+        return await self._outbox.emit(event)
 
     async def read_file(self, path: str) -> str:
         return await self.workspace.read(path)
