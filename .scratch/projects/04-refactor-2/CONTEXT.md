@@ -1,12 +1,13 @@
 # Context
 
 ## Current Status
-Phases 0-12 are implemented and documented. Remaining work is final full-suite validation and final tracking-doc updates.
+Project complete. All phases in `REFACTORING_GUIDE_2.md` are implemented (or documented where design-only) and validated.
 
 ## What Exists
-- Runtime refactor phases 0-11 complete and pushed through commit `9151de0`.
-- Phase 12 design-only artifact added: `EVENT_SOURCING_DESIGN.md`.
-- `PROGRESS.md` and `DECISIONS.md` updated through Phase 12 completion.
+- Runtime refactor phases 0-11 complete in code.
+- Phase 12 design-only artifact exists at `EVENT_SOURCING_DESIGN.md`.
+- Final validation command passed: `152 passed` (`tests/` excluding benchmarks and cairn integration).
+- Tracking docs (`PROGRESS.md`, `CONTEXT.md`, `DECISIONS.md`) are updated to completion state.
 
 ## Next Step
-Run final repo-level validation command, then mark project completion in tracking docs.
+No pending refactor tasks remain in this project scope.

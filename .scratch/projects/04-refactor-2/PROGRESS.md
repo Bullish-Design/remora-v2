@@ -30,7 +30,7 @@
 - [x] Phase 11 implementation
 - [x] Phase 11 testing
 - [x] Phase 12 implementation/validation
-- [ ] Final full-suite validation and docs updates
+- [x] Final full-suite validation and docs updates
 
 ## Latest Completed Work
 - Phase 0 complete: removed proposal endpoints, switched runner rewrite to direct span-based apply (`apply_rewrite`), added cooldown pruning, and hardened reconciler loop fault isolation.
@@ -58,3 +58,4 @@
 - Phase 11 complete: added shared test factories (`tests/factories.py`), migrated duplicated `_node`/`_write`/`_make_cst`/bundle helper patterns to shared helpers across unit+integration suites, and added missing coverage for `broadcast` sibling/file targets, negative config validation, and malformed-source reconciler handling.
 - Phase 11 tests passing: `tests/unit -q` (146 passed) and `tests/integration/test_e2e.py tests/integration/test_performance.py -q` (6 passed), yielding 152 passing tests across the consolidated scope.
 - Phase 12 complete: created design-only event-sourcing artifact in `EVENT_SOURCING_DESIGN.md`, documenting architecture shape, migration boundaries, and deferral recommendation linked to Appendix C of the guide.
+- Final validation complete: `devenv shell -- python -m pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed with 152/152 tests.
