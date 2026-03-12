@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
+from remora.core.actor import RecordingOutbox
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
@@ -247,3 +248,35 @@ async def test_externals_identity(context_env) -> None:
     externals = context.to_externals_dict()
     assert externals["my_node_id"] == node.node_id
     assert externals["my_correlation_id"] == "corr-x"
+
+
+@pytest.mark.asyncio
+async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::alpha")
+    await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+
+    outbox = RecordingOutbox(actor_id=node.node_id)
+    outbox.correlation_id = "corr-outbox"
+    context = AgentContext(
+        node_id=node.node_id,
+        workspace=ws,
+        correlation_id="corr-outbox",
+        node_store=node_store,
+        agent_store=agent_store,
+        event_store=event_store,
+        outbox=outbox,
+    )
+    externals = context.to_externals_dict()
+
+    await externals["event_emit"]("CustomEvent", {"key": "val"})
+    await externals["send_message"]("target-node", "hello")
+
+    assert len(outbox.events) == 2
+    assert outbox.events[0].event_type == "CustomEvent"
+    assert outbox.events[1].event_type == "AgentMessageEvent"
+
+    stored = await event_store.get_events(limit=10)
+    assert not any(event["event_type"] == "CustomEvent" for event in stored)

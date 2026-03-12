@@ -9,6 +9,7 @@ from typing import Any
 
 from remora.core.events import AgentMessageEvent, ContentChangedEvent, CustomEvent, SubscriptionPattern
 from remora.core.events.store import EventStore
+from remora.core.events.types import Event
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.node import CodeNode
 from remora.core.workspace import AgentWorkspace
@@ -25,6 +26,7 @@ class AgentContext:
         node_store: NodeStore,
         agent_store: AgentStore,
         event_store: EventStore,
+        outbox: Any | None = None,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace
@@ -32,6 +34,13 @@ class AgentContext:
         self._node_store = node_store
         self._agent_store = agent_store
         self._event_store = event_store
+        self._outbox = outbox
+
+    async def _emit(self, event: Event) -> int:
+        """Emit an event through outbox if available, otherwise direct to store."""
+        if self._outbox is not None:
+            return await self._outbox.emit(event)
+        return await self._event_store.append(event)
 
     async def read_file(self, path: str) -> str:
         return await self.workspace.read(path)
@@ -101,7 +110,7 @@ class AgentContext:
             payload=payload,
             correlation_id=self.correlation_id,
         )
-        await self._event_store.append(event)
+        await self._emit(event)
         return True
 
     async def event_subscribe(
@@ -124,7 +133,7 @@ class AgentContext:
         return await self._event_store.get_events_for_agent(target_id, limit=limit)
 
     async def send_message(self, to_node_id: str, content: str) -> bool:
-        await self._event_store.append(
+        await self._emit(
             AgentMessageEvent(
                 from_agent=self.node_id,
                 to_agent=to_node_id,
@@ -138,7 +147,7 @@ class AgentContext:
         nodes = await self._node_store.list_nodes()
         target_ids = _resolve_broadcast_targets(self.node_id, pattern, nodes)
         for target_id in target_ids:
-            await self._event_store.append(
+            await self._emit(
                 AgentMessageEvent(
                     from_agent=self.node_id,
                     to_agent=target_id,
@@ -169,7 +178,7 @@ class AgentContext:
         old_hash = hashlib.sha256(full_bytes).hexdigest()
         new_hash = hashlib.sha256(next_text.encode("utf-8")).hexdigest()
         file_path.write_text(next_text, encoding="utf-8")
-        await self._event_store.append(
+        await self._emit(
             ContentChangedEvent(
                 path=str(file_path),
                 change_type="modified",

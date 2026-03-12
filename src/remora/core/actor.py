@@ -258,6 +258,7 @@ class AgentActor:
                     node_store=self._node_store,
                     agent_store=self._agent_store,
                     event_store=self._event_store,
+                    outbox=outbox,
                 )
                 externals = context.to_externals_dict()
                 tools = await self._resolve_maybe_awaitable(discover_tools(workspace, externals))
