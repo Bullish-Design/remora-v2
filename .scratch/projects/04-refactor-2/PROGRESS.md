@@ -15,8 +15,8 @@
 - [x] Phase 3 testing
 - [x] Phase 4 implementation
 - [x] Phase 4 testing
-- [ ] Phase 5 implementation
-- [ ] Phase 5 testing
+- [x] Phase 5 implementation
+- [x] Phase 5 testing
 - [ ] Phase 6 implementation
 - [ ] Phase 6 testing
 - [ ] Phase 7 implementation
@@ -43,3 +43,5 @@
 - Phase 3 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 4 complete: separated `CodeElement` and `Agent` models, introduced `AgentStore`, migrated runner and reconciler status lifecycle through `AgentStore`, and kept `CodeNode` as compatibility view.
 - Phase 4 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 5 complete: moved tool externals into `AgentContext` (`core/externals.py`), removed runner inline-closure externals, and migrated externals tests to direct `AgentContext` coverage.
+- Phase 5 tests passing: `tests/unit -q` and integration smoke suites.

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -9,9 +8,9 @@ import pytest_asyncio
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
+from remora.core.externals import AgentContext
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.node import CodeNode
-from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -31,8 +30,8 @@ def _node(node_id: str, file_path: str = "src/app.py", node_type: str = "functio
 
 
 @pytest_asyncio.fixture
-async def runner_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "phase4.db")
+async def context_env(tmp_path: Path):
+    db = AsyncDB.from_path(tmp_path / "phase5.db")
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
     await node_store.create_tables()
@@ -40,25 +39,44 @@ async def runner_env(tmp_path: Path):
     event_store = EventStore(db=db)
     await event_store.create_tables()
 
-    config = Config(swarm_root=".remora-phase4")
+    config = Config(swarm_root=".remora-phase5")
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 
-    runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
-    yield runner, node_store, agent_store, event_store, workspace_service
+    yield node_store, agent_store, event_store, workspace_service
 
     await workspace_service.close()
     db.close()
 
 
+async def _context(
+    node_id: str,
+    workspace,
+    node_store: NodeStore,
+    agent_store: AgentStore,
+    event_store: EventStore,
+    correlation_id: str = "corr-1",
+) -> AgentContext:
+    return AgentContext(
+        node_id=node_id,
+        workspace=workspace,
+        correlation_id=correlation_id,
+        node_store=node_store,
+        agent_store=agent_store,
+        event_store=event_store,
+    )
+
+
 @pytest.mark.asyncio
-async def test_externals_workspace_ops(runner_env) -> None:
-    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
+async def test_externals_workspace_ops(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     node = _node("src/app.py::alpha")
     await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
 
-    externals = runner._build_externals(node.node_id, ws, "corr-1")
     assert await externals["write_file"]("notes/a.txt", "hello")
     assert await externals["read_file"]("notes/a.txt") == "hello"
     assert await externals["file_exists"]("notes/a.txt") is True
@@ -69,16 +87,18 @@ async def test_externals_workspace_ops(runner_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_externals_graph_ops(runner_env) -> None:
-    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
+async def test_externals_graph_ops(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     a = _node("src/app.py::a")
     b = _node("src/app.py::b")
     await node_store.upsert_node(a)
     await node_store.upsert_node(b)
+    await agent_store.upsert_agent(a.to_agent())
     await node_store.add_edge(a.node_id, b.node_id, "calls")
 
     ws = await workspace_service.get_agent_workspace(a.node_id)
-    externals = runner._build_externals(a.node_id, ws, "corr-1")
+    context = await _context(a.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
 
     got = await externals["graph_get_node"](a.node_id)
     listed = await externals["graph_query_nodes"]("function", None)
@@ -90,12 +110,14 @@ async def test_externals_graph_ops(runner_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_externals_event_ops(runner_env) -> None:
-    runner, node_store, _agent_store, event_store, workspace_service = runner_env
+async def test_externals_event_ops(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     node = _node("src/app.py::alpha")
     await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
-    externals = runner._build_externals(node.node_id, ws, "corr-1")
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
 
     sub_id = await externals["event_subscribe"](["AgentMessageEvent"], None, None)
     assert isinstance(sub_id, int)
@@ -107,24 +129,25 @@ async def test_externals_event_ops(runner_env) -> None:
     assert isinstance(history, list)
     assert await externals["event_unsubscribe"](sub_id)
 
-    # still functional after unregister
     await event_store.append(AgentMessageEvent(from_agent="a", to_agent=node.node_id, content="x"))
     got = await event_store.get_events_for_agent(node.node_id, limit=5)
     assert got
 
 
 @pytest.mark.asyncio
-async def test_externals_communication(runner_env) -> None:
-    runner, node_store, _agent_store, event_store, workspace_service = runner_env
+async def test_externals_communication(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     sender = _node("src/app.py::sender")
     target_a = _node("src/app.py::target_a")
     target_b = _node("src/app.py::target_b")
     await node_store.upsert_node(sender)
     await node_store.upsert_node(target_a)
     await node_store.upsert_node(target_b)
+    await agent_store.upsert_agent(sender.to_agent())
 
     ws = await workspace_service.get_agent_workspace(sender.node_id)
-    externals = runner._build_externals(sender.node_id, ws, "corr-1")
+    context = await _context(sender.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
 
     assert await externals["send_message"](target_a.node_id, "direct")
     summary = await externals["broadcast"]("*", "all")
@@ -135,8 +158,8 @@ async def test_externals_communication(runner_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_externals_code_ops(runner_env) -> None:
-    runner, node_store, _agent_store, event_store, workspace_service = runner_env
+async def test_externals_code_ops(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     source_path = workspace_service._project_root / "src" / "app.py"
     source_path.parent.mkdir(parents=True, exist_ok=True)
     full_source = (
@@ -150,8 +173,10 @@ async def test_externals_code_ops(runner_env) -> None:
     node = _node("src/app.py::alpha", file_path=str(source_path))
     node = node.model_copy(update={"source_code": "def alpha():\n    return 1\n"})
     await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
-    externals = runner._build_externals(node.node_id, ws, "corr-1")
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
 
     assert await externals["apply_rewrite"]("def alpha():\n    return 2\n")
 
@@ -167,8 +192,8 @@ async def test_externals_code_ops(runner_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_apply_rewrite_duplicate_source_blocks(runner_env) -> None:
-    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
+async def test_apply_rewrite_duplicate_source_blocks(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     source_path = workspace_service._project_root / "src" / "dup.py"
     source_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_text(
@@ -189,8 +214,10 @@ async def test_apply_rewrite_duplicate_source_blocks(runner_env) -> None:
         }
     )
     await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
-    externals = runner._build_externals(node.node_id, ws, "corr-1")
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
 
     applied = await externals["apply_rewrite"]("def helper():\n    return 2\n")
     assert applied
@@ -199,11 +226,13 @@ async def test_apply_rewrite_duplicate_source_blocks(runner_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_externals_identity(runner_env) -> None:
-    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
+async def test_externals_identity(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
     node = _node("src/app.py::alpha")
     await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
-    externals = runner._build_externals(node.node_id, ws, "corr-x")
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store, "corr-x")
+    externals = context.to_externals_dict()
     assert externals["my_node_id"] == node.node_id
     assert externals["my_correlation_id"] == "corr-x"
