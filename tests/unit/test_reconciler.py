@@ -10,6 +10,7 @@ import pytest_asyncio
 import remora.code.reconciler as reconciler_module
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
+from remora.core.events import ContentChangedEvent
 from remora.core.db import AsyncDB
 from remora.core.events import EventStore
 from remora.core.graph import AgentStore, NodeStore
@@ -177,6 +178,7 @@ async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, mo
         await original_cycle()
 
     monkeypatch.setattr(reconciler, "reconcile_cycle", flaky_cycle)
+    reconciler._watch_mode = False
 
     task = asyncio.create_task(reconciler.run_forever(poll_interval_s=0.01))
     await asyncio.sleep(0.05)
@@ -184,3 +186,40 @@ async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, mo
     await asyncio.wait_for(task, timeout=1.0)
 
     assert call_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_reconciler_watch_fallback_to_polling(reconcile_env, monkeypatch) -> None:
+    _node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    called = False
+
+    async def fake_watch() -> None:
+        raise ImportError("watchfiles unavailable")
+
+    async def fake_poll(_interval: float) -> None:
+        nonlocal called
+        called = True
+        reconciler.stop()
+
+    monkeypatch.setattr(reconciler, "_run_watching", fake_watch)
+    monkeypatch.setattr(reconciler, "_run_polling", fake_poll)
+    await reconciler.run_forever(poll_interval_s=0.01)
+    assert called
+
+
+@pytest.mark.asyncio
+async def test_reconciler_content_changed_event_triggers_reconcile(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    source_file = tmp_path / "src" / "event.py"
+    _write(source_file, "def event_fn():\n    return 1\n")
+    await reconciler.full_scan()
+
+    _write(source_file, "def event_fn():\n    return 2\n")
+    await reconciler._on_content_changed(ContentChangedEvent(path=str(source_file), change_type="modified"))
+
+    node = await node_store.get_node(f"{source_file}::event_fn")
+    assert node is not None
+    assert "return 2" in node.source_code

@@ -21,8 +21,8 @@
 - [x] Phase 6 testing
 - [x] Phase 7 implementation
 - [x] Phase 7 testing
-- [ ] Phase 8 implementation
-- [ ] Phase 8 testing
+- [x] Phase 8 implementation
+- [x] Phase 8 testing
 - [ ] Phase 9 implementation
 - [ ] Phase 9 testing
 - [ ] Phase 10 implementation
@@ -49,3 +49,5 @@
 - Phase 6 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 7 complete: centralized path logic in `code/paths.py`, introduced plugin-based language registry in `code/languages.py`, refactored discovery/reconciler/CLI to use shared path/plugin modules, and added Grail script caching by content hash.
 - Phase 7 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 8 complete: reconciler now supports watchfiles-first operation with polling fallback, isolates watch-cycle faults, and subscribes to `ContentChangedEvent` for immediate event-triggered reconciliation.
+- Phase 8 tests passing: `tests/unit -q` and integration smoke suites.

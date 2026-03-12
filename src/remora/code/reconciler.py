@@ -12,6 +12,8 @@ from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk
 from remora.code.projections import project_nodes
 from remora.core.config import Config
 from remora.core.events import (
+    ContentChangedEvent,
+    EventBus,
     EventStore,
     NodeChangedEvent,
     NodeDiscoveredEvent,
@@ -45,6 +47,7 @@ class FileReconciler:
         self._project_root = project_root.resolve()
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._running = False
+        self._watch_mode = True
 
     async def full_scan(self) -> list[CodeNode]:
         """Perform a full startup scan and return current graph nodes."""
@@ -74,17 +77,74 @@ class FileReconciler:
         """Continuously reconcile changed files."""
         self._running = True
         try:
-            while self._running:
+            if self._watch_mode:
                 try:
-                    await self.reconcile_cycle()
-                except Exception:  # noqa: BLE001 - keep loop alive on single-cycle failure
-                    logger.exception("Reconcile cycle failed, will retry next cycle")
-                await asyncio.sleep(poll_interval_s)
+                    await self._run_watching()
+                except ImportError:
+                    logger.info("watchfiles unavailable, falling back to polling mode")
+                    await self._run_polling(poll_interval_s)
+            else:
+                await self._run_polling(poll_interval_s)
         finally:
             self._running = False
 
     def stop(self) -> None:
         self._running = False
+
+    async def start(self, event_bus: EventBus) -> None:
+        """Subscribe to content change events for immediate reconciliation."""
+        event_bus.subscribe(ContentChangedEvent, self._on_content_changed)
+
+    async def _run_watching(self) -> None:
+        """Use filesystem events for immediate change detection."""
+        import watchfiles
+
+        paths_to_watch = resolve_discovery_paths(self._config, self._project_root)
+        watch_paths = [str(path) for path in paths_to_watch if path.exists()]
+        if not watch_paths:
+            await self._run_polling(1.0)
+            return
+
+        async for changes in watchfiles.awatch(*watch_paths, stop_event=self._stop_event()):
+            if not self._running:
+                break
+            changed_files = {str(Path(path)) for _change_type, path in changes}
+            try:
+                for file_path in sorted(changed_files):
+                    p = Path(file_path)
+                    if p.exists() and p.is_file():
+                        mtime = p.stat().st_mtime_ns
+                        await self._reconcile_file(str(p), mtime)
+                    elif str(p) in self._file_state:
+                        _mtime, node_ids = self._file_state[str(p)]
+                        for node_id in sorted(node_ids):
+                            await self._remove_node(node_id)
+                        self._file_state.pop(str(p), None)
+            except Exception:  # noqa: BLE001 - isolate one watch batch failure
+                logger.exception("Watch-triggered reconcile failed")
+
+    async def _run_polling(self, interval: float) -> None:
+        """Fallback polling mode."""
+        while self._running:
+            try:
+                await self.reconcile_cycle()
+            except Exception:  # noqa: BLE001 - keep loop alive
+                logger.exception("Reconcile cycle failed, will retry next cycle")
+            await asyncio.sleep(interval)
+
+    def _stop_event(self):  # noqa: ANN201
+        """Create a threading event set when reconciler is stopped."""
+        import threading
+
+        event = threading.Event()
+
+        async def _checker() -> None:
+            while self._running:
+                await asyncio.sleep(0.5)
+            event.set()
+
+        asyncio.create_task(_checker())
+        return event
 
     def _collect_file_mtimes(self) -> dict[str, int]:
         mtimes: dict[str, int] = {}
@@ -200,4 +260,15 @@ class FileReconciler:
     async def _ensure_agent(self, node: CodeNode) -> None:
         if await self._agent_store.get_agent(node.node_id) is None:
             await self._agent_store.upsert_agent(node.to_agent())
+
+    async def _on_content_changed(self, event: ContentChangedEvent) -> None:
+        """Immediately reconcile a file reported changed by upstream systems."""
+        file_path = event.path
+        p = Path(file_path)
+        if p.exists() and p.is_file():
+            try:
+                mtime = p.stat().st_mtime_ns
+                await self._reconcile_file(str(p), mtime)
+            except Exception:  # noqa: BLE001 - isolate event failures
+                logger.exception("Event-triggered reconcile failed for %s", file_path)
 __all__ = ["FileReconciler"]

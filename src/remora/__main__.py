@@ -120,6 +120,7 @@ async def _start(
         workspace_service,
         project_root,
     )
+    await reconciler.start(event_bus)
     logging.info("Starting code discovery...")
     await reconciler.full_scan()
 
