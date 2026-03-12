@@ -7,8 +7,8 @@
 ## Phase Status
 - [x] Phase 0 implementation
 - [x] Phase 0 testing
-- [ ] Phase 1 implementation
-- [ ] Phase 1 testing
+- [x] Phase 1 implementation
+- [x] Phase 1 testing
 - [ ] Phase 2 implementation
 - [ ] Phase 2 testing
 - [ ] Phase 3 implementation
@@ -35,3 +35,5 @@
 ## Latest Completed Work
 - Phase 0 complete: removed proposal endpoints, switched runner rewrite to direct span-based apply (`apply_rewrite`), added cooldown pruning, and hardened reconciler loop fault isolation.
 - Phase 0 tests passing: `tests/unit/test_runner.py tests/unit/test_runner_externals.py tests/unit/test_web_server.py tests/unit/test_reconciler.py`.
+- Phase 1 complete: introduced `AsyncDB`, migrated `NodeStore`, `SubscriptionRegistry`, `EventStore`, updated startup wiring, and migrated tests to shared `db` fixture / AsyncDB constructors.
+- Phase 1 tests passing: `tests/unit -q` and `tests/integration/test_e2e.py tests/integration/test_performance.py -q`.

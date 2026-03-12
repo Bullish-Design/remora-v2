@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sqlite3
 from pathlib import Path
 from typing import Annotated
 
@@ -15,6 +14,7 @@ from remora.code.discovery import CSTNode
 from remora.code.discovery import discover as discover_nodes
 from remora.code.reconciler import FileReconciler
 from remora.core.config import load_config
+from remora.core.db import AsyncDB
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry
 from remora.core.graph import NodeStore
 from remora.core.runner import AgentRunner
@@ -91,24 +91,20 @@ async def _start(
 
     db_path = project_root / config.swarm_root / "remora.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
+    db = AsyncDB.from_path(db_path)
 
     event_bus = EventBus()
-    node_store = NodeStore(conn, lock)
+    node_store = NodeStore(db)
     await node_store.create_tables()
 
-    subscriptions = SubscriptionRegistry(conn, lock)
+    subscriptions = SubscriptionRegistry(db)
+    await subscriptions.create_tables()
     event_store = EventStore(
-        connection=conn,
-        lock=lock,
+        db=db,
         subscriptions=subscriptions,
         event_bus=event_bus,
     )
-    await event_store.initialize()
+    await event_store.create_tables()
 
     workspace_service = CairnWorkspaceService(config, project_root)
     await workspace_service.initialize()
@@ -164,7 +160,7 @@ async def _start(
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await workspace_service.close()
-        conn.close()
+        db.close()
 
 
 async def _discover(

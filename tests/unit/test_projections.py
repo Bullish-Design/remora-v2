@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -10,6 +9,7 @@ import pytest_asyncio
 from remora.code.discovery import CSTNode
 from remora.code.projections import project_nodes
 from remora.core.config import Config
+from remora.core.db import AsyncDB
 from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
@@ -57,11 +57,8 @@ def _write_bundle_templates(root: Path, bundle_name: str = "code-agent") -> None
 
 @pytest_asyncio.fixture
 async def projection_env(tmp_path: Path):
-    conn = sqlite3.connect(str(tmp_path / "phase5.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-
-    node_store = NodeStore(conn, lock)
+    db = AsyncDB.from_path(tmp_path / "phase5.db")
+    node_store = NodeStore(db)
     await node_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
@@ -78,7 +75,7 @@ async def projection_env(tmp_path: Path):
     yield node_store, workspace_service, config
 
     await workspace_service.close()
-    conn.close()
+    db.close()
 
 
 @pytest.mark.asyncio
@@ -131,10 +128,8 @@ async def test_project_changed_node(projection_env) -> None:
 
 @pytest.mark.asyncio
 async def test_project_bundle_mapping(tmp_path: Path) -> None:
-    conn = sqlite3.connect(str(tmp_path / "bundle-map.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-    node_store = NodeStore(conn, lock)
+    db = AsyncDB.from_path(tmp_path / "bundle-map.db")
+    node_store = NodeStore(db)
     await node_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
@@ -159,4 +154,4 @@ async def test_project_bundle_mapping(tmp_path: Path) -> None:
     assert "special-agent" in bundle_text
 
     await workspace_service.close()
-    conn.close()
+    db.close()

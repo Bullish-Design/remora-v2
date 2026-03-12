@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
 from remora.core.config import Config
+from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import CodeNode
@@ -32,15 +32,11 @@ def _node(node_id: str, file_path: str = "src/app.py", node_type: str = "functio
 
 @pytest_asyncio.fixture
 async def runner_env(tmp_path: Path):
-    db_path = tmp_path / "phase4.db"
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-
-    node_store = NodeStore(conn, lock)
+    db = AsyncDB.from_path(tmp_path / "phase4.db")
+    node_store = NodeStore(db)
     await node_store.create_tables()
-    event_store = EventStore(connection=conn, lock=lock)
-    await event_store.initialize()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
 
     config = Config(swarm_root=".remora-phase4")
     workspace_service = CairnWorkspaceService(config, tmp_path)
@@ -50,7 +46,7 @@ async def runner_env(tmp_path: Path):
     yield runner, node_store, event_store, workspace_service
 
     await workspace_service.close()
-    conn.close()
+    db.close()
 
 
 @pytest.mark.asyncio

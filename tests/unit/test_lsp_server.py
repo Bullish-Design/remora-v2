@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,7 @@ import pytest_asyncio
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
+from remora.core.db import AsyncDB
 from remora.core.events import EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import CodeNode
@@ -38,15 +38,13 @@ def _node(node_id: str, file_path: str) -> CodeNode:
 
 @pytest_asyncio.fixture
 async def lsp_env(tmp_path: Path):
-    conn = sqlite3.connect(str(tmp_path / "lsp.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-    node_store = NodeStore(conn, lock)
+    db = AsyncDB.from_path(tmp_path / "lsp.db")
+    node_store = NodeStore(db)
     await node_store.create_tables()
-    event_store = EventStore(connection=conn, lock=lock)
-    await event_store.initialize()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
     yield node_store, event_store
-    conn.close()
+    db.close()
 
 
 @pytest.mark.asyncio

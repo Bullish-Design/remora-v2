@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -11,6 +10,7 @@ import pytest_asyncio
 import remora.code.reconciler as reconciler_module
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
+from remora.core.db import AsyncDB
 from remora.core.events import EventStore
 from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
@@ -35,14 +35,11 @@ def _write_bundle_templates(root: Path) -> None:
 
 @pytest_asyncio.fixture
 async def reconcile_env(tmp_path: Path):
-    conn = sqlite3.connect(str(tmp_path / "reconcile.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-
-    node_store = NodeStore(conn, lock)
+    db = AsyncDB.from_path(tmp_path / "reconcile.db")
+    node_store = NodeStore(db)
     await node_store.create_tables()
-    event_store = EventStore(connection=conn, lock=lock)
-    await event_store.initialize()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
     _write_bundle_templates(bundles_root)
@@ -68,7 +65,7 @@ async def reconcile_env(tmp_path: Path):
     yield node_store, event_store, workspace_service, config, reconciler
 
     await workspace_service.close()
-    conn.close()
+    db.close()
 
 
 @pytest.mark.asyncio

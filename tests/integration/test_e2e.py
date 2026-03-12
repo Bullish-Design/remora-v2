@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
 import pytest
 from structured_agents import Message
 from structured_agents.types import ToolResult, ToolSchema
 
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
+from remora.core.db import AsyncDB
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
@@ -22,7 +21,6 @@ from remora.core.events import (
 from remora.core.graph import NodeStore
 from remora.core.runner import AgentRunner, Trigger
 from remora.core.workspace import CairnWorkspaceService
-from remora.web.server import create_app
 
 
 def _write(path: Path, text: str) -> None:
@@ -50,9 +48,9 @@ def _write_bundles(root: Path) -> None:
         code / "tools" / "rewrite_self.pym",
         "from grail import Input, external\n"
         "new_source: str = Input('new_source')\n"
-        "@external\nasync def propose_rewrite(new_source: str) -> str: ...\n"
-        "proposal_id = await propose_rewrite(new_source)\n"
-        "return proposal_id\n",
+        "@external\nasync def apply_rewrite(new_source: str) -> bool: ...\n"
+        "applied = await apply_rewrite(new_source)\n"
+        "return str(applied)\n",
     )
 
 
@@ -67,14 +65,12 @@ async def _setup_runtime(tmp_path: Path):
     bundles_root = tmp_path / "bundles"
     _write_bundles(bundles_root)
 
-    conn = sqlite3.connect(str(tmp_path / "e2e.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
+    db = AsyncDB.from_path(tmp_path / "e2e.db")
     event_bus = EventBus()
-    node_store = NodeStore(conn, lock)
+    node_store = NodeStore(db)
     await node_store.create_tables()
-    event_store = EventStore(connection=conn, lock=lock, event_bus=event_bus)
-    await event_store.initialize()
+    event_store = EventStore(db=db, event_bus=event_bus)
+    await event_store.create_tables()
 
     config = Config(
         discovery_paths=("src",),
@@ -97,7 +93,7 @@ async def _setup_runtime(tmp_path: Path):
 
     return {
         "source_path": source_path,
-        "conn": conn,
+        "db": db,
         "event_bus": event_bus,
         "node_store": node_store,
         "event_store": event_store,
@@ -158,7 +154,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
         def schema(self) -> ToolSchema:
             return ToolSchema(
                 name="rewrite_self",
-                description="Propose rewrite",
+                description="Apply rewrite",
                 parameters={
                     "type": "object",
                     "properties": {"new_source": {"type": "string"}},
@@ -167,11 +163,11 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
             )
 
         async def execute(self, arguments, context):  # noqa: ANN001, ANN201
-            proposal_id = await self._externals["propose_rewrite"](arguments["new_source"])
+            applied = await self._externals["apply_rewrite"](arguments["new_source"])
             return ToolResult(
                 call_id=getattr(context, "id", ""),
                 name="rewrite_self",
-                output=proposal_id,
+                output=str(applied),
                 is_error=False,
             )
 
@@ -187,23 +183,6 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
         )
     )
 
-    events = await runtime["event_store"].get_events(limit=50)
-    proposal_events = [event for event in events if event["event_type"] == "RewriteProposalEvent"]
-    assert proposal_events
-    proposal_id = proposal_events[0]["payload"]["proposal_id"]
-
-    app = create_app(
-        runtime["event_store"],
-        runtime["node_store"],
-        runtime["event_bus"],
-        project_root=tmp_path,
-    )
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.post("/api/approve", json={"proposal_id": proposal_id})
-    assert response.status_code == 200
     updated_source = runtime["source_path"].read_text(encoding="utf-8")
     assert "def alpha():\n    return 42\n" in updated_source
     assert "def beta():\n    return 2\n" in updated_source
@@ -212,7 +191,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     assert any(event["event_type"] == "ContentChangedEvent" for event in events_after)
 
     await runtime["workspace_service"].close()
-    runtime["conn"].close()
+    runtime["db"].close()
 
 
 @pytest.mark.asyncio
@@ -231,7 +210,7 @@ async def test_e2e_agent_message_chain(tmp_path: Path) -> None:
     assert trigger_event.event_type == "AgentMessageEvent"
 
     await runtime["workspace_service"].close()
-    runtime["conn"].close()
+    runtime["db"].close()
 
 
 @pytest.mark.asyncio
@@ -248,4 +227,4 @@ async def test_e2e_file_change_triggers(tmp_path: Path) -> None:
     assert trigger_event.event_type == "ContentChangedEvent"
 
     await runtime["workspace_service"].close()
-    runtime["conn"].close()
+    runtime["db"].close()

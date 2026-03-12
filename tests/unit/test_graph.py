@@ -30,8 +30,8 @@ def _node(
 
 
 @pytest.mark.asyncio
-async def test_nodestore_upsert_and_get(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_upsert_and_get(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     node = _node("src/app.py::a")
     await store.upsert_node(node)
@@ -41,8 +41,8 @@ async def test_nodestore_upsert_and_get(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_list_with_filters(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_list_with_filters(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     await store.upsert_node(_node("src/app.py::a", node_type="function", status="idle"))
     await store.upsert_node(_node("src/app.py::B", node_type="class", status="running"))
@@ -65,8 +65,8 @@ async def test_nodestore_list_with_filters(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_delete(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_delete(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     await store.upsert_node(_node("src/app.py::a"))
     await store.upsert_node(_node("src/app.py::b"))
@@ -78,8 +78,8 @@ async def test_nodestore_delete(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_set_status(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_set_status(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     node = _node("src/app.py::a", status="idle")
     await store.upsert_node(node)
@@ -92,8 +92,8 @@ async def test_nodestore_set_status(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_add_edge(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_add_edge(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     await store.upsert_node(_node("src/app.py::a"))
     await store.upsert_node(_node("src/app.py::b"))
@@ -107,8 +107,8 @@ async def test_nodestore_add_edge(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_edge_directions(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_edge_directions(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     await store.upsert_node(_node("src/app.py::a"))
     await store.upsert_node(_node("src/app.py::b"))
@@ -128,8 +128,8 @@ async def test_nodestore_edge_directions(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_edge_uniqueness(db_connection, db_lock) -> None:
-    store = NodeStore(db_connection, db_lock)
+async def test_nodestore_edge_uniqueness(db) -> None:
+    store = NodeStore(db)
     await store.create_tables()
     await store.upsert_node(_node("src/app.py::a"))
     await store.upsert_node(_node("src/app.py::b"))
@@ -141,16 +141,16 @@ async def test_nodestore_edge_uniqueness(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_shared_connection(db_connection, db_lock) -> None:
-    node_store = NodeStore(db_connection, db_lock)
-    event_store = EventStore(connection=db_connection, lock=db_lock)
+async def test_shared_connection(db) -> None:
+    node_store = NodeStore(db)
+    event_store = EventStore(db=db)
     await node_store.create_tables()
-    await event_store.initialize()
+    await event_store.create_tables()
     await node_store.upsert_node(_node("src/app.py::a"))
     event_id = await event_store.append(AgentStartEvent(agent_id="src/app.py::a"))
     got = await node_store.get_node("src/app.py::a")
 
     assert got is not None
     assert event_id == 1
-    assert node_store._conn is event_store.connection
-    assert node_store._lock is event_store.lock
+    assert node_store.db.connection is event_store.connection
+    assert node_store.db.lock is event_store.lock

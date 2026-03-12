@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 import time
 from pathlib import Path
 
 import pytest
 
 from remora.code.discovery import discover
+from remora.core.db import AsyncDB
 from remora.core.events import HumanChatEvent, SubscriptionPattern, SubscriptionRegistry
 from remora.core.graph import NodeStore
 from remora.core.node import CodeNode
@@ -46,10 +46,8 @@ async def test_perf_discovery_100_nodes(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
-    conn = sqlite3.connect(str(tmp_path / "perf-nodes.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-    node_store = NodeStore(conn, lock)
+    db = AsyncDB.from_path(tmp_path / "perf-nodes.db")
+    node_store = NodeStore(db)
     await node_store.create_tables()
 
     started = time.perf_counter()
@@ -58,16 +56,14 @@ async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
     elapsed = time.perf_counter() - started
 
     assert elapsed < 1.0
-    conn.close()
+    db.close()
 
 
 @pytest.mark.asyncio
 async def test_perf_subscription_matching(tmp_path: Path) -> None:
-    conn = sqlite3.connect(str(tmp_path / "perf-subs.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-    registry = SubscriptionRegistry(conn, lock)
-    await registry.initialize()
+    db = AsyncDB.from_path(tmp_path / "perf-subs.db")
+    registry = SubscriptionRegistry(db)
+    await registry.create_tables()
 
     for idx in range(100):
         await registry.register(
@@ -83,4 +79,4 @@ async def test_perf_subscription_matching(tmp_path: Path) -> None:
 
     assert "agent-42" in matched
     assert elapsed < 1.0
-    conn.close()
+    db.close()

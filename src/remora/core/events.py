@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path, PurePath
+from pathlib import PurePath
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from remora.core.db import AsyncDB
 
 
 class Event(BaseModel):
@@ -24,9 +25,6 @@ class Event(BaseModel):
     def model_post_init(self, __context: Any) -> None:
         if not self.event_type:
             self.event_type = type(self).__name__
-
-
-# Agent lifecycle
 
 
 class AgentStartEvent(Event):
@@ -44,9 +42,6 @@ class AgentErrorEvent(Event):
     error: str
 
 
-# Communication
-
-
 class AgentMessageEvent(Event):
     from_agent: str
     to_agent: str
@@ -61,9 +56,6 @@ class HumanChatEvent(Event):
 class AgentTextResponse(Event):
     agent_id: str
     content: str
-
-
-# Code changes
 
 
 class NodeDiscoveredEvent(Event):
@@ -102,9 +94,6 @@ class RewriteProposalEvent(Event):
 
 class CustomEvent(Event):
     payload: dict[str, Any] = Field(default_factory=dict)
-
-
-# Tool execution
 
 
 class ToolResultEvent(Event):
@@ -212,96 +201,66 @@ class SubscriptionPattern(BaseModel):
 class SubscriptionRegistry:
     """SQLite-backed subscription store with event_type-indexed in-memory cache."""
 
-    def __init__(self, connection: sqlite3.Connection, lock: asyncio.Lock):
-        self._conn = connection
-        self._lock = lock
+    def __init__(self, db: AsyncDB):
+        self._db = db
         self._cache: dict[str, list[tuple[str, SubscriptionPattern]]] | None = None
-        self._initialized = False
+
+    @property
+    def db(self) -> AsyncDB:
+        return self._db
+
+    async def create_tables(self) -> None:
+        """Create subscription storage tables."""
+        await self._db.execute_script(
+            """
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT NOT NULL,
+                pattern_json TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_subs_agent ON subscriptions(agent_id);
+            """
+        )
 
     async def initialize(self) -> None:
-        """Create subscription storage tables."""
-        if self._initialized:
-            return
-
-        def run() -> None:
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS subscriptions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    agent_id TEXT NOT NULL,
-                    pattern_json TEXT NOT NULL,
-                    created_at REAL NOT NULL
-                )
-                """
-            )
-            self._conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_subs_agent ON subscriptions(agent_id)"
-            )
-            self._conn.commit()
-
-        async with self._lock:
-            await asyncio.to_thread(run)
-        self._initialized = True
+        """Backward-compatible alias for create_tables."""
+        await self.create_tables()
 
     async def register(self, agent_id: str, pattern: SubscriptionPattern) -> int:
         """Register a subscription and return its primary-key ID."""
-        await self.initialize()
-
-        def run() -> int:
-            cursor = self._conn.execute(
-                """
-                INSERT INTO subscriptions (agent_id, pattern_json, created_at)
-                VALUES (?, ?, ?)
-                """,
-                (agent_id, json.dumps(pattern.model_dump()), time.time()),
-            )
-            self._conn.commit()
-            return int(cursor.lastrowid)
-
-        async with self._lock:
-            sub_id = await asyncio.to_thread(run)
+        sub_id = await self._db.insert(
+            """
+            INSERT INTO subscriptions (agent_id, pattern_json, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (agent_id, json.dumps(pattern.model_dump()), time.time()),
+        )
         self._cache = None
         return sub_id
 
     async def unregister(self, subscription_id: int) -> bool:
         """Remove a subscription by ID. Returns True when a row was deleted."""
-        await self.initialize()
-
-        def run() -> bool:
-            cursor = self._conn.execute(
-                "DELETE FROM subscriptions WHERE id = ?",
-                (subscription_id,),
-            )
-            self._conn.commit()
-            return cursor.rowcount > 0
-
-        async with self._lock:
-            deleted = await asyncio.to_thread(run)
+        deleted = await self._db.delete(
+            "DELETE FROM subscriptions WHERE id = ?",
+            (subscription_id,),
+        )
         if deleted:
             self._cache = None
-        return deleted
+        return deleted > 0
 
     async def unregister_by_agent(self, agent_id: str) -> int:
         """Remove all subscriptions for an agent and return deleted count."""
-        await self.initialize()
-
-        def run() -> int:
-            cursor = self._conn.execute(
-                "DELETE FROM subscriptions WHERE agent_id = ?",
-                (agent_id,),
-            )
-            self._conn.commit()
-            return int(cursor.rowcount)
-
-        async with self._lock:
-            deleted = await asyncio.to_thread(run)
+        deleted = await self._db.delete(
+            "DELETE FROM subscriptions WHERE agent_id = ?",
+            (agent_id,),
+        )
         if deleted > 0:
             self._cache = None
         return deleted
 
     async def get_matching_agents(self, event: Event) -> list[str]:
         """Resolve agent IDs whose patterns match the supplied event."""
-        await self.initialize()
         if self._cache is None:
             await self._rebuild_cache()
 
@@ -319,15 +278,9 @@ class SubscriptionRegistry:
 
     async def _rebuild_cache(self) -> None:
         """Load all subscriptions and rebuild event_type-indexed cache."""
-
-        def run() -> list[sqlite3.Row]:
-            cursor = self._conn.execute(
-                "SELECT agent_id, pattern_json FROM subscriptions ORDER BY id ASC"
-            )
-            return cursor.fetchall()
-
-        async with self._lock:
-            rows = await asyncio.to_thread(run)
+        rows = await self._db.fetch_all(
+            "SELECT agent_id, pattern_json FROM subscriptions ORDER BY id ASC"
+        )
 
         cache: dict[str, list[tuple[str, SubscriptionPattern]]] = {}
         for row in rows:
@@ -344,123 +297,83 @@ class EventStore:
 
     def __init__(
         self,
-        db_path: Path | str | None = None,
+        db: AsyncDB,
         subscriptions: SubscriptionRegistry | None = None,
         event_bus: EventBus | None = None,
-        *,
-        connection: sqlite3.Connection | None = None,
-        lock: asyncio.Lock | None = None,
     ) -> None:
-        if connection is None and db_path is None:
-            raise ValueError("EventStore requires either db_path or connection")
-
-        self._db_path = Path(db_path) if db_path is not None else None
-        self._conn = connection
-        self._owns_connection = connection is None
-        self._lock = lock or asyncio.Lock()
-        self._subscriptions = subscriptions
+        self._db = db
+        self._subscriptions = subscriptions or SubscriptionRegistry(db)
         self._event_bus = event_bus or EventBus()
         self._trigger_queue: asyncio.Queue[tuple[str, Event]] = asyncio.Queue()
-        self._initialized = False
 
     @property
     def subscriptions(self) -> SubscriptionRegistry:
         """Access the subscription registry for registration and matching."""
-        if self._subscriptions is None:
-            raise RuntimeError("EventStore not initialized")
         return self._subscriptions
 
     @property
-    def connection(self) -> sqlite3.Connection | None:
-        """Expose the underlying sqlite connection."""
-        return self._conn
+    def connection(self):  # noqa: ANN201
+        """Expose the underlying sqlite connection for compatibility."""
+        return self._db.connection
 
     @property
     def lock(self) -> asyncio.Lock:
         """Expose the shared lock used for sqlite operations."""
-        return self._lock
+        return self._db.lock
+
+    async def create_tables(self) -> None:
+        """Create event storage tables and indexes."""
+        await self._db.execute_script(
+            """
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                agent_id TEXT,
+                from_agent TEXT,
+                to_agent TEXT,
+                correlation_id TEXT,
+                timestamp REAL NOT NULL,
+                payload TEXT NOT NULL,
+                summary TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+            CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
+            """
+        )
+        await self._subscriptions.create_tables()
 
     async def initialize(self) -> None:
-        """Create tables and configure connection pragmas."""
-        if self._initialized:
-            return
-
-        if self._conn is None:
-            assert self._db_path is not None
-            self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-
-        conn = self._conn
-
-        def run() -> None:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=5000")
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_type TEXT NOT NULL,
-                    agent_id TEXT,
-                    from_agent TEXT,
-                    to_agent TEXT,
-                    correlation_id TEXT,
-                    timestamp REAL NOT NULL,
-                    payload TEXT NOT NULL,
-                    summary TEXT DEFAULT ''
-                )
-                """
-            )
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id)"
-            )
-            conn.commit()
-
-        async with self._lock:
-            await asyncio.to_thread(run)
-
-        if self._subscriptions is None:
-            self._subscriptions = SubscriptionRegistry(conn, self._lock)
-        await self._subscriptions.initialize()
-        self._initialized = True
+        """Backward-compatible alias for create_tables."""
+        await self.create_tables()
 
     async def append(self, event: Event) -> int:
         """Append an event and fan-out to bus and matching subscription triggers."""
-        await self.initialize()
-        assert self._conn is not None
-
         payload = event.model_dump()
         summary = self._summarize(event)
         agent_id = getattr(event, "agent_id", None)
         from_agent = getattr(event, "from_agent", None)
         to_agent = getattr(event, "to_agent", None)
 
-        def run() -> int:
-            cursor = self._conn.execute(
-                """
-                INSERT INTO events (
-                    event_type, agent_id, from_agent, to_agent,
-                    correlation_id, timestamp, payload, summary
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event.event_type,
-                    agent_id,
-                    from_agent,
-                    to_agent,
-                    event.correlation_id,
-                    event.timestamp,
-                    json.dumps(payload),
-                    summary,
-                ),
+        event_id = await self._db.insert(
+            """
+            INSERT INTO events (
+                event_type, agent_id, from_agent, to_agent,
+                correlation_id, timestamp, payload, summary
             )
-            self._conn.commit()
-            return int(cursor.lastrowid)
-
-        async with self._lock:
-            event_id = await asyncio.to_thread(run)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.event_type,
+                agent_id,
+                from_agent,
+                to_agent,
+                event.correlation_id,
+                event.timestamp,
+                json.dumps(payload),
+                summary,
+            ),
+        )
 
         await self._event_bus.emit(event)
 
@@ -471,46 +384,32 @@ class EventStore:
 
     async def get_events(self, limit: int = 100) -> list[dict[str, Any]]:
         """Get recent events, newest first."""
-        await self.initialize()
-        assert self._conn is not None
-
-        def run() -> list[dict[str, Any]]:
-            cursor = self._conn.execute(
-                "SELECT * FROM events ORDER BY id DESC LIMIT ?",
-                (limit,),
-            )
-            rows = [dict(row) for row in cursor.fetchall()]
-            for row in rows:
-                row["payload"] = json.loads(row["payload"])
-            return rows
-
-        async with self._lock:
-            return await asyncio.to_thread(run)
+        rows = await self._db.fetch_all(
+            "SELECT * FROM events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        result = [dict(row) for row in rows]
+        for row in result:
+            row["payload"] = json.loads(row["payload"])
+        return result
 
     async def get_events_for_agent(
         self, agent_id: str, limit: int = 50
     ) -> list[dict[str, Any]]:
         """Get recent events that involve an agent as source, target, or owner."""
-        await self.initialize()
-        assert self._conn is not None
-
-        def run() -> list[dict[str, Any]]:
-            cursor = self._conn.execute(
-                """
-                SELECT * FROM events
-                WHERE agent_id = ? OR from_agent = ? OR to_agent = ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (agent_id, agent_id, agent_id, limit),
-            )
-            rows = [dict(row) for row in cursor.fetchall()]
-            for row in rows:
-                row["payload"] = json.loads(row["payload"])
-            return rows
-
-        async with self._lock:
-            return await asyncio.to_thread(run)
+        rows = await self._db.fetch_all(
+            """
+            SELECT * FROM events
+            WHERE agent_id = ? OR from_agent = ? OR to_agent = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (agent_id, agent_id, agent_id, limit),
+        )
+        result = [dict(row) for row in rows]
+        for row in result:
+            row["payload"] = json.loads(row["payload"])
+        return result
 
     async def get_triggers(self) -> AsyncIterator[tuple[str, Event]]:
         """Yield queued (agent_id, event) pairs forever."""

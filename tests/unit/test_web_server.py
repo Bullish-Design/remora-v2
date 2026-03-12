@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 from pathlib import Path
 
 import httpx
@@ -10,6 +9,7 @@ import pytest
 import pytest_asyncio
 
 from remora.core.events import EventBus, EventStore, HumanChatEvent
+from remora.core.db import AsyncDB
 from remora.core.graph import NodeStore
 from remora.core.node import CodeNode
 from remora.web.server import create_app
@@ -33,15 +33,12 @@ def _node(node_id: str, file_path: str, source_code: str, status: str = "idle") 
 
 @pytest_asyncio.fixture
 async def web_env(tmp_path: Path):
-    conn = sqlite3.connect(str(tmp_path / "web.db"), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    lock = asyncio.Lock()
-
+    db = AsyncDB.from_path(tmp_path / "web.db")
     event_bus = EventBus()
-    node_store = NodeStore(conn, lock)
+    node_store = NodeStore(db)
     await node_store.create_tables()
-    event_store = EventStore(connection=conn, lock=lock, event_bus=event_bus)
-    await event_store.initialize()
+    event_store = EventStore(db=db, event_bus=event_bus)
+    await event_store.create_tables()
 
     source_path = tmp_path / "src" / "app.py"
     source_path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,7 +57,7 @@ async def web_env(tmp_path: Path):
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client, node_store, event_store, source_path
 
-    conn.close()
+    db.close()
 
 
 @pytest.mark.asyncio

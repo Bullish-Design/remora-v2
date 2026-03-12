@@ -38,8 +38,9 @@ def test_subscription_pattern_none_matches_all() -> None:
 
 
 @pytest.mark.asyncio
-async def test_registry_register_and_match(db_connection, db_lock) -> None:
-    registry = SubscriptionRegistry(db_connection, db_lock)
+async def test_registry_register_and_match(db) -> None:
+    registry = SubscriptionRegistry(db)
+    await registry.create_tables()
     await registry.register("agent-b", SubscriptionPattern(to_agent="b"))
     matches = await registry.get_matching_agents(
         AgentMessageEvent(from_agent="a", to_agent="b", content="hello")
@@ -48,8 +49,9 @@ async def test_registry_register_and_match(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_registry_unregister(db_connection, db_lock) -> None:
-    registry = SubscriptionRegistry(db_connection, db_lock)
+async def test_registry_unregister(db) -> None:
+    registry = SubscriptionRegistry(db)
+    await registry.create_tables()
     sub_id = await registry.register("agent-b", SubscriptionPattern(to_agent="b"))
     assert await registry.unregister(sub_id)
     matches = await registry.get_matching_agents(
@@ -59,8 +61,9 @@ async def test_registry_unregister(db_connection, db_lock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_registry_cache_invalidation(db_connection, db_lock) -> None:
-    registry = SubscriptionRegistry(db_connection, db_lock)
+async def test_registry_cache_invalidation(db) -> None:
+    registry = SubscriptionRegistry(db)
+    await registry.create_tables()
     await registry.register("agent-b", SubscriptionPattern(to_agent="b"))
     first = await registry.get_matching_agents(
         AgentMessageEvent(from_agent="a", to_agent="b", content="hello")

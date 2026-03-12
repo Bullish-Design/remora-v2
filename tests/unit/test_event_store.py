@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from remora.core.db import AsyncDB
 from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
@@ -16,30 +17,35 @@ from remora.core.events import (
 
 @pytest.mark.asyncio
 async def test_eventstore_append_returns_id(tmp_path: Path) -> None:
-    store = EventStore(tmp_path / "events.db")
-    await store.initialize()
+    db = AsyncDB.from_path(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
     first = await store.append(AgentStartEvent(agent_id="a"))
     second = await store.append(AgentStartEvent(agent_id="b"))
     assert first == 1
     assert second == 2
+    db.close()
 
 
 @pytest.mark.asyncio
 async def test_eventstore_query_events(tmp_path: Path) -> None:
-    store = EventStore(tmp_path / "events.db")
-    await store.initialize()
+    db = AsyncDB.from_path(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
     await store.append(AgentStartEvent(agent_id="a"))
     await store.append(AgentMessageEvent(from_agent="a", to_agent="b", content="hello"))
     events = await store.get_events(limit=2)
     assert len(events) == 2
     assert events[0]["event_type"] == "AgentMessageEvent"
     assert events[1]["event_type"] == "AgentStartEvent"
+    db.close()
 
 
 @pytest.mark.asyncio
 async def test_eventstore_query_by_agent(tmp_path: Path) -> None:
-    store = EventStore(tmp_path / "events.db")
-    await store.initialize()
+    db = AsyncDB.from_path(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
     await store.append(AgentStartEvent(agent_id="target"))
     await store.append(AgentMessageEvent(from_agent="x", to_agent="target", content="inbound"))
     await store.append(AgentMessageEvent(from_agent="x", to_agent="other", content="skip"))
@@ -47,12 +53,14 @@ async def test_eventstore_query_by_agent(tmp_path: Path) -> None:
     event_types = [event["event_type"] for event in events]
     assert event_types.count("AgentStartEvent") == 1
     assert event_types.count("AgentMessageEvent") == 1
+    db.close()
 
 
 @pytest.mark.asyncio
 async def test_eventstore_trigger_flow(tmp_path: Path) -> None:
-    store = EventStore(tmp_path / "events.db")
-    await store.initialize()
+    db = AsyncDB.from_path(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
     await store.subscriptions.register("agent-b", SubscriptionPattern(to_agent="b"))
 
     event = AgentMessageEvent(from_agent="a", to_agent="b", content="hello")
@@ -61,6 +69,7 @@ async def test_eventstore_trigger_flow(tmp_path: Path) -> None:
     agent_id, trigger_event = await asyncio.wait_for(anext(store.get_triggers()), timeout=1.0)
     assert agent_id == "agent-b"
     assert trigger_event == event
+    db.close()
 
 
 @pytest.mark.asyncio
@@ -72,7 +81,9 @@ async def test_eventstore_forwards_to_bus(tmp_path: Path) -> None:
         seen.append(event.event_type)
 
     bus.subscribe_all(handler)
-    store = EventStore(tmp_path / "events.db", event_bus=bus)
-    await store.initialize()
+    db = AsyncDB.from_path(tmp_path / "events.db")
+    store = EventStore(db=db, event_bus=bus)
+    await store.create_tables()
     await store.append(AgentStartEvent(agent_id="a"))
     assert seen == ["AgentStartEvent"]
+    db.close()
