@@ -102,6 +102,12 @@ class AgentContext:
             for edge in edges
         ]
 
+    async def graph_get_children(self, parent_id: str | None = None) -> list[dict[str, Any]]:
+        """Get child nodes. Defaults to current node's children."""
+        target = parent_id or self.node_id
+        children = await self._node_store.get_children(target)
+        return [node.model_dump() for node in children]
+
     async def graph_set_status(self, target_id: str, new_status: str) -> bool:
         await self._agent_store.set_status(target_id, new_status)
         await self._node_store.set_status(target_id, new_status)
@@ -197,6 +203,12 @@ class AgentContext:
         node = await self._node_store.get_node(target_id)
         return node.source_code if node is not None else ""
 
+    async def my_node_id(self) -> str:
+        return self.node_id
+
+    async def my_correlation_id(self) -> str | None:
+        return self.correlation_id
+
     def to_externals_dict(self) -> dict[str, Any]:
         return {
             "read_file": self.read_file,
@@ -208,6 +220,7 @@ class AgentContext:
             "graph_get_node": self.graph_get_node,
             "graph_query_nodes": self.graph_query_nodes,
             "graph_get_edges": self.graph_get_edges,
+            "graph_get_children": self.graph_get_children,
             "graph_set_status": self.graph_set_status,
             "event_emit": self.event_emit,
             "event_subscribe": self.event_subscribe,
@@ -217,8 +230,8 @@ class AgentContext:
             "broadcast": self.broadcast,
             "apply_rewrite": self.apply_rewrite,
             "get_node_source": self.get_node_source,
-            "my_node_id": self.node_id,
-            "my_correlation_id": self.correlation_id,
+            "my_node_id": self.my_node_id,
+            "my_correlation_id": self.my_correlation_id,
         }
 
 

@@ -12,6 +12,7 @@ from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.externals import AgentContext
 from remora.core.graph import AgentStore, NodeStore
+from remora.core.types import NodeType
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -250,8 +251,27 @@ async def test_externals_identity(context_env) -> None:
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store, "corr-x")
     externals = context.to_externals_dict()
-    assert externals["my_node_id"] == node.node_id
-    assert externals["my_correlation_id"] == "corr-x"
+    assert await externals["my_node_id"]() == node.node_id
+    assert await externals["my_correlation_id"]() == "corr-x"
+
+
+@pytest.mark.asyncio
+async def test_externals_graph_get_children(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
+    parent = make_node("src", node_type=NodeType.DIRECTORY)
+    child_a = make_node("src/app.py::a", parent_id="src")
+    child_b = make_node("src/lib", node_type=NodeType.DIRECTORY, parent_id="src")
+    await node_store.upsert_node(parent)
+    await node_store.upsert_node(child_a)
+    await node_store.upsert_node(child_b)
+    await agent_store.upsert_agent(parent.to_agent())
+    ws = await workspace_service.get_agent_workspace(parent.node_id)
+    context = await _context(parent.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
+
+    children = await externals["graph_get_children"]()
+    child_ids = [node["node_id"] for node in children]
+    assert child_ids == ["src/app.py::a", "src/lib"]
 
 
 @pytest.mark.asyncio

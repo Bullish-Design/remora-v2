@@ -321,13 +321,26 @@ class AgentActor:
         """Build the turn prompt from node identity and trigger details."""
         parts = [
             f"# Node: {node.full_name}",
-            f"Type: {node.node_type} | File: {node.file_path}:{node.start_line}-{node.end_line}",
-            "",
-            "## Source Code",
-            "```",
-            node.source_code,
-            "```",
+            f"Type: {node.node_type} | File: {node.file_path}",
         ]
+        if node.source_code:
+            parts.extend(
+                [
+                    "",
+                    "## Source Code",
+                    "```",
+                    node.source_code,
+                    "```",
+                ]
+            )
+        else:
+            parts.extend(
+                [
+                    "",
+                    "## Structure",
+                    "This is a directory node. Use your tools to inspect children and subtree.",
+                ]
+            )
         if trigger.event is not None:
             parts.extend(["", "## Trigger", f"Event: {trigger.event.event_type}"])
             content = _event_content(trigger.event)

@@ -14,6 +14,7 @@ def test_default_config(monkeypatch) -> None:
     config = Config()
     assert config.max_turns == 8
     assert config.bundle_mapping["function"] == "code-agent"
+    assert config.bundle_mapping["directory"] == "directory-agent"
     assert config.language_map[".py"] == "python"
     assert "queries/" in config.query_paths
 

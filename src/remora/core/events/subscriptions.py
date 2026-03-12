@@ -38,7 +38,7 @@ class SubscriptionPattern(BaseModel):
                 return False
 
         if self.path_glob:
-            path = getattr(event, "path", None)
+            path = getattr(event, "path", None) or getattr(event, "file_path", None)
             if path is None or not PurePath(path).match(self.path_glob):
                 return False
 

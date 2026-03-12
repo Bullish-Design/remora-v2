@@ -1,0 +1,16 @@
+from grail import external
+
+
+@external
+async def graph_get_children(parent_id: str | None = None) -> list[dict]: ...
+
+
+children = await graph_get_children()
+if not children:
+    return "No children found."
+
+lines = [
+    f"- [{child.get('node_type', '?')}] {child.get('name', '?')} ({child.get('node_id', '?')})"
+    for child in children
+]
+return "Children:\n" + "\n".join(lines)

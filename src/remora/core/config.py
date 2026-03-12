@@ -40,6 +40,7 @@ class Config(BaseSettings):
             "class": "code-agent",
             "method": "code-agent",
             "file": "code-agent",
+            "directory": "directory-agent",
         }
     )
 

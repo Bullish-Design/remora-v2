@@ -3,21 +3,20 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
+from tests.factories import write_bundle_templates, write_file
 
 import remora.code.reconciler as reconciler_module
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
-from remora.core.events import ContentChangedEvent
 from remora.core.db import AsyncDB
-from remora.core.events import EventStore
+from remora.core.events import ContentChangedEvent, EventStore
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
-from tests.factories import write_bundle_templates, write_file
 
 
 @pytest_asyncio.fixture
@@ -71,8 +70,19 @@ async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: 
 
     assert nodes
     assert stored
-    assert len(discovered) == len(nodes)
-    assert len(subs) == len(nodes) * 2
+    assert len(discovered) == len(stored)
+    assert any(node.node_type == "directory" and node.node_id == "." for node in stored)
+
+    app_node = next(node for node in stored if node.node_id.endswith("::a"))
+    assert app_node.parent_id == "src"
+
+    grouped: dict[str, list[dict]] = {}
+    for row in subs:
+        grouped.setdefault(row["agent_id"], []).append(json.loads(row["pattern_json"]))
+
+    for node in stored:
+        expected = 3 if node.node_type == "directory" else 2
+        assert len(grouped[node.node_id]) == expected
 
 
 @pytest.mark.asyncio
@@ -130,7 +140,7 @@ async def test_reconcile_cycle_handles_new_and_deleted_files(reconcile_env, tmp_
 
 @pytest.mark.asyncio
 async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path) -> None:
-    _node_store, _agent_store, event_store, _workspace_service, _config, reconciler = reconcile_env
+    node_store, _agent_store, event_store, _workspace_service, _config, reconciler = reconcile_env
     write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
     await reconciler.full_scan()
     await reconciler.reconcile_cycle()
@@ -143,8 +153,10 @@ async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path)
     for row in rows:
         grouped.setdefault(row["agent_id"], []).append(json.loads(row["pattern_json"]))
 
-    for patterns in grouped.values():
-        assert len(patterns) == 2
+    nodes = await node_store.list_nodes()
+    for node in nodes:
+        expected = 3 if node.node_type == "directory" else 2
+        assert len(grouped[node.node_id]) == expected
 
 
 @pytest.mark.asyncio
@@ -196,7 +208,9 @@ async def test_reconciler_content_changed_event_triggers_reconcile(
     await reconciler.full_scan()
 
     write_file(source_file, "def event_fn():\n    return 2\n")
-    await reconciler._on_content_changed(ContentChangedEvent(path=str(source_file), change_type="modified"))
+    await reconciler._on_content_changed(
+        ContentChangedEvent(path=str(source_file), change_type="modified")
+    )
 
     node = await node_store.get_node(f"{source_file}::event_fn")
     assert node is not None
@@ -212,3 +226,45 @@ async def test_reconciler_handles_malformed_source(reconcile_env, tmp_path: Path
     await reconciler.reconcile_cycle()
     nodes = await node_store.list_nodes(file_path=str(bad_source))
     assert isinstance(nodes, list)
+
+
+@pytest.mark.asyncio
+async def test_directory_nodes_materialize_parent_chain(reconcile_env, tmp_path: Path) -> None:
+    node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    write_file(tmp_path / "src" / "pkg" / "mod.py", "def fn():\n    return 1\n")
+
+    await reconciler.full_scan()
+    root = await node_store.get_node(".")
+    src_dir = await node_store.get_node("src")
+    pkg_dir = await node_store.get_node("src/pkg")
+    fn_node = await node_store.get_node(f"{tmp_path / 'src' / 'pkg' / 'mod.py'}::fn")
+
+    assert root is not None
+    assert root.node_type == "directory"
+    assert root.parent_id is None
+    assert src_dir is not None
+    assert src_dir.parent_id == "."
+    assert pkg_dir is not None
+    assert pkg_dir.parent_id == "src"
+    assert fn_node is not None
+    assert fn_node.parent_id == "src/pkg"
+
+
+@pytest.mark.asyncio
+async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_path: Path) -> None:
+    node_store, _agent_store, event_store, _workspace_service, _config, reconciler = reconcile_env
+    source = tmp_path / "src" / "gone" / "leaf.py"
+    write_file(source, "def leaf():\n    return 1\n")
+    await reconciler.full_scan()
+
+    source.unlink()
+    await reconciler.reconcile_cycle()
+
+    assert await node_store.get_node("src/gone") is None
+    events = await event_store.get_events(limit=50)
+    removed_ids = [
+        event["payload"]["node_id"]
+        for event in events
+        if event["event_type"] == "NodeRemovedEvent"
+    ]
+    assert "src/gone" in removed_ids

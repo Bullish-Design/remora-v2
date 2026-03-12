@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from tests.factories import make_node
 
 from remora.core.events import AgentStartEvent, EventStore
 from remora.core.graph import NodeStore
 from remora.core.types import NodeStatus
-from tests.factories import make_node
 
 
 @pytest.mark.asyncio
@@ -157,3 +157,26 @@ async def test_nodestore_transition_status_invalid(db) -> None:
     updated = await store.get_node("src/app.py::a")
     assert updated is not None
     assert updated.status == NodeStatus.IDLE
+
+
+@pytest.mark.asyncio
+async def test_nodestore_get_children(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(
+        make_node(
+            "src",
+            node_type="directory",
+            file_path="src",
+            parent_id=".",
+            start_line=0,
+            end_line=0,
+            source_code="",
+            source_hash="hash-src",
+        )
+    )
+    await store.upsert_node(make_node("src/app.py::a", parent_id="src"))
+    await store.upsert_node(make_node("src/lib", node_type="directory", parent_id="src"))
+
+    children = await store.get_children("src")
+    assert [node.node_id for node in children] == ["src/app.py::a", "src/lib"]

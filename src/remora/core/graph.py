@@ -55,6 +55,7 @@ class NodeStore:
             CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type);
             CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);
             CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+            CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
             CREATE TABLE IF NOT EXISTS edges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 from_id TEXT NOT NULL,
@@ -112,6 +113,14 @@ class NodeStore:
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
         sql = f"SELECT * FROM nodes{where_clause} ORDER BY node_id ASC"
         rows = await self._db.fetch_all(sql, tuple(params))
+        return [CodeNode.from_row(row) for row in rows]
+
+    async def get_children(self, parent_id: str) -> list[CodeNode]:
+        """Get all nodes whose parent_id matches."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM nodes WHERE parent_id = ? ORDER BY node_id ASC",
+            (parent_id,),
+        )
         return [CodeNode.from_row(row) for row in rows]
 
     async def delete_node(self, node_id: str) -> bool:

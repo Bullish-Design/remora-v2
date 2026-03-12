@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from structured_agents import Message
 from structured_agents.types import ToolResult, ToolSchema
+from tests.factories import write_file
 
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Outbox, Trigger
@@ -21,7 +22,6 @@ from remora.core.events import (
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
-from tests.factories import write_file
 
 
 def _write_bundles(root: Path) -> None:
@@ -30,8 +30,14 @@ def _write_bundles(root: Path) -> None:
     (system / "tools").mkdir(parents=True, exist_ok=True)
     (code / "tools").mkdir(parents=True, exist_ok=True)
 
-    write_file(system / "bundle.yaml", "name: system\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n")
-    write_file(code / "bundle.yaml", "name: code-agent\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n")
+    write_file(
+        system / "bundle.yaml",
+        "name: system\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n",
+    )
+    write_file(
+        code / "bundle.yaml",
+        "name: code-agent\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n",
+    )
     write_file(
         system / "tools" / "send_message.pym",
         "from grail import Input, external\n"
@@ -108,7 +114,7 @@ async def _setup_runtime(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     runtime = await _setup_runtime(tmp_path)
-    node = runtime["nodes"][0]
+    node = next(node for node in runtime["nodes"] if node.node_type != "directory")
 
     workspace = await runtime["workspace_service"].get_agent_workspace(node.node_id)
     assert await workspace.exists("_bundle/bundle.yaml")
@@ -201,7 +207,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_e2e_agent_message_chain(tmp_path: Path) -> None:
     runtime = await _setup_runtime(tmp_path)
-    nodes = runtime["nodes"]
+    nodes = [node for node in runtime["nodes"] if node.node_type != "directory"]
     source = nodes[0].node_id
     target = nodes[1].node_id
 
@@ -221,7 +227,7 @@ async def test_e2e_agent_message_chain(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_e2e_file_change_triggers(tmp_path: Path) -> None:
     runtime = await _setup_runtime(tmp_path)
-    node = runtime["nodes"][0]
+    node = next(node for node in runtime["nodes"] if node.node_type != "directory")
 
     actor = runtime["runner"].get_or_create_actor(node.node_id)
     await actor.stop()

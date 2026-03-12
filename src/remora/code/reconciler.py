@@ -22,6 +22,7 @@ from remora.core.events import (
 )
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.node import CodeNode
+from remora.core.types import NodeType
 from remora.core.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,8 @@ class FileReconciler:
     async def reconcile_cycle(self) -> None:
         """Run one reconciliation cycle over changed/new/deleted files."""
         current_mtimes = self._collect_file_mtimes()
+        await self._materialize_directories(set(current_mtimes.keys()))
+
         changed_paths = [
             file_path
             for file_path, mtime_ns in current_mtimes.items()
@@ -144,6 +147,138 @@ class FileReconciler:
                 continue
         return mtimes
 
+    async def _materialize_directories(self, file_paths: set[str]) -> None:
+        """Derive directory nodes from the set of discovered file paths."""
+        file_rel_paths = {self._relative_file_path(path) for path in file_paths}
+        dir_paths: set[str] = {"."}
+
+        for rel_file_path in file_rel_paths:
+            parent = Path(rel_file_path).parent
+            current = parent
+            while True:
+                dir_id = self._normalize_dir_id(current)
+                dir_paths.add(dir_id)
+                if dir_id == ".":
+                    break
+                current = current.parent
+
+        children_by_dir: dict[str, list[str]] = {dir_id: [] for dir_id in dir_paths}
+        for dir_id in dir_paths:
+            if dir_id == ".":
+                continue
+            parent_id = self._parent_dir_id(dir_id)
+            children_by_dir.setdefault(parent_id, []).append(dir_id)
+        for rel_file_path in file_rel_paths:
+            parent_id = self._parent_dir_id(rel_file_path)
+            children_by_dir.setdefault(parent_id, []).append(rel_file_path)
+
+        existing_dirs = await self._node_store.list_nodes(node_type=NodeType.DIRECTORY)
+        existing_by_id = {node.node_id: node for node in existing_dirs}
+        desired_ids = set(dir_paths)
+
+        stale_ids = sorted(
+            set(existing_by_id) - desired_ids,
+            key=lambda node_id: node_id.count("/"),
+            reverse=True,
+        )
+        for node_id in stale_ids:
+            await self._remove_node(node_id)
+
+        for dir_id in sorted(dir_paths):
+            parent_id = None if dir_id == "." else self._parent_dir_id(dir_id)
+            name = "." if dir_id == "." else Path(dir_id).name
+            children = sorted(children_by_dir.get(dir_id, []))
+            source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
+            existing = existing_by_id.get(dir_id)
+            mapped_bundle = self._config.bundle_mapping.get(NodeType.DIRECTORY.value)
+
+            directory_node = CodeNode(
+                node_id=dir_id,
+                node_type=NodeType.DIRECTORY,
+                name=name,
+                full_name=dir_id,
+                file_path=dir_id,
+                start_line=0,
+                end_line=0,
+                source_code="",
+                source_hash=source_hash,
+                parent_id=parent_id,
+                status=existing.status if existing is not None else "idle",
+                bundle_name=(
+                    mapped_bundle
+                    if mapped_bundle is not None
+                    else (existing.bundle_name if existing is not None else None)
+                ),
+            )
+
+            if existing is None:
+                await self._node_store.upsert_node(directory_node)
+                await self._register_subscriptions(directory_node)
+                await self._ensure_agent(directory_node)
+                await self._provision_bundle(directory_node.node_id, directory_node.bundle_name)
+                await self._event_store.append(
+                    NodeDiscoveredEvent(
+                        node_id=directory_node.node_id,
+                        node_type=directory_node.node_type,
+                        file_path=directory_node.file_path,
+                        name=directory_node.name,
+                    )
+                )
+                continue
+
+            metadata_changed = (
+                existing.parent_id != directory_node.parent_id
+                or existing.file_path != directory_node.file_path
+                or existing.name != directory_node.name
+                or existing.full_name != directory_node.full_name
+                or existing.bundle_name != directory_node.bundle_name
+            )
+            hash_changed = existing.source_hash != source_hash
+            if metadata_changed or hash_changed:
+                await self._node_store.upsert_node(directory_node)
+
+            if hash_changed:
+                await self._register_subscriptions(directory_node)
+                await self._ensure_agent(directory_node)
+                await self._event_store.append(
+                    NodeChangedEvent(
+                        node_id=directory_node.node_id,
+                        old_hash=existing.source_hash,
+                        new_hash=directory_node.source_hash,
+                        file_path=directory_node.file_path,
+                    )
+                )
+
+    async def _provision_bundle(self, node_id: str, bundle_name: str | None) -> None:
+        bundle_root = Path(self._config.bundle_root)
+        template_dirs = [bundle_root / "system"]
+        if bundle_name:
+            template_dirs.append(bundle_root / bundle_name)
+        await self._workspace_service.provision_bundle(node_id, template_dirs)
+
+    def _relative_file_path(self, file_path: str) -> str:
+        absolute = Path(file_path).resolve()
+        try:
+            relative = absolute.relative_to(self._project_root)
+            return relative.as_posix()
+        except ValueError:
+            return Path(file_path).as_posix()
+
+    @staticmethod
+    def _normalize_dir_id(path: Path | str) -> str:
+        value = Path(path).as_posix() if isinstance(path, Path) else Path(path).as_posix()
+        return "." if value in {"", "."} else value
+
+    @staticmethod
+    def _parent_dir_id(path_like: str) -> str:
+        parent = Path(path_like).parent
+        parent_str = parent.as_posix()
+        return "." if parent_str in {"", "."} else parent_str
+
+    def _directory_id_for_file(self, file_path: str) -> str:
+        rel_file_path = self._relative_file_path(file_path)
+        return self._parent_dir_id(rel_file_path)
+
     async def _reconcile_file(self, file_path: str, mtime_ns: int) -> None:
         discovered = discover(
             [Path(file_path)],
@@ -171,6 +306,13 @@ class FileReconciler:
             self._workspace_service,
             self._config,
         )
+
+        dir_node_id = self._directory_id_for_file(file_path)
+        for node in projected:
+            if node.parent_id is None:
+                node.parent_id = dir_node_id
+                await self._node_store.upsert_node(node)
+
         projected_by_id = {node.node_id: node for node in projected}
 
         additions = sorted(new_ids - old_ids)
@@ -193,7 +335,7 @@ class FileReconciler:
         for node_id in updates:
             node = projected_by_id[node_id]
             old_hash = old_hashes.get(node_id)
-            new_hash = hashlib.sha256(node.source_code.encode("utf-8")).hexdigest()
+            new_hash = node.source_hash
             if old_hash is not None and old_hash != new_hash:
                 await self._register_subscriptions(node)
                 await self._ensure_agent(node)
@@ -202,6 +344,7 @@ class FileReconciler:
                         node_id=node_id,
                         old_hash=old_hash,
                         new_hash=new_hash,
+                        file_path=node.file_path,
                     )
                 )
 
@@ -234,6 +377,25 @@ class FileReconciler:
             node.node_id,
             SubscriptionPattern(to_agent=node.node_id),
         )
+
+        if node.node_type == NodeType.DIRECTORY:
+            subtree_glob = "**" if node.file_path == "." else f"**/{node.file_path}/**"
+            await self._event_store.subscriptions.register(
+                node.node_id,
+                SubscriptionPattern(
+                    event_types=["NodeDiscoveredEvent", "NodeRemovedEvent", "NodeChangedEvent"],
+                    path_glob=subtree_glob,
+                ),
+            )
+            await self._event_store.subscriptions.register(
+                node.node_id,
+                SubscriptionPattern(
+                    event_types=["ContentChangedEvent"],
+                    path_glob=subtree_glob,
+                ),
+            )
+            return
+
         await self._event_store.subscriptions.register(
             node.node_id,
             SubscriptionPattern(
@@ -256,4 +418,6 @@ class FileReconciler:
                 await self._reconcile_file(str(p), mtime)
             except Exception:  # noqa: BLE001 - isolate event failures
                 logger.exception("Event-triggered reconcile failed for %s", file_path)
+
+
 __all__ = ["FileReconciler"]

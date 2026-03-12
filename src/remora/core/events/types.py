@@ -91,6 +91,7 @@ class NodeChangedEvent(Event):
     node_id: str
     old_hash: str
     new_hash: str
+    file_path: str | None = None
 
 
 class ContentChangedEvent(Event):
