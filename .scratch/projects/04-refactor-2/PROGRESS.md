@@ -11,8 +11,8 @@
 - [x] Phase 1 testing
 - [x] Phase 2 implementation
 - [x] Phase 2 testing
-- [ ] Phase 3 implementation
-- [ ] Phase 3 testing
+- [x] Phase 3 implementation
+- [x] Phase 3 testing
 - [ ] Phase 4 implementation
 - [ ] Phase 4 testing
 - [ ] Phase 5 implementation
@@ -39,3 +39,5 @@
 - Phase 1 tests passing: `tests/unit -q` and `tests/integration/test_e2e.py tests/integration/test_performance.py -q`.
 - Phase 2 complete: decomposed events into `core/events/` package (`types`, `bus`, `subscriptions`, `store`, `dispatcher`) and migrated trigger queue ownership to `TriggerDispatcher`.
 - Phase 2 tests passing: `tests/unit -q` plus focused event/runner/reconciler suites.
+- Phase 3 complete: added shared enums (`NodeStatus`, `NodeType`, `ChangeType`), enforced transition rules in `NodeStore.transition_status`, updated runner to use transitions, made discovery IDs collision-safe, and removed unused `src/remora/utils`.
+- Phase 3 tests passing: `tests/unit -q` and integration smoke suites.

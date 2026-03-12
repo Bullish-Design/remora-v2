@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from remora.core.types import NodeStatus, NodeType
+
 
 class CodeNode(BaseModel):
     """A code element that is also an autonomous agent."""
@@ -16,7 +18,7 @@ class CodeNode(BaseModel):
 
     # Identity
     node_id: str
-    node_type: str
+    node_type: NodeType
     name: str
     full_name: str
     file_path: str
@@ -29,11 +31,12 @@ class CodeNode(BaseModel):
 
     # Graph context
     parent_id: str | None = None
+    # TODO: remove caller/callee lists once edge-based projections fully replace them.
     caller_ids: list[str] = Field(default_factory=list)
     callee_ids: list[str] = Field(default_factory=list)
 
     # Runtime
-    status: str = "idle"
+    status: NodeStatus = NodeStatus.IDLE
 
     # Provisioning
     bundle_name: str | None = None
@@ -41,6 +44,10 @@ class CodeNode(BaseModel):
     def to_row(self) -> dict[str, Any]:
         """Serialize the model into a sqlite-ready row."""
         data = self.model_dump()
+        data["node_type"] = (
+            data["node_type"].value if hasattr(data["node_type"], "value") else data["node_type"]
+        )
+        data["status"] = data["status"].value if hasattr(data["status"], "value") else data["status"]
         data["caller_ids"] = json.dumps(data["caller_ids"])
         data["callee_ids"] = json.dumps(data["callee_ids"])
         return data

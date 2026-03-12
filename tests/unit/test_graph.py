@@ -5,6 +5,7 @@ import pytest
 from remora.core.events import AgentStartEvent, EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import CodeNode
+from remora.core.types import NodeStatus
 
 
 def _node(
@@ -154,3 +155,27 @@ async def test_shared_connection(db) -> None:
     assert event_id == 1
     assert node_store.db.connection is event_store.connection
     assert node_store.db.lock is event_store.lock
+
+
+@pytest.mark.asyncio
+async def test_nodestore_transition_status_valid(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(_node("src/app.py::a", status="idle"))
+
+    assert await store.transition_status("src/app.py::a", NodeStatus.RUNNING)
+    updated = await store.get_node("src/app.py::a")
+    assert updated is not None
+    assert updated.status == NodeStatus.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_nodestore_transition_status_invalid(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(_node("src/app.py::a", status="idle"))
+
+    assert not await store.transition_status("src/app.py::a", NodeStatus.ERROR)
+    updated = await store.get_node("src/app.py::a")
+    assert updated is not None
+    assert updated.status == NodeStatus.IDLE

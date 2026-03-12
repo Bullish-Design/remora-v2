@@ -198,6 +198,7 @@ def _parse_file(path: Path, language: str, query_paths: list[Path]) -> list[CSTN
 
     file_path = str(path)
     cst_nodes: list[CSTNode] = []
+    seen_ids: set[str] = set()
     for key, entry in by_key.items():
         node = entry["node"]
         name_node = entry["name_node"]
@@ -214,10 +215,14 @@ def _parse_file(path: Path, language: str, query_paths: list[Path]) -> list[CSTN
                 name_by_key,
             )
         parent_id = f"{file_path}::{parent_full_name}" if parent_full_name else None
+        candidate_id = f"{file_path}::{full_name}"
+        if candidate_id in seen_ids:
+            candidate_id = f"{file_path}::{full_name}@{node.start_byte}"
+        seen_ids.add(candidate_id)
 
         cst_nodes.append(
             CSTNode(
-                node_id=f"{file_path}::{full_name}",
+                node_id=candidate_id,
                 node_type=_resolve_node_type(language, node),
                 name=name,
                 full_name=full_name,

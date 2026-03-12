@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from remora.core.node import CodeNode
 
 
@@ -46,3 +49,19 @@ def test_codenode_list_serialization() -> None:
     restored = CodeNode.from_row(row)
     assert restored.caller_ids == ["src/api.py::handle_request"]
     assert restored.callee_ids == ["src/auth.py::decode"]
+
+
+def test_codenode_rejects_invalid_status() -> None:
+    with pytest.raises(ValidationError):
+        CodeNode(
+            node_id="src/a.py::a",
+            node_type="function",
+            name="a",
+            full_name="a",
+            file_path="src/a.py",
+            start_line=1,
+            end_line=2,
+            source_code="def a():\n    return 1\n",
+            source_hash="h-a",
+            status="bogus",
+        )

@@ -32,6 +32,7 @@ from remora.core.grail import discover_tools
 from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.node import CodeNode
+from remora.core.types import NodeStatus
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -125,7 +126,9 @@ class AgentRunner:
                     logger.warning("Trigger for unknown node: %s", node_id)
                     return
 
-                await self._node_store.set_status(node_id, "running")
+                if not await self._node_store.transition_status(node_id, NodeStatus.RUNNING):
+                    logger.warning("Failed to transition node %s into running state", node_id)
+                    return
                 await self._event_store.append(
                     AgentStartEvent(
                         agent_id=node_id,
@@ -174,6 +177,7 @@ class AgentRunner:
                 )
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
                 logger.exception("Agent turn failed for %s", node_id)
+                await self._node_store.transition_status(node_id, NodeStatus.ERROR)
                 await self._event_store.append(
                     AgentErrorEvent(
                         agent_id=node_id,
@@ -184,8 +188,8 @@ class AgentRunner:
             finally:
                 try:
                     current_node = await self._node_store.get_node(node_id)
-                    if current_node is not None and current_node.status == "running":
-                        await self._node_store.set_status(node_id, "idle")
+                    if current_node is not None and current_node.status == NodeStatus.RUNNING:
+                        await self._node_store.transition_status(node_id, NodeStatus.IDLE)
                 except Exception:  # noqa: BLE001 - best effort cleanup
                     logger.exception("Failed to reset node status for %s", node_id)
                 remaining = self._depths.get(depth_key, 1) - 1

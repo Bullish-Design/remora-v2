@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 from remora.core.db import AsyncDB
 from remora.core.node import CodeNode
+from remora.core.types import NodeStatus, NodeType, validate_status_transition
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -82,8 +86,8 @@ class NodeStore:
 
     async def list_nodes(
         self,
-        node_type: str | None = None,
-        status: str | None = None,
+        node_type: str | NodeType | None = None,
+        status: str | NodeStatus | None = None,
         file_path: str | None = None,
     ) -> list[CodeNode]:
         """List nodes with optional filtering fields."""
@@ -91,10 +95,10 @@ class NodeStore:
         params: list[Any] = []
         if node_type is not None:
             conditions.append("node_type = ?")
-            params.append(node_type)
+            params.append(node_type.value if isinstance(node_type, NodeType) else node_type)
         if status is not None:
             conditions.append("status = ?")
-            params.append(status)
+            params.append(status.value if isinstance(status, NodeStatus) else status)
         if file_path is not None:
             conditions.append("file_path = ?")
             params.append(file_path)
@@ -113,12 +117,30 @@ class NodeStore:
         deleted = await self._db.delete("DELETE FROM nodes WHERE node_id = ?", (node_id,))
         return deleted > 0
 
-    async def set_status(self, node_id: str, status: str) -> None:
+    async def set_status(self, node_id: str, status: str | NodeStatus) -> None:
         """Update a node status in-place."""
+        status_value = status.value if isinstance(status, NodeStatus) else status
         await self._db.execute(
             "UPDATE nodes SET status = ? WHERE node_id = ?",
-            (status, node_id),
+            (status_value, node_id),
         )
+
+    async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
+        """Transition node status if the transition is valid."""
+        node = await self.get_node(node_id)
+        if node is None:
+            return False
+        current = node.status
+        if not validate_status_transition(current, target):
+            logger.warning(
+                "Invalid status transition for %s: %s -> %s",
+                node_id,
+                current,
+                target,
+            )
+            return False
+        await self.set_status(node_id, target)
+        return True
 
     async def add_edge(self, from_id: str, to_id: str, edge_type: str) -> None:
         """Insert an edge unless it already exists."""

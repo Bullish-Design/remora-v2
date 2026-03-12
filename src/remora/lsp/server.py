@@ -54,13 +54,14 @@ def create_lsp_server(node_store, event_store) -> LanguageServer:  # noqa: ANN00
 
 def _node_to_lens(node: CodeNode) -> lsp.CodeLens:
     """Map a CodeNode to a CodeLens entry showing runtime status."""
+    status = node.status.value if hasattr(node.status, "value") else str(node.status)
     return lsp.CodeLens(
         range=lsp.Range(
             start=lsp.Position(line=max(0, node.start_line - 1), character=0),
             end=lsp.Position(line=max(0, node.end_line - 1), character=0),
         ),
         command=lsp.Command(
-            title=f"Remora: {node.status}",
+            title=f"Remora: {status}",
             command="remora.showNode",
             arguments=[node.node_id],
         ),
@@ -70,11 +71,13 @@ def _node_to_lens(node: CodeNode) -> lsp.CodeLens:
 
 def _node_to_hover(node: CodeNode) -> lsp.Hover:
     """Map a CodeNode to markdown hover details."""
+    node_type = node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
+    status = node.status.value if hasattr(node.status, "value") else str(node.status)
     value = (
         f"### {node.full_name}\n"
         f"- Node ID: `{node.node_id}`\n"
-        f"- Type: `{node.node_type}`\n"
-        f"- Status: `{node.status}`\n"
+        f"- Type: `{node_type}`\n"
+        f"- Status: `{status}`\n"
         f"- File: `{node.file_path}:{node.start_line}-{node.end_line}`"
     )
     return lsp.Hover(

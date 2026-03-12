@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from remora.core.types import ChangeType
+
 
 class Event(BaseModel):
     """Base event with automatic event_type tagging."""
@@ -93,7 +95,7 @@ class NodeChangedEvent(Event):
 
 class ContentChangedEvent(Event):
     path: str
-    change_type: str = "modified"
+    change_type: ChangeType = ChangeType.MODIFIED
 
 
 class RewriteProposalEvent(Event):
