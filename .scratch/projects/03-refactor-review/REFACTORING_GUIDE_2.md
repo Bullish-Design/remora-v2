@@ -13,7 +13,7 @@
 5. [Phase 3: Type Safety & Data Models](#phase-3-type-safety--data-models) — R6, R8, R15, R16 (status machine, collision-safe IDs, enums, dead code)
 6. [Phase 4: Agent/Code Separation](#phase-4-agentcode-separation) — R21 (separate agent identity from code element)
 7. [Phase 5: Externals Redesign](#phase-5-externals-redesign) — R4 (three options evaluated, chosen approach implemented)
-8. [Phase 6: Proposal System](#phase-6-proposal-system) — R5 (dedicated model with span-based patching)
+8. [Phase 6: Direct Rewrite Flow](#phase-6-direct-rewrite-flow) — R5 (span-based apply + VCS-ready hooks)
 9. [Phase 7: Discovery & Language Plugins](#phase-7-discovery--language-plugins) — R7, R8, R10, R19 (centralize paths, language plugin protocol)
 10. [Phase 8: Reconciler Overhaul](#phase-8-reconciler-overhaul) — R9, R20 (fault isolation, event-driven reconciliation)
 11. [Phase 9: Web & LSP Improvements](#phase-9-web--lsp-improvements) — R11, R12, R13
@@ -35,10 +35,10 @@ Phase 2 (events)     ──→  depends on Phase 1 (AsyncDB)
 Phase 3 (types)      ──→  depends on Phase 2 (event types live in new locations)
 Phase 4 (agent/code) ──→  depends on Phase 3 (new enums/types)
 Phase 5 (externals)  ──→  depends on Phase 4 (agent model changes)
-Phase 6 (proposals)  ──→  depends on Phase 1 (AsyncDB), Phase 4 (agent model)
+Phase 6 (direct rewrite)  ──→  depends on Phase 4 (agent model)
 Phase 7 (discovery)  ──→  depends on Phase 3 (type safety)
 Phase 8 (reconciler) ──→  depends on Phase 7 (discovery changes)
-Phase 9 (web/lsp)    ──→  depends on Phase 2, Phase 4, Phase 6
+Phase 9 (web/lsp)    ──→  depends on Phase 2, Phase 4
 Phase 10 (services)  ──→  depends on all above
 Phase 11 (tests)     ──→  do incrementally within each phase + final consolidation
 Phase 12 (eventsrc)  ──→  future consideration, not implemented in this guide
@@ -52,7 +52,7 @@ Phase 12 (eventsrc)  ──→  future consideration, not implemented in this gu
 
 These are correctness fixes that should be applied to the *current* codebase before any structural refactoring. Each fix is small and independent.
 
-### Step 0.1: Fix `pending_approval` status clobber (C1)
+### Step 0.1: Remove proposal-only status paths (C1)
 
 **File**: `src/remora/core/runner.py`
 
@@ -65,7 +65,7 @@ finally:
         logger.exception("Failed to reset node status for %s", node_id)
 ```
 
-**Fix**: Check current status before resetting. Only transition to `idle` from `running`.
+**Fix**: In the no-proposals MVP, remove `pending_approval` from the runtime entirely and enforce a simple status model (`idle`/`running`/`error`). Keep guarded reset logic so we only transition `running -> idle`.
 
 ```python
 finally:
@@ -81,56 +81,33 @@ finally:
 
 ```python
 @pytest.mark.asyncio
-async def test_pending_approval_survives_turn_completion(runner_env, monkeypatch) -> None:
-    """propose_rewrite sets pending_approval; finally block must NOT clobber it."""
+async def test_runner_only_resets_running_to_idle(runner_env, monkeypatch) -> None:
+    """Runner should only transition running -> idle in finally."""
     runner, node_store, event_store, workspace_service = runner_env
     node = _node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    # Write a source file so propose_rewrite can read it
-    source_path = workspace_service._project_root / "src" / "app.py"
-    source_path.parent.mkdir(parents=True, exist_ok=True)
-    source_path.write_text(node.source_code, encoding="utf-8")
-    node = node.model_copy(update={"file_path": str(source_path)})
-    await node_store.upsert_node(node)
-
     class MockKernel:
-        def __init__(self, externals):
-            self._externals = externals
-
         async def run(self, _messages, _tools, max_turns=20):
-            # Simulate agent calling propose_rewrite during its turn
             del max_turns
-            return SimpleNamespace(final_message=Message(role="assistant", content="proposed"))
-
+            return SimpleNamespace(final_message=Message(role="assistant", content="done"))
         async def close(self):
             return None
 
-    propose_called = False
-
-    async def fake_discover_tools(_workspace, externals):
-        # Call propose_rewrite to set pending_approval
-        nonlocal propose_called
-        proposal_id = await externals["propose_rewrite"]("def a():\n    return 99\n")
-        assert proposal_id
-        propose_called = True
-        return []
-
-    monkeypatch.setattr("remora.core.runner.create_kernel", lambda **kw: MockKernel(kw))
-    monkeypatch.setattr("remora.core.runner.discover_tools", fake_discover_tools)
+    monkeypatch.setattr("remora.core.runner.create_kernel", lambda **kw: MockKernel())
+    monkeypatch.setattr("remora.core.runner.discover_tools", lambda *_a, **_kw: [])
     await runner._execute_turn(Trigger(node_id=node.node_id, correlation_id="c1"))
 
-    assert propose_called
     updated = await node_store.get_node(node.node_id)
     assert updated is not None
-    assert updated.status == "pending_approval"  # NOT "idle"
+    assert updated.status == "idle"
 ```
 
-### Step 0.2: Fix rewrite string replacement (C2)
+### Step 0.2: Fix rewrite string replacement with span-based apply (C2)
 
-**File**: `src/remora/core/runner.py`, `propose_rewrite` closure (lines 322-352)
+**File**: `src/remora/core/externals.py`, `apply_rewrite` method
 
 **Current** (lines 333-334):
 ```python
@@ -138,65 +115,36 @@ if old_source and old_source in full_source:
     complete_new_source = full_source.replace(old_source, new_source, 1)
 ```
 
-**Fix**: Use byte-span replacement instead of string search. The node has `start_byte` and `end_byte` already.
+**Fix**: Use byte-span replacement instead of string search. The node has `start_byte` and `end_byte` already. Apply directly to disk and emit `ContentChangedEvent` (no proposal queue).
 
 ```python
-async def propose_rewrite(new_source: str) -> str:
-    node = await self._node_store.get_node(node_id)
+async def apply_rewrite(self, new_source: str) -> bool:
+    node = await self._node_store.get_node(self.node_id)
     if node is None:
-        return ""
+        return False
+    file_path = Path(node.file_path)
+    if not file_path.exists():
+        return False
 
-    old_source = node.source_code
-    complete_new_source = new_source
-    try:
-        file_path = Path(node.file_path)
-        if file_path.exists():
-            full_bytes = file_path.read_bytes()
-            full_source = full_bytes.decode("utf-8", errors="replace")
-            # Use byte spans for precise replacement
-            if node.start_byte > 0 or node.end_byte > 0:
-                before = full_bytes[:node.start_byte].decode("utf-8", errors="replace")
-                after = full_bytes[node.end_byte:].decode("utf-8", errors="replace")
-                complete_new_source = before + new_source + after
-            elif old_source and old_source in full_source:
-                # Fallback to string replacement if no byte spans
-                complete_new_source = full_source.replace(old_source, new_source, 1)
-            else:
-                complete_new_source = new_source
-    except OSError:
-        complete_new_source = new_source
+    full_bytes = file_path.read_bytes()
+    if node.start_byte > 0 or node.end_byte > 0:
+        before = full_bytes[:node.start_byte].decode("utf-8", errors="replace")
+        after = full_bytes[node.end_byte:].decode("utf-8", errors="replace")
+        next_text = before + new_source + after
+    else:
+        full_text = full_bytes.decode("utf-8", errors="replace")
+        next_text = full_text.replace(node.source_code, new_source, 1)
 
-    proposal_id = uuid.uuid4().hex[:8]
-    # Store the base file hash for concurrency checking
-    base_hash = ""
-    try:
-        base_hash = hashlib.sha256(
-            Path(node.file_path).read_bytes()
-        ).hexdigest()
-    except OSError:
-        pass
-
-    await self._event_store.append(
-        RewriteProposalEvent(
-            agent_id=node_id,
-            proposal_id=proposal_id,
-            file_path=node.file_path,
-            old_source=old_source,
-            new_source=complete_new_source,
-            correlation_id=correlation_id,
-        )
-    )
-    await self._node_store.set_status(node_id, "pending_approval")
-    return proposal_id
+    file_path.write_text(next_text, encoding="utf-8")
+    await self._event_store.append(ContentChangedEvent(path=str(file_path), change_type="modified"))
+    return True
 ```
-
-**Note**: Add `import hashlib` to runner.py imports.
 
 **Test**: Add to `tests/unit/test_runner_externals.py`:
 
 ```python
 @pytest.mark.asyncio
-async def test_propose_rewrite_duplicate_source_blocks(runner_env) -> None:
+async def test_apply_rewrite_duplicate_source_blocks(runner_env) -> None:
     """When a file has duplicate code, rewrite targets the correct occurrence by byte span."""
     runner, node_store, event_store, workspace_service = runner_env
     source_path = workspace_service._project_root / "src" / "dup.py"
@@ -223,103 +171,36 @@ async def test_propose_rewrite_duplicate_source_blocks(runner_env) -> None:
     ws = await workspace_service.get_agent_workspace(node.node_id)
     externals = runner._build_externals(node.node_id, ws, "corr-1")
 
-    proposal_id = await externals["propose_rewrite"]("def helper():\n    return 2\n")
-    assert proposal_id
-
-    events = await event_store.get_events(limit=5)
-    rewrite = next(e for e in events if e["event_type"] == "RewriteProposalEvent")
-    new_source = rewrite["payload"]["new_source"]
+    applied = await externals["apply_rewrite"]("def helper():\n    return 2\n")
+    assert applied
+    new_source = source_path.read_text(encoding="utf-8")
 
     # First helper should be unchanged, second should be updated
     assert "def helper():\n    return 1\n\ndef helper():\n    return 2\n" == new_source
 ```
 
-### Step 0.3: Add concurrency guard to approval endpoint (C3)
+### Step 0.3: Remove approval/rejection web endpoints (C3)
 
 **File**: `src/remora/web/server.py`
 
-**Change**: Add `base_hash` field to `RewriteProposalEvent` and check it before writing.
+**Change**: Delete `/api/approve` and `/api/reject` endpoints and all proposal lookup code. Rewrites are now applied directly through `apply_rewrite` + `ContentChangedEvent`, and future audit/version control is handled by Jujutsu integration.
 
-First, update the event type in `src/remora/core/events.py`:
-
-```python
-class RewriteProposalEvent(Event):
-    agent_id: str
-    proposal_id: str
-    file_path: str
-    old_source: str
-    new_source: str
-    diff: str = ""
-    base_hash: str = ""  # SHA-256 of the full file at proposal time
-```
-
-Then update the approve endpoint in `web/server.py` (lines 103-127):
+Expected result:
 
 ```python
-async def api_approve(request: Request) -> JSONResponse:
-    data = await request.json()
-    proposal_id = str(data.get("proposal_id", "")).strip()
-    if not proposal_id:
-        return JSONResponse({"error": "proposal_id is required"}, status_code=400)
-
-    proposal = await _find_proposal(event_store, proposal_id)
-    if proposal is None:
-        return JSONResponse({"error": "proposal not found"}, status_code=404)
-
-    file_path = _resolve_file_path(proposal["file_path"], root)
-    if file_path is None:
-        return JSONResponse({"error": "proposal path is outside project root"}, status_code=400)
-
-    # Concurrency guard: check file hasn't changed since proposal was created
-    base_hash = proposal.get("base_hash", "")
-    if base_hash and file_path.exists():
-        import hashlib
-        current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
-        if current_hash != base_hash:
-            return JSONResponse(
-                {"error": "file has been modified since proposal was created"},
-                status_code=409,
-            )
-
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(str(proposal["new_source"]), encoding="utf-8")
-
-    agent_id = str(proposal.get("agent_id", "")).strip()
-    if agent_id:
-        await node_store.set_status(agent_id, "idle")
-    await event_store.append(
-        ContentChangedEvent(path=str(file_path), change_type="modified")
-    )
-    return JSONResponse({"status": "approved", "proposal_id": proposal_id})
+# remove Route("/api/approve", ...)
+# remove Route("/api/reject", ...)
+# remove _find_proposal(...)
 ```
 
-**Test**: Add to `tests/unit/test_web_server.py`:
+**Test**: Update `tests/unit/test_web_server.py`:
 
 ```python
 @pytest.mark.asyncio
-async def test_api_approve_rejects_stale_proposal(web_env) -> None:
-    """Approval must fail if the file was modified after proposal creation."""
-    import hashlib
-    client, node_store, event_store, source_path = web_env
-    original = source_path.read_bytes()
-    base_hash = hashlib.sha256(original).hexdigest()
-
-    await event_store.append(
-        RewriteProposalEvent(
-            agent_id="src/app.py::a",
-            proposal_id="stale-1",
-            file_path=str(source_path),
-            old_source="def a():\n    return 1\n",
-            new_source="def a():\n    return 99\n",
-            base_hash=base_hash,
-        )
-    )
-    # Modify the file after proposal was created
-    source_path.write_text("def a():\n    return 42\n", encoding="utf-8")
-
-    response = await client.post("/api/approve", json={"proposal_id": "stale-1"})
-    assert response.status_code == 409
-    assert "modified" in response.json()["error"]
+async def test_api_approve_endpoint_removed(web_env) -> None:
+    client, *_rest = web_env
+    response = await client.post("/api/approve", json={"id": "x"})
+    assert response.status_code == 404
 ```
 
 ### Step 0.4: Add fault isolation to reconciler loop (H2)
@@ -416,9 +297,9 @@ async def trigger(
 For `_depths`, entries are already cleaned in `_execute_turn`'s `finally` block when they reach 0. No additional change needed.
 
 ### Phase 0 Acceptance Criteria
-- [ ] `pending_approval` survives turn completion (test passes)
+- [ ] Runtime no longer uses `pending_approval`
 - [ ] Span-based rewrite patches correct occurrence (test passes)
-- [ ] Stale proposal approval returns 409 (test passes)
+- [ ] `/api/approve` and `/api/reject` are removed
 - [ ] Reconciler loop survives cycle errors (test passes)
 - [ ] All 125+ existing tests still pass
 
@@ -785,7 +666,6 @@ class NodeStatus(str, Enum):
     """Valid states for a code node / agent."""
     IDLE = "idle"
     RUNNING = "running"
-    PENDING_APPROVAL = "pending_approval"
     ERROR = "error"
 
 
@@ -809,8 +689,7 @@ class ChangeType(str, Enum):
 # Valid status transitions
 STATUS_TRANSITIONS: dict[NodeStatus, set[NodeStatus]] = {
     NodeStatus.IDLE: {NodeStatus.RUNNING},
-    NodeStatus.RUNNING: {NodeStatus.IDLE, NodeStatus.PENDING_APPROVAL, NodeStatus.ERROR},
-    NodeStatus.PENDING_APPROVAL: {NodeStatus.IDLE},
+    NodeStatus.RUNNING: {NodeStatus.IDLE, NodeStatus.ERROR},
     NodeStatus.ERROR: {NodeStatus.IDLE, NodeStatus.RUNNING},
 }
 
@@ -1147,16 +1026,14 @@ See **Appendix A** for the full option analysis as requested.
 from __future__ import annotations
 
 import fnmatch
-import hashlib
-import uuid
 from pathlib import Path
 from typing import Any
 
 from remora.core.events.store import EventStore
 from remora.core.events.types import (
     AgentMessageEvent,
+    ContentChangedEvent,
     CustomEvent,
-    RewriteProposalEvent,
     SubscriptionPattern,
 )
 from remora.core.graph import NodeStore
@@ -1296,12 +1173,15 @@ class AgentContext:
 
     # -- Code operations ---------------------------------------------------
 
-    async def propose_rewrite(self, new_source: str) -> str:
+    async def apply_rewrite(self, new_source: str) -> bool:
         node = await self._node_store.get_node(self.node_id)
         if node is None:
-            return ""
+            return False
         # ... (rewrite logic from Step 0.2)
-        return proposal_id
+        await self._event_store.append(
+            ContentChangedEvent(path=node.file_path, change_type="modified")
+        )
+        return True
 
     async def get_node_source(self, target_id: str) -> str:
         node = await self._node_store.get_node(target_id)
@@ -1326,7 +1206,7 @@ class AgentContext:
             "event_get_history": self.event_get_history,
             "send_message": self.send_message,
             "broadcast": self.broadcast,
-            "propose_rewrite": self.propose_rewrite,
+            "apply_rewrite": self.apply_rewrite,
             "get_node_source": self.get_node_source,
             "my_node_id": self.node_id,
             "my_correlation_id": self.correlation_id,
@@ -1369,203 +1249,36 @@ Create `tests/unit/test_externals.py` — directly test `AgentContext` methods w
 
 ---
 
-## Phase 6: Proposal System
+## Phase 6: Direct Rewrite Flow
 
-### Step 6.1: Create `ProposalStore`
+### Step 6.1: Remove proposal persistence and endpoints
 
-**New file**: `src/remora/core/proposals.py`
+Delete proposal-only components and keep the runtime focused on immediate rewrite execution:
+- remove `RewriteProposalEvent` and any proposal-related fields/models,
+- remove `/api/approve` and `/api/reject`,
+- remove proposal lookup helpers and proposal tables/stores.
 
-```python
-"""Persistent proposal lifecycle management."""
+### Step 6.2: Make `AgentContext.apply_rewrite` the single rewrite path
 
-from __future__ import annotations
+`apply_rewrite` should:
+1. read the target file,
+2. apply a span-based replacement using `start_byte`/`end_byte` when available,
+3. write the updated file,
+4. emit `ContentChangedEvent`.
 
-from enum import Enum
-from typing import Any
+This preserves deterministic edit targeting without introducing approval lifecycle state.
 
-from pydantic import BaseModel, Field
+### Step 6.3: Add lightweight VCS-ready hooks (Jujutsu later)
 
-from remora.core.db import AsyncDB
-
-
-class ProposalStatus(str, Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    EXPIRED = "expired"
-
-
-class Proposal(BaseModel):
-    proposal_id: str
-    agent_id: str
-    file_path: str
-    old_source: str
-    new_source: str
-    start_byte: int
-    end_byte: int
-    base_hash: str  # SHA-256 of full file at proposal time
-    status: ProposalStatus = ProposalStatus.PENDING
-    created_at: float = Field(default_factory=lambda: __import__("time").time())
-
-
-class ProposalStore:
-    """SQLite-backed proposal persistence with lifecycle management."""
-
-    def __init__(self, db: AsyncDB):
-        self._db = db
-
-    async def create_tables(self) -> None:
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS proposals (
-                proposal_id TEXT PRIMARY KEY,
-                agent_id TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                old_source TEXT NOT NULL,
-                new_source TEXT NOT NULL,
-                start_byte INTEGER NOT NULL,
-                end_byte INTEGER NOT NULL,
-                base_hash TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                created_at REAL NOT NULL
-            )
-        """)
-        await self._db.execute(
-            "CREATE INDEX IF NOT EXISTS idx_proposals_agent ON proposals(agent_id)"
-        )
-        await self._db.execute(
-            "CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status)"
-        )
-
-    async def create(self, proposal: Proposal) -> None:
-        await self._db.execute(
-            """INSERT INTO proposals
-               (proposal_id, agent_id, file_path, old_source, new_source,
-                start_byte, end_byte, base_hash, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                proposal.proposal_id, proposal.agent_id, proposal.file_path,
-                proposal.old_source, proposal.new_source,
-                proposal.start_byte, proposal.end_byte,
-                proposal.base_hash, proposal.status.value, proposal.created_at,
-            ),
-        )
-
-    async def get(self, proposal_id: str) -> Proposal | None:
-        row = await self._db.fetch_one(
-            "SELECT * FROM proposals WHERE proposal_id = ?", (proposal_id,)
-        )
-        return Proposal(**dict(row)) if row else None
-
-    async def set_status(self, proposal_id: str, status: ProposalStatus) -> bool:
-        cursor = await self._db.execute(
-            "UPDATE proposals SET status = ? WHERE proposal_id = ?",
-            (status.value, proposal_id),
-        )
-        return cursor.rowcount > 0
-
-    async def get_pending_for_agent(self, agent_id: str) -> list[Proposal]:
-        rows = await self._db.fetch_all(
-            "SELECT * FROM proposals WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC",
-            (agent_id,),
-        )
-        return [Proposal(**dict(r)) for r in rows]
-```
-
-### Step 6.2: Update `AgentContext.propose_rewrite` to use `ProposalStore`
-
-```python
-async def propose_rewrite(self, new_source: str) -> str:
-    node = await self._node_store.get_node(self.node_id)
-    if node is None:
-        return ""
-
-    file_path = Path(node.file_path)
-    base_hash = ""
-    complete_new_source = new_source
-    try:
-        if file_path.exists():
-            full_bytes = file_path.read_bytes()
-            base_hash = hashlib.sha256(full_bytes).hexdigest()
-            if node.start_byte > 0 or node.end_byte > 0:
-                before = full_bytes[:node.start_byte].decode("utf-8", errors="replace")
-                after = full_bytes[node.end_byte:].decode("utf-8", errors="replace")
-                complete_new_source = before + new_source + after
-    except OSError:
-        pass
-
-    proposal = Proposal(
-        proposal_id=uuid.uuid4().hex[:8],
-        agent_id=self.node_id,
-        file_path=node.file_path,
-        old_source=node.source_code,
-        new_source=complete_new_source,
-        start_byte=node.start_byte,
-        end_byte=node.end_byte,
-        base_hash=base_hash,
-    )
-    await self._proposal_store.create(proposal)
-    # Still emit event for SSE/UI visibility
-    await self._event_store.append(
-        RewriteProposalEvent(
-            agent_id=self.node_id,
-            proposal_id=proposal.proposal_id,
-            file_path=node.file_path,
-            old_source=node.source_code,
-            new_source=complete_new_source,
-            base_hash=base_hash,
-            correlation_id=self.correlation_id,
-        )
-    )
-    await self._node_store.set_status(self.node_id, "pending_approval")
-    return proposal.proposal_id
-```
-
-### Step 6.3: Update `web/server.py` approval endpoint
-
-Replace `_find_proposal` (event scan) with `ProposalStore.get()`:
-
-```python
-async def api_approve(request: Request) -> JSONResponse:
-    data = await request.json()
-    proposal_id = str(data.get("proposal_id", "")).strip()
-    if not proposal_id:
-        return JSONResponse({"error": "proposal_id is required"}, status_code=400)
-
-    proposal = await proposal_store.get(proposal_id)
-    if proposal is None:
-        return JSONResponse({"error": "proposal not found"}, status_code=404)
-    if proposal.status != ProposalStatus.PENDING:
-        return JSONResponse({"error": f"proposal is {proposal.status.value}"}, status_code=409)
-
-    file_path = _resolve_file_path(proposal.file_path, root)
-    if file_path is None:
-        return JSONResponse({"error": "path outside project root"}, status_code=400)
-
-    # Concurrency guard
-    if proposal.base_hash and file_path.exists():
-        current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
-        if current_hash != proposal.base_hash:
-            await proposal_store.set_status(proposal_id, ProposalStatus.EXPIRED)
-            return JSONResponse({"error": "file modified since proposal"}, status_code=409)
-
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(proposal.new_source, encoding="utf-8")
-
-    await proposal_store.set_status(proposal_id, ProposalStatus.APPROVED)
-    if proposal.agent_id:
-        await node_store.set_status(proposal.agent_id, "idle")
-    await event_store.append(ContentChangedEvent(path=str(file_path)))
-    return JSONResponse({"status": "approved", "proposal_id": proposal_id})
-```
-
-This eliminates C2 (span-based), C3 (concurrency guard), and M1 (no event scan limit) in one change.
+Keep the MVP simple now, but shape the API so VCS integration can be added without another surface redesign:
+- keep rewrite metadata in emitted events (`agent_id`, `file_path`, `old_hash`, `new_hash`),
+- isolate file-write logic in one method (`apply_rewrite`) so future Jujutsu commit/branch operations wrap a single boundary.
 
 ### Phase 6 Acceptance Criteria
-- [ ] `ProposalStore` with full CRUD + status lifecycle
-- [ ] Proposals persist in SQLite, not scraped from events
-- [ ] Approval validates `base_hash` before writing
-- [ ] Expired/already-approved proposals are rejected
-- [ ] `_find_proposal` is deleted
+- [ ] No proposal-specific models, stores, or endpoints remain
+- [ ] `apply_rewrite` performs direct span-based file updates
+- [ ] Rewrites emit `ContentChangedEvent`
+- [ ] Rewrite path is centralized and VCS-wrap-friendly
 - [ ] All tests pass
 
 ---
@@ -2065,7 +1778,6 @@ from remora.core.events.dispatcher import TriggerDispatcher
 from remora.core.events.store import EventStore
 from remora.core.events.subscriptions import SubscriptionRegistry
 from remora.core.graph import NodeStore
-from remora.core.proposals import ProposalStore
 from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
 
@@ -2085,7 +1797,6 @@ class RuntimeServices:
 
         # Storage
         self.node_store = NodeStore(db)
-        self.proposal_store = ProposalStore(db)
 
         # Events
         self.event_bus = EventBus()
@@ -2108,7 +1819,6 @@ class RuntimeServices:
         await self.node_store.create_tables()
         await self.subscriptions.create_tables()
         await self.event_store.create_tables()
-        await self.proposal_store.create_tables()
         await self.workspace_service.initialize()
 
         self.reconciler = FileReconciler(
@@ -2268,7 +1978,7 @@ From the test gaps identified in CODE_REVIEW_2:
 1. **`broadcast` with `"siblings"` and `"file:"` patterns** — test_runner_externals.py
 2. **Negative config tests** — test_config.py (invalid language map, missing paths)
 3. **Reconciler with malformed source** — test_reconciler.py (file with syntax errors doesn't crash)
-4. **ProposalStore lifecycle** — test_proposals.py (create, get, approve, reject, expire)
+4. **Direct rewrite lifecycle** — test_externals.py / test_web_server.py (apply rewrite, emit content-changed, no approve/reject routes)
 5. **AgentContext unit tests** — test_externals.py (all 18 externals)
 6. **LanguagePlugin unit tests** — test_languages.py (each plugin resolves types correctly)
 
@@ -2295,7 +2005,7 @@ See **Appendix C** for the full architecture sketch as requested. This phase is 
 class AgentToolBackend(Protocol):
     async def read_file(self, path: str) -> str: ...
     async def write_file(self, path: str, content: str) -> bool: ...
-    async def propose_rewrite(self, new_source: str) -> str: ...
+    async def apply_rewrite(self, new_source: str) -> bool: ...
     async def search_files(self, pattern: str) -> list[str]: ...
     # ... all 18 externals
 ```
@@ -2357,7 +2067,7 @@ externals/
 ├── graph.py         — graph_get_node, graph_query_nodes, etc.
 ├── events.py        — event_emit, event_subscribe, etc.
 ├── communication.py — send_message, broadcast
-└── code.py          — propose_rewrite, get_node_source
+└── code.py          — apply_rewrite, get_node_source
 ```
 
 Each module exports functions that take an explicit context parameter.
@@ -2466,7 +2176,7 @@ Use patterns 1 (str Enum), 2 (discriminated unions for event deserialization —
 
 ### What event sourcing would look like for Remora
 
-**Core idea**: The EventStore becomes the single source of truth. All other state (nodes, agents, subscriptions, proposals) is derived by "projecting" the event stream.
+**Core idea**: The EventStore becomes the single source of truth. All other state (nodes, agents, subscriptions, rewrite history) is derived by "projecting" the event stream.
 
 ### Event stream (already exists)
 
@@ -2476,8 +2186,7 @@ NodeChangedEvent    → updates node source/hash
 NodeRemovedEvent    → deletes node from projection
 AgentStartEvent     → sets agent status = running
 AgentCompleteEvent  → sets agent status = idle
-RewriteProposalEvent → creates proposal in projection
-ProposalApprovedEvent → marks proposal approved, writes file
+RewriteAppliedEvent → records an agent-initiated file rewrite
 ```
 
 ### Projections (new)
@@ -2533,7 +2242,7 @@ class ProjectionManager:
 ### What would need to change
 
 1. **NodeStore becomes read-only from projections**: Writes happen only through events. `upsert_node` is replaced by `emit(NodeDiscoveredEvent)`.
-2. **New event types needed**: `ProposalApprovedEvent`, `ProposalRejectedEvent`, `StatusTransitionEvent`, `SubscriptionCreatedEvent`, `SubscriptionRemovedEvent`.
+2. **New event types needed**: `RewriteAppliedEvent`, `StatusTransitionEvent`, `SubscriptionCreatedEvent`, `SubscriptionRemovedEvent`.
 3. **All state mutations become events**: Instead of `node_store.set_status(id, "running")`, emit `StatusTransitionEvent(node_id, "idle", "running")`.
 4. **Projections replace direct queries**: `node_store.get_node()` delegates to `NodeProjection.get_node()`.
 
@@ -2547,7 +2256,7 @@ class ProjectionManager:
 | NodeProjection | Medium | Replace NodeStore reads |
 | AgentProjection | Small | Replace AgentStore reads |
 | SubscriptionProjection | Medium | Replace SubscriptionRegistry reads |
-| ProposalProjection | Small | Replace ProposalStore reads |
+| RewriteProjection | Small | Replace rewrite-history reads |
 | Snapshot persistence | Large | Serialize/deserialize projection state |
 | Migration | Large | All write paths must go through events |
 | **Total** | **Large** | ~2-3 weeks of focused work |
@@ -2569,7 +2278,7 @@ class ProjectionManager:
 
 ### Recommendation
 
-Event sourcing is powerful but premature for Remora's current scale. The dedicated stores (NodeStore, ProposalStore, AgentStore) with explicit state management are sufficient. Revisit when:
+Event sourcing is powerful but premature for Remora's current scale. The dedicated stores (NodeStore, AgentStore) with explicit state management are sufficient. Revisit when:
 - The event log is actively used for debugging/auditing
 - There's a need for multi-process or distributed deployment
 - The team is comfortable with the event sourcing paradigm
@@ -2586,7 +2295,7 @@ After all phases are complete:
 - [ ] `events.py` god module is split into 5 focused modules
 - [ ] `AsyncDB` eliminates ~300 lines of boilerplate
 - [ ] Externals are a testable class, not 18 closures
-- [ ] Proposals have their own persistence with concurrency guards
+- [ ] Direct rewrites are centralized and ready to be wrapped by Jujutsu workflows
 - [ ] Language plugins make new language support zero-touch for existing code
 - [ ] Reconciler uses filesystem watching with polling fallback
 - [ ] Agent identity is separated from code element
