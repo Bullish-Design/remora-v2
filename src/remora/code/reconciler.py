@@ -73,7 +73,10 @@ class FileReconciler:
         self._running = True
         try:
             while self._running:
-                await self.reconcile_cycle()
+                try:
+                    await self.reconcile_cycle()
+                except Exception:  # noqa: BLE001 - keep loop alive on single-cycle failure
+                    logger.exception("Reconcile cycle failed, will retry next cycle")
                 await asyncio.sleep(poll_interval_s)
         finally:
             self._running = False

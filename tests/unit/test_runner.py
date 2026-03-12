@@ -129,6 +129,31 @@ async def test_runner_status_lifecycle(runner_env, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_runner_only_resets_running_to_idle(runner_env, monkeypatch) -> None:
+    runner, node_store, _event_store, workspace_service = runner_env
+    node = _node("src/app.py::a")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="done"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.runner.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.runner.discover_tools", lambda *_args, **_kwargs: [])
+    await runner._execute_turn(Trigger(node_id=node.node_id, correlation_id="c1"))
+
+    updated = await node_store.get_node(node.node_id)
+    assert updated is not None
+    assert updated.status == "idle"
+
+
+@pytest.mark.asyncio
 async def test_runner_build_prompt(runner_env) -> None:
     runner, node_store, _event_store, _workspace_service = runner_env
     node = _node("src/app.py::a")

@@ -11,7 +11,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from remora.core.events import ContentChangedEvent, HumanChatEvent
+from remora.core.events import HumanChatEvent
 from remora.web.views import GRAPH_HTML
 
 
@@ -22,8 +22,8 @@ def create_app(
     *,
     project_root: Path | None = None,
 ) -> Starlette:
-    """Create Starlette app exposing graph, events, chat, and proposal APIs."""
-    root = project_root.resolve() if project_root is not None else None
+    """Create Starlette app exposing graph, events, and chat APIs."""
+    del project_root
 
     async def index(_request: Request) -> HTMLResponse:
         return HTMLResponse(GRAPH_HTML)
@@ -100,47 +100,6 @@ def create_app(
         }
         return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
-    async def api_approve(request: Request) -> JSONResponse:
-        data = await request.json()
-        proposal_id = str(data.get("proposal_id", "")).strip()
-        if not proposal_id:
-            return JSONResponse({"error": "proposal_id is required"}, status_code=400)
-
-        proposal = await _find_proposal(event_store, proposal_id)
-        if proposal is None:
-            return JSONResponse({"error": "proposal not found"}, status_code=404)
-
-        file_path = _resolve_file_path(proposal["file_path"], root)
-        if file_path is None:
-            return JSONResponse({"error": "proposal path is outside project root"}, status_code=400)
-
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(str(proposal["new_source"]), encoding="utf-8")
-
-        agent_id = str(proposal.get("agent_id", "")).strip()
-        if agent_id:
-            await node_store.set_status(agent_id, "idle")
-        await event_store.append(
-            ContentChangedEvent(path=str(file_path), change_type="modified")
-        )
-
-        return JSONResponse({"status": "approved", "proposal_id": proposal_id})
-
-    async def api_reject(request: Request) -> JSONResponse:
-        data = await request.json()
-        proposal_id = str(data.get("proposal_id", "")).strip()
-        if not proposal_id:
-            return JSONResponse({"error": "proposal_id is required"}, status_code=400)
-
-        proposal = await _find_proposal(event_store, proposal_id)
-        if proposal is None:
-            return JSONResponse({"error": "proposal not found"}, status_code=404)
-
-        agent_id = str(proposal.get("agent_id", "")).strip()
-        if agent_id:
-            await node_store.set_status(agent_id, "idle")
-        return JSONResponse({"status": "rejected", "proposal_id": proposal_id})
-
     routes = [
         Route("/", endpoint=index),
         Route("/api/nodes", endpoint=api_nodes),
@@ -149,40 +108,8 @@ def create_app(
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
         Route("/api/events", endpoint=api_events),
         Route("/sse", endpoint=sse_stream),
-        Route("/api/approve", endpoint=api_approve, methods=["POST"]),
-        Route("/api/reject", endpoint=api_reject, methods=["POST"]),
     ]
     return Starlette(routes=routes)
-
-
-async def _find_proposal(event_store: Any, proposal_id: str) -> dict[str, Any] | None:
-    events = await event_store.get_events(limit=1000)
-    for event in events:
-        if event.get("event_type") != "RewriteProposalEvent":
-            continue
-        payload = event.get("payload", {})
-        if payload.get("proposal_id") == proposal_id:
-            return payload
-    return None
-
-
-def _resolve_file_path(file_path: str, root: Path | None) -> Path | None:
-    candidate = Path(file_path)
-    if not candidate.is_absolute():
-        if root is None:
-            candidate = candidate.resolve()
-        else:
-            candidate = (root / candidate).resolve()
-    else:
-        candidate = candidate.resolve()
-
-    if root is None:
-        return candidate
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        return None
-    return candidate
 
 
 __all__ = ["create_app"]

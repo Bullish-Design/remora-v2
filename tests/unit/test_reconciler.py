@@ -158,3 +158,29 @@ async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path)
 
     for patterns in grouped.values():
         assert len(patterns) == 2
+
+
+@pytest.mark.asyncio
+async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, monkeypatch) -> None:
+    _node_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    _write(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
+    await reconciler.full_scan()
+
+    call_count = 0
+    original_cycle = reconciler.reconcile_cycle
+
+    async def flaky_cycle() -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("simulated failure")
+        await original_cycle()
+
+    monkeypatch.setattr(reconciler, "reconcile_cycle", flaky_cycle)
+
+    task = asyncio.create_task(reconciler.run_forever(poll_interval_s=0.01))
+    await asyncio.sleep(0.05)
+    reconciler.stop()
+    await asyncio.wait_for(task, timeout=1.0)
+
+    assert call_count >= 2

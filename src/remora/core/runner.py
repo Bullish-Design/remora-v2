@@ -21,10 +21,10 @@ from remora.core.events import (
     AgentErrorEvent,
     AgentMessageEvent,
     AgentStartEvent,
+    ContentChangedEvent,
     CustomEvent,
     Event,
     EventStore,
-    RewriteProposalEvent,
     SubscriptionPattern,
 )
 from remora.core.grail import discover_tools
@@ -85,6 +85,11 @@ class AgentRunner:
     ) -> None:
         """Enqueue a trigger with cooldown and depth checks."""
         now_ms = time.time() * 1000.0
+        cutoff_ms = now_ms - 60_000.0
+        stale_keys = [key for key, value in self._cooldowns.items() if value < cutoff_ms]
+        for key in stale_keys:
+            del self._cooldowns[key]
+
         last_ms = self._cooldowns.get(node_id, 0.0)
         if now_ms - last_ms < self._config.trigger_cooldown_ms:
             return
@@ -175,7 +180,9 @@ class AgentRunner:
                 )
             finally:
                 try:
-                    await self._node_store.set_status(node_id, "idle")
+                    current_node = await self._node_store.get_node(node_id)
+                    if current_node is not None and current_node.status == "running":
+                        await self._node_store.set_status(node_id, "idle")
                 except Exception:  # noqa: BLE001 - best effort cleanup
                     logger.exception("Failed to reset node status for %s", node_id)
                 remaining = self._depths.get(depth_key, 1) - 1
@@ -319,37 +326,36 @@ class AgentRunner:
                 )
             return f"Broadcast sent to {len(target_ids)} agents"
 
-        async def propose_rewrite(new_source: str) -> str:
+        async def apply_rewrite(new_source: str) -> bool:
             node = await self._node_store.get_node(node_id)
             if node is None:
-                return ""
+                return False
 
-            old_source = node.source_code
-            complete_new_source = new_source
             try:
                 file_path = Path(node.file_path)
-                if file_path.exists():
-                    full_source = file_path.read_text(encoding="utf-8")
-                    if old_source and old_source in full_source:
-                        complete_new_source = full_source.replace(old_source, new_source, 1)
-                    else:
-                        complete_new_source = new_source
+                if not file_path.exists():
+                    return False
+                full_bytes = file_path.read_bytes()
             except OSError:
-                complete_new_source = new_source
+                return False
 
-            proposal_id = uuid.uuid4().hex[:8]
+            if node.start_byte > 0 or node.end_byte > 0:
+                before = full_bytes[: node.start_byte].decode("utf-8", errors="replace")
+                after = full_bytes[node.end_byte :].decode("utf-8", errors="replace")
+                next_text = before + new_source + after
+            else:
+                full_text = full_bytes.decode("utf-8", errors="replace")
+                next_text = full_text.replace(node.source_code, new_source, 1)
+
+            file_path.write_text(next_text, encoding="utf-8")
             await self._event_store.append(
-                RewriteProposalEvent(
-                    agent_id=node_id,
-                    proposal_id=proposal_id,
-                    file_path=node.file_path,
-                    old_source=old_source,
-                    new_source=complete_new_source,
+                ContentChangedEvent(
+                    path=str(file_path),
+                    change_type="modified",
                     correlation_id=correlation_id,
                 )
             )
-            await self._node_store.set_status(node_id, "pending_approval")
-            return proposal_id
+            return True
 
         async def get_node_source(target_id: str) -> str:
             node = await self._node_store.get_node(target_id)
@@ -372,7 +378,7 @@ class AgentRunner:
             "event_get_history": event_get_history,
             "send_message": send_message,
             "broadcast": broadcast,
-            "propose_rewrite": propose_rewrite,
+            "apply_rewrite": apply_rewrite,
             "get_node_source": get_node_source,
             "my_node_id": node_id,
             "my_correlation_id": correlation_id,

@@ -9,7 +9,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from remora.core.events import EventBus, EventStore, HumanChatEvent, RewriteProposalEvent
+from remora.core.events import EventBus, EventStore, HumanChatEvent
 from remora.core.graph import NodeStore
 from remora.core.node import CodeNode
 from remora.web.server import create_app
@@ -161,46 +161,14 @@ async def test_sse_receives_events(web_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_api_approve_proposal(web_env) -> None:
-    client, node_store, event_store, source_path = web_env
-    proposal_id = "abc123"
-    new_source = "def a():\n    return 99\n"
-    await node_store.set_status("src/app.py::a", "pending_approval")
-    await event_store.append(
-        RewriteProposalEvent(
-            agent_id="src/app.py::a",
-            proposal_id=proposal_id,
-            file_path=str(source_path),
-            old_source="def a():\n    return 1\n",
-            new_source=new_source,
-        )
-    )
-
-    response = await client.post("/api/approve", json={"proposal_id": proposal_id})
-    assert response.status_code == 200
-    assert source_path.read_text(encoding="utf-8") == new_source
-    updated = await node_store.get_node("src/app.py::a")
-    assert updated is not None
-    assert updated.status == "idle"
+async def test_api_approve_endpoint_removed(web_env) -> None:
+    client, *_rest = web_env
+    response = await client.post("/api/approve", json={"id": "x"})
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_api_reject_proposal(web_env) -> None:
-    client, node_store, event_store, source_path = web_env
-    proposal_id = "reject-1"
-    await node_store.set_status("src/app.py::a", "pending_approval")
-    await event_store.append(
-        RewriteProposalEvent(
-            agent_id="src/app.py::a",
-            proposal_id=proposal_id,
-            file_path=str(source_path),
-            old_source="def a():\n    return 1\n",
-            new_source="def a():\n    return -1\n",
-        )
-    )
-
-    response = await client.post("/api/reject", json={"proposal_id": proposal_id})
-    assert response.status_code == 200
-    updated = await node_store.get_node("src/app.py::a")
-    assert updated is not None
-    assert updated.status == "idle"
+async def test_api_reject_endpoint_removed(web_env) -> None:
+    client, *_rest = web_env
+    response = await client.post("/api/reject", json={"id": "x"})
+    assert response.status_code == 404
