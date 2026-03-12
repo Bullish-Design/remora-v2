@@ -1,4 +1,4 @@
-"""Persistent graph store for CodeNode agents."""
+"""Persistent graph and agent stores."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from remora.core.db import AsyncDB
-from remora.core.node import CodeNode
+from remora.core.node import Agent, CodeNode
 from remora.core.types import NodeStatus, NodeType, validate_status_transition
 
 logger = logging.getLogger(__name__)
@@ -49,8 +49,6 @@ class NodeStore:
                 source_code TEXT NOT NULL,
                 source_hash TEXT NOT NULL,
                 parent_id TEXT,
-                caller_ids TEXT DEFAULT '[]',
-                callee_ids TEXT DEFAULT '[]',
                 status TEXT DEFAULT 'idle',
                 bundle_name TEXT
             );
@@ -66,6 +64,14 @@ class NodeStore:
             );
             CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
             CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
+            CREATE TABLE IF NOT EXISTS agents (
+                agent_id TEXT PRIMARY KEY,
+                element_id TEXT,
+                status TEXT DEFAULT 'idle',
+                bundle_name TEXT,
+                FOREIGN KEY (element_id) REFERENCES nodes(node_id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
 
@@ -187,4 +193,74 @@ class NodeStore:
         )
 
 
-__all__ = ["Edge", "NodeStore"]
+class AgentStore:
+    """SQLite persistence for agent state, separate from code elements."""
+
+    def __init__(self, db: AsyncDB):
+        self._db = db
+
+    async def create_tables(self) -> None:
+        await self._db.execute_script(
+            """
+            CREATE TABLE IF NOT EXISTS agents (
+                agent_id TEXT PRIMARY KEY,
+                element_id TEXT,
+                status TEXT DEFAULT 'idle',
+                bundle_name TEXT,
+                FOREIGN KEY (element_id) REFERENCES nodes(node_id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+            """
+        )
+
+    async def upsert_agent(self, agent: Agent) -> None:
+        row = agent.to_row()
+        columns = ", ".join(row.keys())
+        placeholders = ", ".join("?" for _ in row)
+        await self._db.execute(
+            f"INSERT OR REPLACE INTO agents ({columns}) VALUES ({placeholders})",
+            tuple(row.values()),
+        )
+
+    async def get_agent(self, agent_id: str) -> Agent | None:
+        row = await self._db.fetch_one("SELECT * FROM agents WHERE agent_id = ?", (agent_id,))
+        return None if row is None else Agent.from_row(row)
+
+    async def set_status(self, agent_id: str, status: NodeStatus | str) -> None:
+        status_value = status.value if isinstance(status, NodeStatus) else status
+        await self._db.execute(
+            "UPDATE agents SET status = ? WHERE agent_id = ?",
+            (status_value, agent_id),
+        )
+
+    async def transition_status(self, agent_id: str, target: NodeStatus) -> bool:
+        agent = await self.get_agent(agent_id)
+        if agent is None:
+            return False
+        if not validate_status_transition(agent.status, target):
+            logger.warning(
+                "Invalid agent status transition for %s: %s -> %s",
+                agent_id,
+                agent.status,
+                target,
+            )
+            return False
+        await self.set_status(agent_id, target)
+        return True
+
+    async def list_agents(self, status: NodeStatus | None = None) -> list[Agent]:
+        if status is None:
+            rows = await self._db.fetch_all("SELECT * FROM agents ORDER BY agent_id ASC")
+        else:
+            rows = await self._db.fetch_all(
+                "SELECT * FROM agents WHERE status = ? ORDER BY agent_id ASC",
+                (status.value,),
+            )
+        return [Agent.from_row(row) for row in rows]
+
+    async def delete_agent(self, agent_id: str) -> bool:
+        deleted = await self._db.delete("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
+        return deleted > 0
+
+
+__all__ = ["Edge", "NodeStore", "AgentStore"]

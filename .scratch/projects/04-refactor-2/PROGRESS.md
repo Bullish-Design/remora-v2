@@ -13,8 +13,8 @@
 - [x] Phase 2 testing
 - [x] Phase 3 implementation
 - [x] Phase 3 testing
-- [ ] Phase 4 implementation
-- [ ] Phase 4 testing
+- [x] Phase 4 implementation
+- [x] Phase 4 testing
 - [ ] Phase 5 implementation
 - [ ] Phase 5 testing
 - [ ] Phase 6 implementation
@@ -41,3 +41,5 @@
 - Phase 2 tests passing: `tests/unit -q` plus focused event/runner/reconciler suites.
 - Phase 3 complete: added shared enums (`NodeStatus`, `NodeType`, `ChangeType`), enforced transition rules in `NodeStore.transition_status`, updated runner to use transitions, made discovery IDs collision-safe, and removed unused `src/remora/utils`.
 - Phase 3 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 4 complete: separated `CodeElement` and `Agent` models, introduced `AgentStore`, migrated runner and reconciler status lifecycle through `AgentStore`, and kept `CodeNode` as compatibility view.
+- Phase 4 tests passing: `tests/unit -q` and integration smoke suites.

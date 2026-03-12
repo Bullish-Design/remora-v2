@@ -16,7 +16,7 @@ from remora.code.reconciler import FileReconciler
 from remora.core.config import load_config
 from remora.core.db import AsyncDB
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
-from remora.core.graph import NodeStore
+from remora.core.graph import AgentStore, NodeStore
 from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
 from remora.web.server import create_app
@@ -95,7 +95,9 @@ async def _start(
 
     event_bus = EventBus()
     node_store = NodeStore(db)
+    agent_store = AgentStore(db)
     await node_store.create_tables()
+    await agent_store.create_tables()
 
     subscriptions = SubscriptionRegistry(db)
     dispatcher = TriggerDispatcher(subscriptions)
@@ -112,6 +114,7 @@ async def _start(
     reconciler = FileReconciler(
         config,
         node_store,
+        agent_store,
         event_store,
         workspace_service,
         project_root,
@@ -119,7 +122,7 @@ async def _start(
     logging.info("Starting code discovery...")
     await reconciler.full_scan()
 
-    runner = AgentRunner(event_store, node_store, workspace_service, config)
+    runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
     runner_task = asyncio.create_task(runner.run_forever(), name="remora-runner")
     reconciler_task = asyncio.create_task(
         reconciler.run_forever(),

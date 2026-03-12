@@ -9,7 +9,7 @@ import pytest_asyncio
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
-from remora.core.graph import NodeStore
+from remora.core.graph import AgentStore, NodeStore
 from remora.core.node import CodeNode
 from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
@@ -34,7 +34,9 @@ def _node(node_id: str, file_path: str = "src/app.py", node_type: str = "functio
 async def runner_env(tmp_path: Path):
     db = AsyncDB.from_path(tmp_path / "phase4.db")
     node_store = NodeStore(db)
+    agent_store = AgentStore(db)
     await node_store.create_tables()
+    await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
 
@@ -42,8 +44,8 @@ async def runner_env(tmp_path: Path):
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 
-    runner = AgentRunner(event_store, node_store, workspace_service, config)
-    yield runner, node_store, event_store, workspace_service
+    runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
+    yield runner, node_store, agent_store, event_store, workspace_service
 
     await workspace_service.close()
     db.close()
@@ -51,7 +53,7 @@ async def runner_env(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_externals_workspace_ops(runner_env) -> None:
-    runner, node_store, _event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
     node = _node("src/app.py::alpha")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
@@ -68,7 +70,7 @@ async def test_externals_workspace_ops(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_externals_graph_ops(runner_env) -> None:
-    runner, node_store, _event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
     a = _node("src/app.py::a")
     b = _node("src/app.py::b")
     await node_store.upsert_node(a)
@@ -89,7 +91,7 @@ async def test_externals_graph_ops(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_externals_event_ops(runner_env) -> None:
-    runner, node_store, event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, event_store, workspace_service = runner_env
     node = _node("src/app.py::alpha")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
@@ -113,7 +115,7 @@ async def test_externals_event_ops(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_externals_communication(runner_env) -> None:
-    runner, node_store, event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, event_store, workspace_service = runner_env
     sender = _node("src/app.py::sender")
     target_a = _node("src/app.py::target_a")
     target_b = _node("src/app.py::target_b")
@@ -134,7 +136,7 @@ async def test_externals_communication(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_externals_code_ops(runner_env) -> None:
-    runner, node_store, event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, event_store, workspace_service = runner_env
     source_path = workspace_service._project_root / "src" / "app.py"
     source_path.parent.mkdir(parents=True, exist_ok=True)
     full_source = (
@@ -166,7 +168,7 @@ async def test_externals_code_ops(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_apply_rewrite_duplicate_source_blocks(runner_env) -> None:
-    runner, node_store, _event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
     source_path = workspace_service._project_root / "src" / "dup.py"
     source_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_text(
@@ -198,7 +200,7 @@ async def test_apply_rewrite_duplicate_source_blocks(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_externals_identity(runner_env) -> None:
-    runner, node_store, _event_store, workspace_service = runner_env
+    runner, node_store, _agent_store, _event_store, workspace_service = runner_env
     node = _node("src/app.py::alpha")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)

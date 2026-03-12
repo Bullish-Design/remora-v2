@@ -29,7 +29,7 @@ from remora.core.events import (
     TriggerDispatcher,
 )
 from remora.core.grail import discover_tools
-from remora.core.graph import NodeStore
+from remora.core.graph import AgentStore, NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.node import CodeNode
 from remora.core.types import NodeStatus
@@ -54,6 +54,7 @@ class AgentRunner:
         self,
         event_store: EventStore,
         node_store: NodeStore,
+        agent_store: AgentStore,
         workspace_service: CairnWorkspaceService,
         config: Config,
         dispatcher: TriggerDispatcher | None = None,
@@ -61,6 +62,7 @@ class AgentRunner:
         self._event_store = event_store
         self._dispatcher = dispatcher or event_store.dispatcher
         self._node_store = node_store
+        self._agent_store = agent_store
         self._workspace_service = workspace_service
         self._config = config
         self._running = False
@@ -126,9 +128,12 @@ class AgentRunner:
                     logger.warning("Trigger for unknown node: %s", node_id)
                     return
 
-                if not await self._node_store.transition_status(node_id, NodeStatus.RUNNING):
+                if await self._agent_store.get_agent(node_id) is None:
+                    await self._agent_store.upsert_agent(node.to_agent())
+                if not await self._agent_store.transition_status(node_id, NodeStatus.RUNNING):
                     logger.warning("Failed to transition node %s into running state", node_id)
                     return
+                await self._node_store.transition_status(node_id, NodeStatus.RUNNING)
                 await self._event_store.append(
                     AgentStartEvent(
                         agent_id=node_id,
@@ -177,6 +182,7 @@ class AgentRunner:
                 )
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
                 logger.exception("Agent turn failed for %s", node_id)
+                await self._agent_store.transition_status(node_id, NodeStatus.ERROR)
                 await self._node_store.transition_status(node_id, NodeStatus.ERROR)
                 await self._event_store.append(
                     AgentErrorEvent(
@@ -187,6 +193,9 @@ class AgentRunner:
                 )
             finally:
                 try:
+                    current_agent = await self._agent_store.get_agent(node_id)
+                    if current_agent is not None and current_agent.status == NodeStatus.RUNNING:
+                        await self._agent_store.transition_status(node_id, NodeStatus.IDLE)
                     current_node = await self._node_store.get_node(node_id)
                     if current_node is not None and current_node.status == NodeStatus.RUNNING:
                         await self._node_store.transition_status(node_id, NodeStatus.IDLE)
@@ -278,6 +287,7 @@ class AgentRunner:
             ]
 
         async def graph_set_status(target_id: str, new_status: str) -> bool:
+            await self._agent_store.set_status(target_id, new_status)
             await self._node_store.set_status(target_id, new_status)
             return True
 

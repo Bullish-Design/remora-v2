@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from remora.core.node import CodeNode
+from remora.core.node import Agent, CodeElement, CodeNode
 
 
 def _make_node() -> CodeNode:
@@ -20,8 +20,6 @@ def _make_node() -> CodeNode:
         source_code="def validate_token(token: str) -> bool:\n    return True\n",
         source_hash="abc123",
         parent_id="src/auth.py::AuthService",
-        caller_ids=["src/api.py::handle_request"],
-        callee_ids=["src/auth.py::decode"],
         status="idle",
         bundle_name="code-agent",
     )
@@ -41,14 +39,14 @@ def test_codenode_roundtrip() -> None:
     assert restored.model_dump() == node.model_dump()
 
 
-def test_codenode_list_serialization() -> None:
+def test_codenode_element_and_agent_projection() -> None:
     node = _make_node()
-    row = node.to_row()
-    assert isinstance(row["caller_ids"], str)
-    assert isinstance(row["callee_ids"], str)
-    restored = CodeNode.from_row(row)
-    assert restored.caller_ids == ["src/api.py::handle_request"]
-    assert restored.callee_ids == ["src/auth.py::decode"]
+    element = node.to_element()
+    agent = node.to_agent()
+    assert isinstance(element, CodeElement)
+    assert isinstance(agent, Agent)
+    assert element.element_id == node.node_id
+    assert agent.agent_id == node.node_id
 
 
 def test_codenode_rejects_invalid_status() -> None:

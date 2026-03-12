@@ -18,7 +18,7 @@ from remora.core.events import (
     NodeRemovedEvent,
     SubscriptionPattern,
 )
-from remora.core.graph import NodeStore
+from remora.core.graph import AgentStore, NodeStore
 from remora.core.node import CodeNode
 from remora.core.workspace import CairnWorkspaceService
 
@@ -32,12 +32,14 @@ class FileReconciler:
         self,
         config: Config,
         node_store: NodeStore,
+        agent_store: AgentStore,
         event_store: EventStore,
         workspace_service: CairnWorkspaceService,
         project_root: Path,
     ):
         self._config = config
         self._node_store = node_store
+        self._agent_store = agent_store
         self._event_store = event_store
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
@@ -129,6 +131,7 @@ class FileReconciler:
         for node_id in additions:
             node = projected_by_id[node_id]
             await self._register_subscriptions(node)
+            await self._ensure_agent(node)
             await self._event_store.append(
                 NodeDiscoveredEvent(
                     node_id=node.node_id,
@@ -144,6 +147,7 @@ class FileReconciler:
             new_hash = hashlib.sha256(node.source_code.encode("utf-8")).hexdigest()
             if old_hash is not None and old_hash != new_hash:
                 await self._register_subscriptions(node)
+                await self._ensure_agent(node)
                 await self._event_store.append(
                     NodeChangedEvent(
                         node_id=node_id,
@@ -164,6 +168,7 @@ class FileReconciler:
             return
 
         await self._event_store.subscriptions.unregister_by_agent(node_id)
+        await self._agent_store.delete_agent(node_id)
         await self._node_store.delete_node(node_id)
         await self._event_store.append(
             NodeRemovedEvent(
@@ -187,6 +192,10 @@ class FileReconciler:
                 path_glob=node.file_path,
             ),
         )
+
+    async def _ensure_agent(self, node: CodeNode) -> None:
+        if await self._agent_store.get_agent(node.node_id) is None:
+            await self._agent_store.upsert_agent(node.to_agent())
 
     def _iter_source_files(self) -> list[Path]:
         ignore_patterns = tuple(

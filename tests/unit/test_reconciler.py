@@ -12,7 +12,7 @@ from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import EventStore
-from remora.core.graph import NodeStore
+from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -37,7 +37,9 @@ def _write_bundle_templates(root: Path) -> None:
 async def reconcile_env(tmp_path: Path):
     db = AsyncDB.from_path(tmp_path / "reconcile.db")
     node_store = NodeStore(db)
+    agent_store = AgentStore(db)
     await node_store.create_tables()
+    await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
 
@@ -57,12 +59,13 @@ async def reconcile_env(tmp_path: Path):
     reconciler = FileReconciler(
         config,
         node_store,
+        agent_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
     )
 
-    yield node_store, event_store, workspace_service, config, reconciler
+    yield node_store, agent_store, event_store, workspace_service, config, reconciler
 
     await workspace_service.close()
     db.close()
@@ -70,7 +73,7 @@ async def reconcile_env(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: Path) -> None:
-    node_store, event_store, _workspace_service, _config, reconciler = reconcile_env
+    node_store, _agent_store, event_store, _workspace_service, _config, reconciler = reconcile_env
     _write(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
 
     nodes = await reconciler.full_scan()
@@ -91,7 +94,7 @@ async def test_reconcile_cycle_modified_file_only(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _node_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    _node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
     first = tmp_path / "src" / "first.py"
     second = tmp_path / "src" / "second.py"
     _write(first, "def first():\n    return 1\n")
@@ -119,7 +122,7 @@ async def test_reconcile_cycle_modified_file_only(
 
 @pytest.mark.asyncio
 async def test_reconcile_cycle_handles_new_and_deleted_files(reconcile_env, tmp_path: Path) -> None:
-    node_store, event_store, _workspace_service, _config, reconciler = reconcile_env
+    node_store, _agent_store, event_store, _workspace_service, _config, reconciler = reconcile_env
     file_a = tmp_path / "src" / "a.py"
     file_b = tmp_path / "src" / "b.py"
     _write(file_a, "def a():\n    return 1\n")
@@ -140,7 +143,7 @@ async def test_reconcile_cycle_handles_new_and_deleted_files(reconcile_env, tmp_
 
 @pytest.mark.asyncio
 async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path) -> None:
-    _node_store, event_store, _workspace_service, _config, reconciler = reconcile_env
+    _node_store, _agent_store, event_store, _workspace_service, _config, reconciler = reconcile_env
     _write(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
     await reconciler.full_scan()
     await reconciler.reconcile_cycle()
@@ -159,7 +162,7 @@ async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path)
 
 @pytest.mark.asyncio
 async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, monkeypatch) -> None:
-    _node_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    _node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
     _write(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
     await reconciler.full_scan()
 

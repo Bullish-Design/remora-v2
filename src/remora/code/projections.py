@@ -43,8 +43,6 @@ async def project_nodes(
             source_code=cst.text,
             source_hash=source_hash,
             parent_id=cst.parent_id,
-            caller_ids=existing.caller_ids if existing else [],
-            callee_ids=existing.callee_ids if existing else [],
             status=existing.status if existing else "idle",
             bundle_name=(
                 mapped_bundle
