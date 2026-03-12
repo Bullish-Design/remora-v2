@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
@@ -64,6 +64,36 @@ class Config(BaseSettings):
         "node_modules",
         ".remora",
     )
+
+    @field_validator("language_map")
+    @classmethod
+    def _validate_language_map(cls, value: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for ext, language in value.items():
+            if not isinstance(ext, str) or not ext.startswith("."):
+                raise ValueError("language_map keys must be file extensions starting with '.'")
+            if not isinstance(language, str) or not language.strip():
+                raise ValueError("language_map values must be non-empty language names")
+            normalized[ext.lower()] = language.lower()
+        return normalized
+
+    @field_validator("discovery_paths")
+    @classmethod
+    def _validate_discovery_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            raise ValueError("discovery_paths must not be empty")
+        cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
+        if not cleaned:
+            raise ValueError("discovery_paths must contain at least one non-empty path")
+        return cleaned
+
+    @field_validator("query_paths")
+    @classmethod
+    def _validate_query_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            return value
+        cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
+        return cleaned
 
 
 def _expand_string(value: str) -> str:

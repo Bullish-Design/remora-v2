@@ -27,8 +27,8 @@
 - [x] Phase 9 testing
 - [x] Phase 10 implementation
 - [x] Phase 10 testing
-- [ ] Phase 11 implementation
-- [ ] Phase 11 testing
+- [x] Phase 11 implementation
+- [x] Phase 11 testing
 - [ ] Phase 12 implementation/validation
 - [ ] Final full-suite validation and docs updates
 
@@ -55,3 +55,5 @@
 - Phase 9 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 10 complete: introduced `RuntimeServices` container for dependency wiring and refactored `__main__.py` startup/shutdown flow to orchestrate services through a single lifecycle surface.
 - Phase 10 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 11 complete: added shared test factories (`tests/factories.py`), migrated duplicated `_node`/`_write`/`_make_cst`/bundle helper patterns to shared helpers across unit+integration suites, and added missing coverage for `broadcast` sibling/file targets, negative config validation, and malformed-source reconciler handling.
+- Phase 11 tests passing: `tests/unit -q` (146 passed) and `tests/integration/test_e2e.py tests/integration/test_performance.py -q` (6 passed), yielding 152 passing tests across the consolidated scope.

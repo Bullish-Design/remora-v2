@@ -4,37 +4,15 @@ import pytest
 
 from remora.core.events import AgentStartEvent, EventStore
 from remora.core.graph import NodeStore
-from remora.core.node import CodeNode
 from remora.core.types import NodeStatus
-
-
-def _node(
-    node_id: str,
-    *,
-    node_type: str = "function",
-    status: str = "idle",
-    file_path: str = "src/app.py",
-) -> CodeNode:
-    name = node_id.split("::", maxsplit=1)[-1]
-    return CodeNode(
-        node_id=node_id,
-        node_type=node_type,
-        name=name,
-        full_name=name,
-        file_path=file_path,
-        start_line=1,
-        end_line=5,
-        source_code=f"def {name}():\n    return 1\n",
-        source_hash=f"hash-{node_id}",
-        status=status,
-    )
+from tests.factories import make_node
 
 
 @pytest.mark.asyncio
 async def test_nodestore_upsert_and_get(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await store.upsert_node(node)
     got = await store.get_node(node.node_id)
     assert got is not None
@@ -45,10 +23,10 @@ async def test_nodestore_upsert_and_get(db) -> None:
 async def test_nodestore_list_with_filters(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a", node_type="function", status="idle"))
-    await store.upsert_node(_node("src/app.py::B", node_type="class", status="running"))
+    await store.upsert_node(make_node("src/app.py::a", node_type="function", status="idle"))
+    await store.upsert_node(make_node("src/app.py::B", node_type="class", status="running"))
     await store.upsert_node(
-        _node(
+        make_node(
             "src/other.py::c",
             node_type="function",
             status="idle",
@@ -69,8 +47,8 @@ async def test_nodestore_list_with_filters(db) -> None:
 async def test_nodestore_delete(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a"))
-    await store.upsert_node(_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
     await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
 
     assert await store.delete_node("src/app.py::a")
@@ -82,7 +60,7 @@ async def test_nodestore_delete(db) -> None:
 async def test_nodestore_set_status(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    node = _node("src/app.py::a", status="idle")
+    node = make_node("src/app.py::a", status="idle")
     await store.upsert_node(node)
 
     await store.set_status(node.node_id, "running")
@@ -96,8 +74,8 @@ async def test_nodestore_set_status(db) -> None:
 async def test_nodestore_add_edge(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a"))
-    await store.upsert_node(_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
 
     await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
     edges = await store.get_edges("src/app.py::a", direction="outgoing")
@@ -111,9 +89,9 @@ async def test_nodestore_add_edge(db) -> None:
 async def test_nodestore_edge_directions(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a"))
-    await store.upsert_node(_node("src/app.py::b"))
-    await store.upsert_node(_node("src/app.py::c"))
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::c"))
     await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
     await store.add_edge("src/app.py::c", "src/app.py::a", "calls")
 
@@ -132,8 +110,8 @@ async def test_nodestore_edge_directions(db) -> None:
 async def test_nodestore_edge_uniqueness(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a"))
-    await store.upsert_node(_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
 
     await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
     await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
@@ -147,7 +125,7 @@ async def test_shared_connection(db) -> None:
     event_store = EventStore(db=db)
     await node_store.create_tables()
     await event_store.create_tables()
-    await node_store.upsert_node(_node("src/app.py::a"))
+    await node_store.upsert_node(make_node("src/app.py::a"))
     event_id = await event_store.append(AgentStartEvent(agent_id="src/app.py::a"))
     got = await node_store.get_node("src/app.py::a")
 
@@ -161,7 +139,7 @@ async def test_shared_connection(db) -> None:
 async def test_nodestore_transition_status_valid(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a", status="idle"))
+    await store.upsert_node(make_node("src/app.py::a", status="idle"))
 
     assert await store.transition_status("src/app.py::a", NodeStatus.RUNNING)
     updated = await store.get_node("src/app.py::a")
@@ -173,7 +151,7 @@ async def test_nodestore_transition_status_valid(db) -> None:
 async def test_nodestore_transition_status_invalid(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
-    await store.upsert_node(_node("src/app.py::a", status="idle"))
+    await store.upsert_node(make_node("src/app.py::a", status="idle"))
 
     assert not await store.transition_status("src/app.py::a", NodeStatus.ERROR)
     updated = await store.get_node("src/app.py::a")

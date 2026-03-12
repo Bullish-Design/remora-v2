@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from remora.core.config import Config, _expand_env_vars, _find_config_file, load_config
 
 
@@ -57,3 +60,13 @@ def test_find_config_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(nested)
     found = _find_config_file()
     assert found == config_path
+
+
+def test_invalid_language_map_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Config(language_map={"py": "python"})
+
+
+def test_empty_discovery_paths_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Config(discovery_paths=())

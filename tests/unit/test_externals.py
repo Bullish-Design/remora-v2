@@ -10,23 +10,8 @@ from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.externals import AgentContext
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.node import CodeNode
 from remora.core.workspace import CairnWorkspaceService
-
-
-def _node(node_id: str, file_path: str = "src/app.py", node_type: str = "function") -> CodeNode:
-    name = node_id.split("::", maxsplit=1)[-1]
-    return CodeNode(
-        node_id=node_id,
-        node_type=node_type,
-        name=name,
-        full_name=name,
-        file_path=file_path,
-        start_line=1,
-        end_line=4,
-        source_code=f"def {name}():\n    return 1\n",
-        source_hash=f"h-{node_id}",
-    )
+from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -70,7 +55,7 @@ async def _context(
 @pytest.mark.asyncio
 async def test_externals_workspace_ops(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
-    node = _node("src/app.py::alpha")
+    node = make_node("src/app.py::alpha")
     await node_store.upsert_node(node)
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
@@ -89,8 +74,8 @@ async def test_externals_workspace_ops(context_env) -> None:
 @pytest.mark.asyncio
 async def test_externals_graph_ops(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
-    a = _node("src/app.py::a")
-    b = _node("src/app.py::b")
+    a = make_node("src/app.py::a")
+    b = make_node("src/app.py::b")
     await node_store.upsert_node(a)
     await node_store.upsert_node(b)
     await agent_store.upsert_agent(a.to_agent())
@@ -112,7 +97,7 @@ async def test_externals_graph_ops(context_env) -> None:
 @pytest.mark.asyncio
 async def test_externals_event_ops(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
-    node = _node("src/app.py::alpha")
+    node = make_node("src/app.py::alpha")
     await node_store.upsert_node(node)
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
@@ -137,9 +122,9 @@ async def test_externals_event_ops(context_env) -> None:
 @pytest.mark.asyncio
 async def test_externals_communication(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
-    sender = _node("src/app.py::sender")
-    target_a = _node("src/app.py::target_a")
-    target_b = _node("src/app.py::target_b")
+    sender = make_node("src/app.py::sender")
+    target_a = make_node("src/app.py::target_a")
+    target_b = make_node("src/app.py::target_b")
     await node_store.upsert_node(sender)
     await node_store.upsert_node(target_a)
     await node_store.upsert_node(target_b)
@@ -158,6 +143,32 @@ async def test_externals_communication(context_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_externals_broadcast_siblings_and_file_patterns(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
+    sender = make_node("src/app.py::sender", file_path="src/app.py")
+    sibling = make_node("src/app.py::sib", file_path="src/app.py")
+    other = make_node("src/other.py::oth", file_path="src/other.py")
+    await node_store.upsert_node(sender)
+    await node_store.upsert_node(sibling)
+    await node_store.upsert_node(other)
+    await agent_store.upsert_agent(sender.to_agent())
+
+    ws = await workspace_service.get_agent_workspace(sender.node_id)
+    context = await _context(sender.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
+
+    summary1 = await externals["broadcast"]("siblings", "same-file")
+    summary2 = await externals["broadcast"]("file:src/other.py", "other-file")
+
+    assert "1 agents" in summary1
+    assert "1 agents" in summary2
+    events = await event_store.get_events(limit=10)
+    payloads = [e["payload"] for e in events if e["event_type"] == "AgentMessageEvent"]
+    assert any(p["to_agent"] == sibling.node_id for p in payloads)
+    assert any(p["to_agent"] == other.node_id for p in payloads)
+
+
+@pytest.mark.asyncio
 async def test_externals_code_ops(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
     source_path = workspace_service._project_root / "src" / "app.py"
@@ -170,7 +181,7 @@ async def test_externals_code_ops(context_env) -> None:
     )
     source_path.write_text(full_source, encoding="utf-8")
 
-    node = _node("src/app.py::alpha", file_path=str(source_path))
+    node = make_node("src/app.py::alpha", file_path=str(source_path))
     node = node.model_copy(update={"source_code": "def alpha():\n    return 1\n"})
     await node_store.upsert_node(node)
     await agent_store.upsert_agent(node.to_agent())
@@ -201,7 +212,7 @@ async def test_apply_rewrite_duplicate_source_blocks(context_env) -> None:
         encoding="utf-8",
     )
 
-    node = _node(f"{source_path}::helper_2", file_path=str(source_path))
+    node = make_node(f"{source_path}::helper_2", file_path=str(source_path))
     node = node.model_copy(
         update={
             "name": "helper",
@@ -228,7 +239,7 @@ async def test_apply_rewrite_duplicate_source_blocks(context_env) -> None:
 @pytest.mark.asyncio
 async def test_externals_identity(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
-    node = _node("src/app.py::alpha")
+    node = make_node("src/app.py::alpha")
     await node_store.upsert_node(node)
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)

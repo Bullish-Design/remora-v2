@@ -477,7 +477,9 @@ Any of these would dramatically improve testability and readability versus the c
 
 **NOTE:** Give examples of each, along with pros/cons/implications/opportunities for each.
 
-#### R5. Replace the proposal system with a dedicated model
+#### R5. Replace the proposal system with a dedicated model (REJECTED)
+
+**NOTE:** We're rejecting this system and we're removing proposals entirely. 
 
 Proposals are currently scraped from event history via `_find_proposal` (linear scan of last 1000 events). A proper proposal model would:
 
@@ -486,7 +488,6 @@ Proposals are currently scraped from event history via `_find_proposal` (linear 
 - Validate base content hash before applying
 - Support explicit lifecycle: `pending → approved → applied` or `pending → rejected`
 
-This eliminates C2, C3, and M1 in one architectural change.
 
 ### Tier 2: Module-Level Improvements
 
@@ -788,6 +789,8 @@ stage, not modifying the monolith.
 
 ---
 #### R27. Eliminate the Trigger → _execute_turn indirection by making agents self-scheduling actors
+
+**NOTE:** Lets investigate this further. 
 
 Currently the flow is: event → subscription match → trigger queue → runner dequeues → runner creates asyncio.Task → _execute_turn. The runner is a central coordinator managing all agents.
 

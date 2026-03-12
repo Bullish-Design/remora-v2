@@ -21,11 +21,7 @@ from remora.core.events import (
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.runner import AgentRunner, Trigger
 from remora.core.workspace import CairnWorkspaceService
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.factories import write_file
 
 
 def _write_bundles(root: Path) -> None:
@@ -34,9 +30,9 @@ def _write_bundles(root: Path) -> None:
     (system / "tools").mkdir(parents=True, exist_ok=True)
     (code / "tools").mkdir(parents=True, exist_ok=True)
 
-    _write(system / "bundle.yaml", "name: system\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n")
-    _write(code / "bundle.yaml", "name: code-agent\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n")
-    _write(
+    write_file(system / "bundle.yaml", "name: system\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n")
+    write_file(code / "bundle.yaml", "name: code-agent\nsystem_prompt: hi\nmodel: mock\nmax_turns: 2\n")
+    write_file(
         system / "tools" / "send_message.pym",
         "from grail import Input, external\n"
         "to_node_id: str = Input('to_node_id')\n"
@@ -44,7 +40,7 @@ def _write_bundles(root: Path) -> None:
         "@external\nasync def send_message(to_node_id: str, content: str) -> bool: ...\n"
         "result = await send_message(to_node_id, content)\nreturn str(result)\n",
     )
-    _write(
+    write_file(
         code / "tools" / "rewrite_self.pym",
         "from grail import Input, external\n"
         "new_source: str = Input('new_source')\n"
@@ -56,7 +52,7 @@ def _write_bundles(root: Path) -> None:
 
 async def _setup_runtime(tmp_path: Path):
     source_path = tmp_path / "src" / "app.py"
-    _write(
+    write_file(
         source_path,
         "def alpha():\n    return 1\n\n"
         "def beta():\n    return 2\n",

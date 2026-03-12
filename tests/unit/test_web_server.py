@@ -11,24 +11,8 @@ import pytest_asyncio
 from remora.core.events import EventBus, EventStore, HumanChatEvent
 from remora.core.db import AsyncDB
 from remora.core.graph import NodeStore
-from remora.core.node import CodeNode
 from remora.web.server import create_app
-
-
-def _node(node_id: str, file_path: str, source_code: str, status: str = "idle") -> CodeNode:
-    name = node_id.split("::", maxsplit=1)[-1]
-    return CodeNode(
-        node_id=node_id,
-        node_type="function",
-        name=name,
-        full_name=name,
-        file_path=file_path,
-        start_line=1,
-        end_line=2,
-        source_code=source_code,
-        source_hash=f"hash-{node_id}-{status}",
-        status=status,
-    )
+from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -44,7 +28,13 @@ async def web_env(tmp_path: Path):
     source_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_text("def a():\n    return 1\n", encoding="utf-8")
 
-    node = _node("src/app.py::a", str(source_path), "def a():\n    return 1\n")
+    node = make_node(
+        "src/app.py::a",
+        file_path=str(source_path),
+        source_code="def a():\n    return 1\n",
+        start_line=1,
+        end_line=2,
+    )
     await node_store.upsert_node(node)
 
     app = create_app(
@@ -89,7 +79,13 @@ async def test_api_node_not_found(web_env) -> None:
 @pytest.mark.asyncio
 async def test_api_edges(web_env) -> None:
     client, node_store, _event_store, source_path = web_env
-    other = _node("src/app.py::b", str(source_path), "def b():\n    return 2\n")
+    other = make_node(
+        "src/app.py::b",
+        file_path=str(source_path),
+        source_code="def b():\n    return 2\n",
+        start_line=1,
+        end_line=2,
+    )
     await node_store.upsert_node(other)
     await node_store.add_edge("src/app.py::a", "src/app.py::b", "calls")
 
@@ -102,7 +98,13 @@ async def test_api_edges(web_env) -> None:
 @pytest.mark.asyncio
 async def test_api_all_edges(web_env) -> None:
     client, node_store, _event_store, source_path = web_env
-    other = _node("src/app.py::b", str(source_path), "def b():\n    return 2\n")
+    other = make_node(
+        "src/app.py::b",
+        file_path=str(source_path),
+        source_code="def b():\n    return 2\n",
+        start_line=1,
+        end_line=2,
+    )
     await node_store.upsert_node(other)
     await node_store.add_edge("src/app.py::a", "src/app.py::b", "calls")
 

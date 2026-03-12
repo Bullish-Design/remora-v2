@@ -11,29 +11,13 @@ from pygls.lsp.server import LanguageServer
 from remora.core.db import AsyncDB
 from remora.core.events import EventStore
 from remora.core.graph import NodeStore
-from remora.core.node import CodeNode
 from remora.lsp.server import (
     _find_node_at_line,
     _node_to_hover,
     _node_to_lens,
     create_lsp_server,
 )
-
-
-def _node(node_id: str, file_path: str) -> CodeNode:
-    name = node_id.split("::", maxsplit=1)[-1]
-    return CodeNode(
-        node_id=node_id,
-        node_type="function",
-        name=name,
-        full_name=name,
-        file_path=file_path,
-        start_line=2,
-        end_line=5,
-        source_code=f"def {name}():\n    return 1\n",
-        source_hash=f"h-{node_id}",
-        status="idle",
-    )
+from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -55,7 +39,7 @@ async def test_lsp_server_creates(lsp_env) -> None:
 
 
 def test_node_to_lens() -> None:
-    node = _node("src/app.py::a", "src/app.py")
+    node = make_node("src/app.py::a", file_path="src/app.py", start_line=2, end_line=5)
     lens = _node_to_lens(node)
     assert lens.range.start.line == node.start_line - 1
     assert lens.range.end.line == node.end_line - 1
@@ -64,7 +48,7 @@ def test_node_to_lens() -> None:
 
 
 def test_node_to_hover() -> None:
-    node = _node("src/app.py::a", "src/app.py")
+    node = make_node("src/app.py::a", file_path="src/app.py", start_line=2, end_line=5)
     hover = _node_to_hover(node)
     assert isinstance(hover, lsp.Hover)
     assert node.node_id in hover.contents.value
@@ -72,8 +56,8 @@ def test_node_to_hover() -> None:
 
 
 def test_find_node_at_line() -> None:
-    node_a = _node("src/app.py::a", "src/app.py")
-    node_b = _node("src/app.py::b", "src/app.py").model_copy(
+    node_a = make_node("src/app.py::a", file_path="src/app.py", start_line=2, end_line=5)
+    node_b = make_node("src/app.py::b", file_path="src/app.py", start_line=2, end_line=5).model_copy(
         update={"start_line": 10, "end_line": 12}
     )
     assert _find_node_at_line([node_a, node_b], 3) == node_a

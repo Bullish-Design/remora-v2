@@ -6,16 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from remora.code.discovery import CSTNode, discover
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.factories import write_file
 
 
 def test_discover_python_function(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
-    _write(source, "def greet(name):\n    return f'hi {name}'\n")
+    write_file(source, "def greet(name):\n    return f'hi {name}'\n")
 
     nodes = discover(
         [tmp_path],
@@ -30,7 +26,7 @@ def test_discover_python_function(tmp_path: Path) -> None:
 
 def test_discover_python_class_and_method(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
-    _write(source, "class Greeter:\n    def hello(self):\n        return 'ok'\n")
+    write_file(source, "class Greeter:\n    def hello(self):\n        return 'ok'\n")
 
     nodes = discover([tmp_path], language_map={".py": "python"})
     klass = next(node for node in nodes if node.name == "Greeter")
@@ -44,7 +40,7 @@ def test_discover_python_class_and_method(tmp_path: Path) -> None:
 
 def test_discover_python_decorated_and_async(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
-    _write(
+    write_file(
         source,
         "@decorator\n"
         "def decorated():\n"
@@ -62,7 +58,7 @@ def test_discover_python_decorated_and_async(tmp_path: Path) -> None:
 
 def test_discover_markdown_sections_hierarchy(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
-    _write(readme, "# Top\n\n## Install\n\n### From Source\n")
+    write_file(readme, "# Top\n\n## Install\n\n### From Source\n")
 
     nodes = discover([tmp_path], language_map={".md": "markdown"})
     names = {node.full_name for node in nodes}
@@ -74,7 +70,7 @@ def test_discover_markdown_sections_hierarchy(tmp_path: Path) -> None:
 
 def test_discover_toml_tables(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
-    _write(pyproject, "[tool.ruff.lint]\nselect = ['E']\n\n[project]\nname = 'x'\n")
+    write_file(pyproject, "[tool.ruff.lint]\nselect = ['E']\n\n[project]\nname = 'x'\n")
 
     nodes = discover([tmp_path], language_map={".toml": "toml"})
     names = {node.full_name for node in nodes}
@@ -85,8 +81,8 @@ def test_discover_toml_tables(tmp_path: Path) -> None:
 def test_discover_ignores_patterns(tmp_path: Path) -> None:
     ignored = tmp_path / "node_modules" / "ignore_me.py"
     kept = tmp_path / "src" / "keep_me.py"
-    _write(ignored, "def ignored():\n    return 1\n")
-    _write(kept, "def kept():\n    return 2\n")
+    write_file(ignored, "def ignored():\n    return 1\n")
+    write_file(kept, "def kept():\n    return 2\n")
 
     nodes = discover(
         [tmp_path],
@@ -101,11 +97,11 @@ def test_discover_ignores_patterns(tmp_path: Path) -> None:
 
 def test_discover_query_override(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
-    _write(source, "def only_function():\n    return 1\n\nclass C:\n    pass\n")
+    write_file(source, "def only_function():\n    return 1\n\nclass C:\n    pass\n")
 
     override_dir = tmp_path / "queries"
     override_dir.mkdir(parents=True, exist_ok=True)
-    _write(
+    write_file(
         override_dir / "python.scm",
         "(class_definition name: (identifier) @node.name) @node\n",
     )
@@ -120,8 +116,8 @@ def test_discover_query_override(tmp_path: Path) -> None:
 
 
 def test_discover_multiple_files(tmp_path: Path) -> None:
-    _write(tmp_path / "a.py", "def a():\n    return 1\n")
-    _write(tmp_path / "b.py", "def b():\n    return 2\n")
+    write_file(tmp_path / "a.py", "def a():\n    return 1\n")
+    write_file(tmp_path / "b.py", "def b():\n    return 2\n")
 
     nodes = discover([tmp_path], language_map={".py": "python"})
     names = {node.name for node in nodes}
@@ -135,7 +131,7 @@ def test_discover_empty_dir(tmp_path: Path) -> None:
 
 
 def test_language_not_in_registry_is_skipped(tmp_path: Path) -> None:
-    _write(tmp_path / "x.foo", "hello")
+    write_file(tmp_path / "x.foo", "hello")
     nodes = discover([tmp_path], language_map={".foo": "unknown"})
     assert nodes == []
 

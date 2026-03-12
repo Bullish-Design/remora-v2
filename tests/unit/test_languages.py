@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from remora.code.languages import LanguageRegistry, MarkdownPlugin, PythonPlugin, TomlPlugin
 
 
-def _node(node_type: str, parent=None, children=None):  # noqa: ANN001, ANN202
+def make_ts_node(node_type: str, parent=None, children=None):  # noqa: ANN001, ANN202
     return SimpleNamespace(type=node_type, parent=parent, children=children or [])
 
 
@@ -19,9 +19,9 @@ def test_language_registry_resolves_by_name_and_extension() -> None:
 
 def test_python_plugin_resolve_node_type() -> None:
     plugin = PythonPlugin()
-    class_node = _node("class_definition")
-    method_node = _node("function_definition", parent=class_node)
-    fn_node = _node("function_definition")
+    class_node = make_ts_node("class_definition")
+    method_node = make_ts_node("function_definition", parent=class_node)
+    fn_node = make_ts_node("function_definition")
 
     assert plugin.resolve_node_type(class_node) == "class"
     assert plugin.resolve_node_type(method_node) == "method"
@@ -29,5 +29,5 @@ def test_python_plugin_resolve_node_type() -> None:
 
 
 def test_markdown_and_toml_plugins() -> None:
-    assert MarkdownPlugin().resolve_node_type(_node("heading")) == "section"
-    assert TomlPlugin().resolve_node_type(_node("table")) == "table"
+    assert MarkdownPlugin().resolve_node_type(make_ts_node("heading")) == "section"
+    assert TomlPlugin().resolve_node_type(make_ts_node("table")) == "table"

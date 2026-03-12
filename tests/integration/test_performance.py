@@ -10,21 +10,17 @@ from remora.code.discovery import discover
 from remora.core.db import AsyncDB
 from remora.core.events import HumanChatEvent, SubscriptionPattern, SubscriptionRegistry
 from remora.core.graph import NodeStore
-from remora.core.node import CodeNode
+from tests.factories import make_node
 
 
-def _node(idx: int) -> CodeNode:
+def make_perf_node(idx: int):
     name = f"f{idx}"
-    return CodeNode(
-        node_id=f"src/perf.py::{name}",
-        node_type="function",
-        name=name,
-        full_name=name,
+    return make_node(
+        f"src/perf.py::{name}",
         file_path="src/perf.py",
         start_line=idx + 1,
         end_line=idx + 1,
         source_code=f"def {name}():\n    return {idx}\n",
-        source_hash=f"h-{idx}",
     )
 
 
@@ -52,7 +48,7 @@ async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
 
     started = time.perf_counter()
     for idx in range(100):
-        await node_store.upsert_node(_node(idx))
+        await node_store.upsert_node(make_perf_node(idx))
     elapsed = time.perf_counter() - started
 
     assert elapsed < 1.0

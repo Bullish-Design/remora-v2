@@ -13,24 +13,9 @@ from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore, HumanChatEvent
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.node import CodeNode
 from remora.core.runner import AgentRunner, Trigger
 from remora.core.workspace import CairnWorkspaceService
-
-
-def _node(node_id: str, file_path: str = "src/app.py", node_type: str = "function") -> CodeNode:
-    name = node_id.split("::", maxsplit=1)[-1]
-    return CodeNode(
-        node_id=node_id,
-        node_type=node_type,
-        name=name,
-        full_name=name,
-        file_path=file_path,
-        start_line=1,
-        end_line=4,
-        source_code=f"def {name}():\n    return 1\n",
-        source_hash=f"h-{node_id}",
-    )
+from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -104,7 +89,7 @@ async def test_runner_missing_node(runner_env) -> None:
 @pytest.mark.asyncio
 async def test_runner_status_lifecycle(runner_env, monkeypatch) -> None:
     runner, node_store, _agent_store, _event_store, workspace_service = runner_env
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
@@ -129,7 +114,7 @@ async def test_runner_status_lifecycle(runner_env, monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_runner_only_resets_running_to_idle(runner_env, monkeypatch) -> None:
     runner, node_store, _agent_store, _event_store, workspace_service = runner_env
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
@@ -154,7 +139,7 @@ async def test_runner_only_resets_running_to_idle(runner_env, monkeypatch) -> No
 @pytest.mark.asyncio
 async def test_runner_build_prompt(runner_env) -> None:
     runner, node_store, _agent_store, _event_store, _workspace_service = runner_env
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     prompt = runner._build_prompt(
         node,
@@ -172,7 +157,7 @@ async def test_runner_build_prompt(runner_env) -> None:
 @pytest.mark.asyncio
 async def test_full_turn_with_mock_kernel(runner_env, monkeypatch) -> None:
     runner, node_store, _agent_store, event_store, workspace_service = runner_env
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
@@ -203,7 +188,7 @@ async def test_full_turn_with_mock_kernel(runner_env, monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_turn_emits_start_and_complete(runner_env, monkeypatch) -> None:
     runner, node_store, _agent_store, event_store, workspace_service = runner_env
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
@@ -227,7 +212,7 @@ async def test_turn_emits_start_and_complete(runner_env, monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_turn_with_tool_call(runner_env, monkeypatch) -> None:
     runner, node_store, _agent_store, event_store, workspace_service = runner_env
-    node = _node("src/app.py::a")
+    node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")

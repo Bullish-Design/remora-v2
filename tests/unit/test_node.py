@@ -4,10 +4,11 @@ import pytest
 from pydantic import ValidationError
 
 from remora.core.node import Agent, CodeElement, CodeNode
+from tests.factories import make_node
 
 
-def _make_node() -> CodeNode:
-    return CodeNode(
+def make_auth_node() -> CodeNode:
+    return make_node(
         node_id="src/auth.py::AuthService.validate_token",
         node_type="method",
         name="validate_token",
@@ -26,21 +27,21 @@ def _make_node() -> CodeNode:
 
 
 def test_codenode_creation() -> None:
-    node = _make_node()
+    node = make_auth_node()
     assert node.node_id == "src/auth.py::AuthService.validate_token"
     assert node.node_type == "method"
     assert node.parent_id == "src/auth.py::AuthService"
 
 
 def test_codenode_roundtrip() -> None:
-    node = _make_node()
+    node = make_auth_node()
     row = node.to_row()
     restored = CodeNode.from_row(row)
     assert restored.model_dump() == node.model_dump()
 
 
 def test_codenode_element_and_agent_projection() -> None:
-    node = _make_node()
+    node = make_auth_node()
     element = node.to_element()
     agent = node.to_agent()
     assert isinstance(element, CodeElement)
