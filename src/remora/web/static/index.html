@@ -1,7 +1,4 @@
-"""HTML view templates for the Remora web surface."""
-
-
-GRAPH_HTML = """<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -53,11 +50,11 @@ GRAPH_HTML = """<!DOCTYPE html>
       border-radius: 8px;
       font-size: 0.8rem;
     }
-    textarea, input, button {
+    textarea, button {
       font-family: inherit;
       font-size: 0.9rem;
     }
-    textarea, input {
+    textarea {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -74,8 +71,6 @@ GRAPH_HTML = """<!DOCTYPE html>
       color: white;
       margin-right: 6px;
     }
-    button.secondary { background: #475569; }
-    button.reject { background: #b91c1c; }
     #events {
       max-height: 180px;
       overflow: auto;
@@ -101,12 +96,6 @@ GRAPH_HTML = """<!DOCTYPE html>
       <h3>Chat</h3>
       <textarea id="chat-input" rows="4" placeholder="Ask selected node..."></textarea>
       <button id="send-chat">Send</button>
-    </section>
-    <section>
-      <h3>Proposal</h3>
-      <input id="proposal-id" placeholder="proposal_id" />
-      <button id="approve" class="secondary">Approve</button>
-      <button id="reject" class="reject">Reject</button>
     </section>
     <section>
       <h3>Events</h3>
@@ -154,17 +143,17 @@ GRAPH_HTML = """<!DOCTYPE html>
           });
         }
       }
-      for (const node of nodes) {
-        const edgeResp = await fetch(`/api/nodes/${encodeURIComponent(node.node_id)}/edges`);
-        const edges = await edgeResp.json();
-        for (const edge of edges) {
-          const key = `${edge.from_id}->${edge.to_id}:${edge.edge_type}`;
-          if (!graph.hasNode(edge.from_id) || !graph.hasNode(edge.to_id)) continue;
-          if (!graph.hasEdge(key)) {
-            graph.addEdgeWithKey(key, edge.from_id, edge.to_id, { label: edge.edge_type, size: 1 });
-          }
+
+      const edgeResp = await fetch("/api/edges");
+      const edges = await edgeResp.json();
+      for (const edge of edges) {
+        const key = `${edge.from_id}->${edge.to_id}:${edge.edge_type}`;
+        if (!graph.hasNode(edge.from_id) || !graph.hasNode(edge.to_id)) continue;
+        if (!graph.hasEdge(key)) {
+          graph.addEdgeWithKey(key, edge.from_id, edge.to_id, { label: edge.edge_type, size: 1 });
         }
       }
+
       if (window.graphologyLayoutForceatlas2) {
         window.graphologyLayoutForceatlas2.assign(graph, { iterations: 30 });
       }
@@ -217,26 +206,6 @@ GRAPH_HTML = """<!DOCTYPE html>
       document.getElementById("chat-input").value = "";
     });
 
-    document.getElementById("approve").addEventListener("click", async () => {
-      const proposalId = document.getElementById("proposal-id").value.trim();
-      if (!proposalId) return;
-      await fetch("/api/approve", {
-        method: "POST",
-        headers: {"content-type": "application/json"},
-        body: JSON.stringify({ proposal_id: proposalId })
-      });
-    });
-
-    document.getElementById("reject").addEventListener("click", async () => {
-      const proposalId = document.getElementById("proposal-id").value.trim();
-      if (!proposalId) return;
-      await fetch("/api/reject", {
-        method: "POST",
-        headers: {"content-type": "application/json"},
-        body: JSON.stringify({ proposal_id: proposalId })
-      });
-    });
-
     const evtSource = new EventSource('/sse');
     evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
       const data = JSON.parse(event.data);
@@ -252,6 +221,18 @@ GRAPH_HTML = """<!DOCTYPE html>
       }
       renderer.refresh();
       appendEventLine(`NodeDiscoveredEvent: ${data.node_id}`);
+    });
+    evtSource.addEventListener("NodeRemovedEvent", (event) => {
+      const data = JSON.parse(event.data);
+      if (graph.hasNode(data.node_id)) {
+        graph.dropNode(data.node_id);
+        renderer.refresh();
+      }
+      appendEventLine(`NodeRemovedEvent: ${data.node_id}`);
+    });
+    evtSource.addEventListener("NodeChangedEvent", (event) => {
+      const data = JSON.parse(event.data);
+      appendEventLine(`NodeChangedEvent: ${data.node_id}`);
     });
     evtSource.addEventListener("AgentStartEvent", (event) => {
       const data = JSON.parse(event.data);
@@ -291,7 +272,3 @@ GRAPH_HTML = """<!DOCTYPE html>
   </script>
 </body>
 </html>
-"""
-
-
-__all__ = ["GRAPH_HTML"]

@@ -23,8 +23,8 @@
 - [x] Phase 7 testing
 - [x] Phase 8 implementation
 - [x] Phase 8 testing
-- [ ] Phase 9 implementation
-- [ ] Phase 9 testing
+- [x] Phase 9 implementation
+- [x] Phase 9 testing
 - [ ] Phase 10 implementation
 - [ ] Phase 10 testing
 - [ ] Phase 11 implementation
@@ -51,3 +51,5 @@
 - Phase 7 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 8 complete: reconciler now supports watchfiles-first operation with polling fallback, isolates watch-cycle faults, and subscribes to `ContentChangedEvent` for immediate event-triggered reconciliation.
 - Phase 8 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 9 complete: extracted web UI into `web/static/index.html`, removed `views.py`, added SSE handlers for removed/changed nodes, added batch `/api/edges`, and limited LSP exports to public API.
+- Phase 9 tests passing: `tests/unit -q` and integration smoke suites.

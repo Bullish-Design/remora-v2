@@ -100,6 +100,19 @@ async def test_api_edges(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_all_edges(web_env) -> None:
+    client, node_store, _event_store, source_path = web_env
+    other = _node("src/app.py::b", str(source_path), "def b():\n    return 2\n")
+    await node_store.upsert_node(other)
+    await node_store.add_edge("src/app.py::a", "src/app.py::b", "calls")
+
+    response = await client.get("/api/edges")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload and payload[0]["edge_type"] == "calls"
+
+
+@pytest.mark.asyncio
 async def test_api_chat_sends_event(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     response = await client.post(

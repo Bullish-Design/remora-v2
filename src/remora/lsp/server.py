@@ -103,4 +103,4 @@ def _uri_to_path(uri: str) -> str:
     return uri.removeprefix("file://")
 
 
-__all__ = ["create_lsp_server", "_node_to_lens", "_node_to_hover", "_find_node_at_line"]
+__all__ = ["create_lsp_server"]

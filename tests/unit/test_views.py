@@ -1,19 +1,32 @@
 from __future__ import annotations
 
-from remora.web.views import GRAPH_HTML
+from pathlib import Path
+
+
+def _index_html() -> str:
+    html_path = Path("src/remora/web/static/index.html")
+    return html_path.read_text(encoding="utf-8")
 
 
 def test_graph_html_renders() -> None:
-    assert isinstance(GRAPH_HTML, str)
-    assert GRAPH_HTML.strip()
-    assert "<div id=\"graph\"" in GRAPH_HTML
-    assert "Remora" in GRAPH_HTML
+    html = _index_html()
+    assert isinstance(html, str)
+    assert html.strip()
+    assert '<div id="graph"' in html
+    assert "Remora" in html
 
 
 def test_graph_html_has_sse_client() -> None:
-    assert "EventSource('/sse')" in GRAPH_HTML or 'EventSource("/sse")' in GRAPH_HTML
+    html = _index_html()
+    assert "EventSource('/sse')" in html or 'EventSource("/sse")' in html
 
 
 def test_graph_html_escapes_source_rendering() -> None:
-    assert "<pre>${node.source_code}</pre>" not in GRAPH_HTML
-    assert "pre.textContent = node.source_code" in GRAPH_HTML
+    html = _index_html()
+    assert "<pre>${node.source_code}</pre>" not in html
+    assert "pre.textContent = node.source_code" in html
+
+
+def test_graph_html_uses_batch_edge_endpoint() -> None:
+    html = _index_html()
+    assert '/api/edges' in html

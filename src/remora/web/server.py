@@ -10,9 +10,12 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
+from starlette.staticfiles import StaticFiles
 
 from remora.core.events import HumanChatEvent
-from remora.web.views import GRAPH_HTML
+
+_STATIC_DIR = Path(__file__).parent / "static"
+_INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
 def create_app(
@@ -22,11 +25,11 @@ def create_app(
     *,
     project_root: Path | None = None,
 ) -> Starlette:
-    """Create Starlette app exposing graph, events, and chat APIs."""
+    """Create Starlette app exposing graph APIs, events, and chat."""
     del project_root
 
     async def index(_request: Request) -> HTMLResponse:
-        return HTMLResponse(GRAPH_HTML)
+        return HTMLResponse(_INDEX_HTML)
 
     async def api_nodes(_request: Request) -> JSONResponse:
         nodes = await node_store.list_nodes()
@@ -47,6 +50,12 @@ def create_app(
             for edge in edges
         ]
         return JSONResponse(payload)
+
+    async def api_all_edges(_request: Request) -> JSONResponse:
+        rows = await node_store.db.fetch_all(
+            "SELECT from_id, to_id, edge_type FROM edges ORDER BY id ASC"
+        )
+        return JSONResponse([dict(row) for row in rows])
 
     async def api_chat(request: Request) -> JSONResponse:
         data = await request.json()
@@ -75,7 +84,6 @@ def create_app(
             replay_limit = 0
 
         async def event_generator():
-            # Send an initial heartbeat so clients establish the stream promptly.
             yield ": connected\n\n"
             if replay_limit > 0:
                 rows = await event_store.get_events(limit=replay_limit)
@@ -103,13 +111,16 @@ def create_app(
     routes = [
         Route("/", endpoint=index),
         Route("/api/nodes", endpoint=api_nodes),
+        Route("/api/edges", endpoint=api_all_edges),
         Route("/api/nodes/{node_id:path}/edges", endpoint=api_edges),
         Route("/api/nodes/{node_id:path}", endpoint=api_node),
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
         Route("/api/events", endpoint=api_events),
         Route("/sse", endpoint=sse_stream),
     ]
-    return Starlette(routes=routes)
+    app = Starlette(routes=routes)
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+    return app
 
 
 __all__ = ["create_app"]
