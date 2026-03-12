@@ -13,13 +13,9 @@ import uvicorn
 from remora.code.discovery import CSTNode
 from remora.code.discovery import discover as discover_nodes
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
-from remora.code.reconciler import FileReconciler
 from remora.core.config import load_config
 from remora.core.db import AsyncDB
-from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
-from remora.core.graph import AgentStore, NodeStore
-from remora.core.runner import AgentRunner
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.services import RuntimeServices
 from remora.web.server import create_app
 
 app = typer.Typer(
@@ -93,41 +89,17 @@ async def _start(
     db_path = project_root / config.swarm_root / "remora.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db = AsyncDB.from_path(db_path)
+    services = RuntimeServices(config, project_root, db)
+    await services.initialize()
+    assert services.reconciler is not None
+    assert services.runner is not None
 
-    event_bus = EventBus()
-    node_store = NodeStore(db)
-    agent_store = AgentStore(db)
-    await node_store.create_tables()
-    await agent_store.create_tables()
-
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
-    event_store = EventStore(
-        db=db,
-        event_bus=event_bus,
-        dispatcher=dispatcher,
-    )
-    await event_store.create_tables()
-
-    workspace_service = CairnWorkspaceService(config, project_root)
-    await workspace_service.initialize()
-
-    reconciler = FileReconciler(
-        config,
-        node_store,
-        agent_store,
-        event_store,
-        workspace_service,
-        project_root,
-    )
-    await reconciler.start(event_bus)
     logging.info("Starting code discovery...")
-    await reconciler.full_scan()
+    await services.reconciler.full_scan()
 
-    runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
-    runner_task = asyncio.create_task(runner.run_forever(), name="remora-runner")
+    runner_task = asyncio.create_task(services.runner.run_forever(), name="remora-runner")
     reconciler_task = asyncio.create_task(
-        reconciler.run_forever(),
+        services.reconciler.run_forever(),
         name="remora-reconciler",
     )
     tasks: list[asyncio.Task] = [runner_task, reconciler_task]
@@ -135,9 +107,9 @@ async def _start(
 
     if not no_web:
         web_app = create_app(
-            event_store,
-            node_store,
-            event_bus,
+            services.event_store,
+            services.node_store,
+            services.event_bus,
             project_root=project_root,
         )
         web_config = uvicorn.Config(
@@ -156,16 +128,13 @@ async def _start(
         else:
             await asyncio.gather(*tasks)
     finally:
-        reconciler.stop()
-        runner.stop()
+        await services.close()
         if web_server is not None:
             web_server.should_exit = True
         for task in tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await workspace_service.close()
-        db.close()
 
 
 async def _discover(

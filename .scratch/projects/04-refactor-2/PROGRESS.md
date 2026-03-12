@@ -25,8 +25,8 @@
 - [x] Phase 8 testing
 - [x] Phase 9 implementation
 - [x] Phase 9 testing
-- [ ] Phase 10 implementation
-- [ ] Phase 10 testing
+- [x] Phase 10 implementation
+- [x] Phase 10 testing
 - [ ] Phase 11 implementation
 - [ ] Phase 11 testing
 - [ ] Phase 12 implementation/validation
@@ -53,3 +53,5 @@
 - Phase 8 tests passing: `tests/unit -q` and integration smoke suites.
 - Phase 9 complete: extracted web UI into `web/static/index.html`, removed `views.py`, added SSE handlers for removed/changed nodes, added batch `/api/edges`, and limited LSP exports to public API.
 - Phase 9 tests passing: `tests/unit -q` and integration smoke suites.
+- Phase 10 complete: introduced `RuntimeServices` container for dependency wiring and refactored `__main__.py` startup/shutdown flow to orchestrate services through a single lifecycle surface.
+- Phase 10 tests passing: `tests/unit -q` and integration smoke suites.
