@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -148,47 +150,39 @@ async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path)
 @pytest.mark.asyncio
 async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, monkeypatch) -> None:
     _node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
-    write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
-    await reconciler.full_scan()
+    source = tmp_path / "src" / "app.py"
+    write_file(source, "def a():\n    return 1\n")
 
     call_count = 0
-    original_cycle = reconciler.reconcile_cycle
 
-    async def flaky_cycle() -> None:
+    async def fake_awatch(*_args, **_kwargs):  # noqa: ANN001, ANN202
+        yield {(1, str(source))}
+        yield {(1, str(source))}
+
+    async def flaky_reconcile(_file_path: str, _mtime_ns: int) -> None:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
             raise RuntimeError("simulated failure")
-        await original_cycle()
+        reconciler.stop()
 
-    monkeypatch.setattr(reconciler, "reconcile_cycle", flaky_cycle)
-    reconciler._watch_mode = False
+    monkeypatch.setitem(sys.modules, "watchfiles", SimpleNamespace(awatch=fake_awatch))
+    monkeypatch.setattr(reconciler, "_reconcile_file", flaky_reconcile)
 
-    task = asyncio.create_task(reconciler.run_forever(poll_interval_s=0.01))
-    await asyncio.sleep(0.05)
-    reconciler.stop()
-    await asyncio.wait_for(task, timeout=1.0)
-
+    await asyncio.wait_for(reconciler.run_forever(), timeout=1.0)
     assert call_count >= 2
 
 
 @pytest.mark.asyncio
-async def test_reconciler_watch_fallback_to_polling(reconcile_env, monkeypatch) -> None:
+async def test_reconciler_watch_import_error_is_not_suppressed(reconcile_env, monkeypatch) -> None:
     _node_store, _agent_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
-    called = False
 
     async def fake_watch() -> None:
         raise ImportError("watchfiles unavailable")
 
-    async def fake_poll(_interval: float) -> None:
-        nonlocal called
-        called = True
-        reconciler.stop()
-
     monkeypatch.setattr(reconciler, "_run_watching", fake_watch)
-    monkeypatch.setattr(reconciler, "_run_polling", fake_poll)
-    await reconciler.run_forever(poll_interval_s=0.01)
-    assert called
+    with pytest.raises(ImportError, match="watchfiles unavailable"):
+        await asyncio.wait_for(reconciler.run_forever(), timeout=0.05)
 
 
 @pytest.mark.asyncio

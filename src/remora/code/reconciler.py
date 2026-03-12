@@ -47,7 +47,6 @@ class FileReconciler:
         self._project_root = project_root.resolve()
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._running = False
-        self._watch_mode = True
 
     async def full_scan(self) -> list[CodeNode]:
         """Perform a full startup scan and return current graph nodes."""
@@ -73,18 +72,11 @@ class FileReconciler:
                 await self._remove_node(node_id)
             self._file_state.pop(file_path, None)
 
-    async def run_forever(self, *, poll_interval_s: float = 1.0) -> None:
-        """Continuously reconcile changed files."""
+    async def run_forever(self) -> None:
+        """Continuously reconcile changed files using watchfiles."""
         self._running = True
         try:
-            if self._watch_mode:
-                try:
-                    await self._run_watching()
-                except ImportError:
-                    logger.info("watchfiles unavailable, falling back to polling mode")
-                    await self._run_polling(poll_interval_s)
-            else:
-                await self._run_polling(poll_interval_s)
+            await self._run_watching()
         finally:
             self._running = False
 
@@ -102,8 +94,10 @@ class FileReconciler:
         paths_to_watch = resolve_discovery_paths(self._config, self._project_root)
         watch_paths = [str(path) for path in paths_to_watch if path.exists()]
         if not watch_paths:
-            await self._run_polling(1.0)
-            return
+            raise RuntimeError(
+                "No discovery paths exist to watch. "
+                "Create configured discovery paths before starting reconciler."
+            )
 
         async for changes in watchfiles.awatch(*watch_paths, stop_event=self._stop_event()):
             if not self._running:
@@ -122,15 +116,6 @@ class FileReconciler:
                         self._file_state.pop(str(p), None)
             except Exception:  # noqa: BLE001 - isolate one watch batch failure
                 logger.exception("Watch-triggered reconcile failed")
-
-    async def _run_polling(self, interval: float) -> None:
-        """Fallback polling mode."""
-        while self._running:
-            try:
-                await self.reconcile_cycle()
-            except Exception:  # noqa: BLE001 - keep loop alive
-                logger.exception("Reconcile cycle failed, will retry next cycle")
-            await asyncio.sleep(interval)
 
     def _stop_event(self):  # noqa: ANN201
         """Create a threading event set when reconciler is stopped."""
