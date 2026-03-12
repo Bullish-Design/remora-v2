@@ -411,7 +411,7 @@ core/events/
 └── store.py         — EventStore (persistence + trigger queue)
 ```
 
-Or even further — extract the trigger queue into its own `dispatcher.py`, since trigger dispatch is a distinct concern from event persistence.
+Or even further — extract the trigger queue into its own `dispatcher.py`, since trigger dispatch is a distinct concern from event persistence. <<-- Do this as well
 
 **Why**: Every module in the codebase imports from `events.py`. Splitting it reduces coupling, makes each piece independently testable, and makes the architecture self-documenting through file structure.
 
@@ -431,7 +431,7 @@ class AsyncDB:
 
 Then `NodeStore`, `EventStore`, and `SubscriptionRegistry` all use this instead of each implementing the same pattern. This eliminates ~300 lines of boilerplate and centralizes connection management.
 
-**Consider also**: Whether `aiosqlite` would be a better fit than hand-rolling async wrappers. It provides native async SQLite support and is mature.
+**Consider also**: Whether `aiosqlite` would be a better fit than hand-rolling async wrappers. It provides native async SQLite support and is mature. <-- Do this as well
 
 #### R3. Introduce a formal domain service layer
 
@@ -474,6 +474,8 @@ class Externals:
 Each external function becomes its own file or class, registered in a discoverable way. This would enable per-tool-type configuration and testing.
 
 Any of these would dramatically improve testability and readability versus the current nested-closure approach.
+
+**NOTE:** Give examples of each, along with pros/cons/implications/opportunities for each.
 
 #### R5. Replace the proposal system with a dedicated model
 
@@ -613,6 +615,8 @@ ChangeType = Literal["modified", "created", "deleted", "opened"]
 
 This provides IDE autocomplete, catches typos at construction time, and documents the valid value space.
 
+**QUESTION:** What about pydantic classes/subclasses? Is there any additional functionality that could be composed/abstracted to these if we used pydantic? 
+
 #### R16. Remove dead code
 
 - `utils/__init__.py` is an empty package with no contents and no usages
@@ -671,13 +675,17 @@ class LanguagePlugin(Protocol):
     def resolve_node_type(self, node: Any) -> str: ...
 ```
 
-Each language becomes a self-contained plugin, and new languages can be added without modifying any existing code.
+Each language becomes a self-contained plugin, and new languages can be added without modifying any existing code. 
+
+**NOTE:** Do this as well
 
 #### R20. Consider making the reconciler event-driven rather than polling
 
 The current reconciler polls at 1-second intervals. An alternative is to use filesystem watchers (e.g., `watchfiles` or `inotify`) to get immediate notification of changes. The LSP server already emits `ContentChangedEvent` on save — the reconciler could subscribe to these events AND use filesystem watching as a fallback.
 
 **Trade-off**: More complex, platform-dependent. But eliminates the 1-second latency and reduces CPU usage for idle projects.
+
+**NOTE:** This is a good idea. Do this as well.
 
 #### R21. Consider separating the "agent identity" from "code element"
 
@@ -691,6 +699,8 @@ Separating these would allow:
 - Agents that aren't tied to code elements (e.g., a project-level orchestrator)
 - Code elements that don't need agents (e.g., trivial utility functions)
 
+**NOTE:** This is a great idea, lets absolutely do this
+
 #### R22. Consider a proper event sourcing pattern
 
 The EventStore already stores all events immutably. But the system doesn't fully leverage event sourcing — node state is maintained as a separate mutable store that can drift from the event log. A full event-sourcing approach would derive all state (nodes, edges, subscriptions, proposals) from the event stream, making the system:
@@ -699,6 +709,8 @@ The EventStore already stores all events immutably. But the system doesn't fully
 - Debuggable through event replay
 
 **Trade-off**: Significant complexity increase. Event sourcing is powerful but requires careful projection management.
+
+**NOTE:** Give an outline of what this would look like and what it would take to implement. 
 
 #### R23. Unify the storage layer
 
