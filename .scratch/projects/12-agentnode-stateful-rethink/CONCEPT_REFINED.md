@@ -108,3 +108,73 @@ Use `user` consistently in:
 - examples and tests
 
 Avoid `human` terminology going forward except for backward compatibility references.
+
+## Appendix A: Ethos-Aligned Minimal Shape (No Class Explosion)
+
+This appendix is the pragmatic alignment layer: keep Remora simple, event-native, and tool-driven.
+
+### A1. What to Keep
+
+- One AgentNode model.
+- One actor loop.
+- One event pipeline.
+- Strict schemas and fail-fast validation.
+
+No deep class hierarchy is required to get the behavior we want.
+
+### A2. What to Change
+
+- Treat `user` interaction as standard event traffic.
+- Stop requiring prose outputs for every non-user trigger.
+- Add a direct, explicit tool for user-directed replies.
+
+### A3. User Reply as a Grail Tool
+
+Yes: make "send message to user" a Grail tool.
+
+Conceptually:
+
+- Tool name: `send_message_to_user`
+- Inputs:
+  - `content: str`
+  - `channel: str | None` (optional, for UI routing)
+- Implementation behavior:
+  - emits an event intended for UI/user sink (for example `AgentMessageEvent(from_agent=<node_id>, to_agent="user", content=...)` or a dedicated `AgentUserMessageEvent`)
+
+Why this aligns:
+
+- Keeps user output explicit and intentional.
+- Avoids conflating internal reactive turns with chat responses.
+- Uses the same event/tool primitives Remora already has.
+
+### A4. Turn Policy (Minimal)
+
+- On `AgentMessageEvent(from_agent="user")`:
+  - agent may call `send_message_to_user`.
+- On `NodeChangedEvent` / `ContentChangedEvent`:
+  - default to internal state/tool work only.
+  - no automatic user-facing message unless policy says otherwise.
+- On peer agent messages:
+  - produce machine-coordination events/messages.
+
+This can be implemented with a small policy gate, not a new type system.
+
+### A5. Recommended Prompt Contract
+
+Use one compact instruction set:
+
+- "You are a node expert. Maintain node/subtree/project understanding."
+- "User messaging is explicit: call `send_message_to_user` when a user-facing reply is warranted."
+- "For reactive system events, prioritize state updates and coordination over narrative output."
+
+### A6. Observable Outcomes
+
+- Fewer noisy directory summaries after file changes.
+- Cleaner logs separating internal work from user replies.
+- Better operator control: if a user reply happened, it was explicitly emitted.
+
+### A7. Why This Is the Right Level of Change
+
+- Preserves Remora's existing ethos: event-driven, composable primitives, incremental evolution.
+- Avoids overengineering with class-heavy architecture.
+- Delivers the behavioral correction you want with minimal surface area.
