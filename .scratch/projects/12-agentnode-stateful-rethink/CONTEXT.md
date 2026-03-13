@@ -1,20 +1,33 @@
 # Context
 
 ## Current Status
-REFINED_CONCEPT_OVERVIEW.md has been written and corrected after studying the Cairn codebase.
-
-Key correction: Cairn workspaces are **fsdantic database files** (`.db`), not filesystem directories. Each workspace is backed by a libsql database via `Fsdantic.open(path=...)`. They provide a virtual filesystem API (`workspace.files.read/write/query/search`) plus a KV store (`workspace.kv.get/set/delete/list`). The data layout is `.remora/stable.db` + `.remora/agents/{safe_id}.db` per node.
+REFACTORING_GUIDE.md has been written with 12 incremental PRs and 3 investigation items.
 
 ## Key Decisions
-1. **State storage**: Cairn workspace databases for all internal node state.
-2. **HumanChatEvent**: Replace with AgentMessageEvent(from_agent="user"). Migrate now.
-3. **Turn modes**: Prompt-level injection only. Two modes: chat and reactive.
-4. **Node spawning**: Deferred.
+1. **Scope**: User annotated each appendix idea with Implement/Investigate/Do Not Implement.
+2. **Format**: Incremental PRs, each self-contained and independently committable.
+3. **LSP**: Keep it (user explicitly chose to keep).
+4. **Bundles**: Implement A4 alternative (additive, not flatten). Implement A5 (drop companion).
+5. **Events**: Implement A6 middle ground (typed classes, generic envelope storage).
 
-## What Just Happened
-- Studied Cairn codebase in `.context/cairn/` — understood fsdantic, database-backed workspaces, KV store, overlay semantics.
-- Corrected workspace descriptions throughout REFINED_CONCEPT_OVERVIEW.md (was incorrectly describing filesystem directories).
-- Added two new appendix items: A16 (use workspace KV store for structured state) and A17 (use fsdantic overlay semantics instead of hand-rolled fallback in AgentWorkspace).
+## User's Appendix Annotations
+- A1 (merge stores): **Investigate** — concern about future non-CST node types
+- A2 (no stable fallback): **Implement**
+- A3 (bundle.yaml as workspace file): **Implement**
+- A4 (unify tools): **Implement alternative** (additive system)
+- A5 (drop companion): **Implement**
+- A6 (event envelope): **Implement middle ground**
+- A7 (simplify subscriptions): **Do Not Implement**
+- A8 (rename everything): **Implement**
+- A9 (event sourcing): **Do Not Implement**
+- A10 (kill _preview_text): **Implement**
+- A11 (config as workspace): **Do Not Implement**
+- A12 (drop LSP): **Do Not Implement**
+- A13 (user replies via send_message): **Implement**
+- A14 (separate identity/content/runtime): **Investigate Further**
+- A15 (directories not agents): **Do Not Implement**
+- A16 (KV store): **Implement**
+- A17 (fsdantic overlays): **Investigate Further**
 
 ## Next Step
-User reviews the corrected document. Then iterate on feedback or begin implementation planning.
+User reviews REFACTORING_GUIDE.md. Then begin implementation with PR1.
