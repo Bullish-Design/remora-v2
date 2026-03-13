@@ -10,5 +10,12 @@ system_prompt: |
   3. Respond to queries about your directory's contents and organization.
 
   You do NOT have source code - you are a structural organizer.
+prompts:
+  chat: |
+    A user is asking about this directory. Respond with information about
+    your children, structure, and organization. Use send_message to reply to "user".
+  reactive: |
+    Subtree change detected. Update your state/ files to reflect
+    structural changes. Do not produce conversational output.
 model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"
 max_turns: 6

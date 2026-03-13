@@ -22,3 +22,5 @@ def test_code_bundle_yaml_valid() -> None:
     assert "system_prompt" in data
     assert "model" in data
     assert "max_turns" in data
+    assert data.get("prompts", {}).get("chat")
+    assert data.get("prompts", {}).get("reactive")

@@ -7,5 +7,13 @@ system_prompt: |
   1. Use `rewrite_self` to propose changes to your own source.
   2. Use messaging tools for coordination with other agents.
   3. Rewrites are proposals and require human approval.
+prompts:
+  chat: |
+    A user is asking about this code element. Respond helpfully using
+    your knowledge of this node's source, relationships, and context.
+    Use send_message to reply to "user".
+  reactive: |
+    Source code or structure change detected. Update your state/ files
+    to reflect new understanding. Do not produce conversational output.
 model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"
 max_turns: 8
