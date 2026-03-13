@@ -214,7 +214,7 @@ On disk, the full layout is:
 
 ### 5.2 State as Workspace Files
 
-The node's long-term memory lives in workspace files. This is deliberate:
+The node's long-term memory lives in the Cairn workspace files. This is deliberate:
 
 - **Inspectable**: a developer can query the Cairn workspace to see what a node knows.
 - **No new infrastructure**: uses the existing Cairn read/write tools.
