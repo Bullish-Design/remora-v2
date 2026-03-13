@@ -437,7 +437,7 @@ Starlette app providing:
 
 Everything below is brainstorming. These are ideas for making the library's mental model smaller and the codebase cleaner. None are committed — they're a menu of options to evaluate.
 
-### A1. Collapse NodeStore and AgentStore into One Store
+### A1. Collapse NodeStore and AgentStore into One Store (Investigate - What about nodes that aren't CST nodes? Might want to create a "ResearchNode" or something?)
 
 **Current state**: `NodeStore` holds `CodeNode` records. `AgentStore` holds `Agent` records. Both are keyed by the same ID. Status is tracked in both and must be kept in sync (see `actor.py:322-338` where both are transitioned). This creates a synchronization problem and conceptual duplication.
 
@@ -447,7 +447,7 @@ Everything below is brainstorming. These are ideas for making the library's ment
 
 **Risk**: If we ever need agent-specific fields that don't belong on CodeNode. But YAGNI — we can split later if needed.
 
-### A2. Eliminate the Stable Workspace Fallback
+### A2. Eliminate the Stable Workspace Fallback (Implement)
 
 **Current state**: Workspaces have a two-layer read-through: agent db → stable db. The stable workspace database holds shared templates. Bundle provisioning writes templates into agent workspace databases.
 
@@ -457,7 +457,7 @@ Everything below is brainstorming. These are ideas for making the library's ment
 
 **Cost**: Slightly more database storage (duplicated templates). But templates are tiny and database storage is cheap. Updates to templates require re-provisioning, but that already happens on startup.
 
-### A3. Make bundle.yaml Just Another Workspace File
+### A3. Make bundle.yaml Just Another Workspace File (Implement)
 
 **Current state**: `bundle.yaml` is read by `_read_bundle_config()` in the actor. It's treated as special configuration.
 
@@ -467,7 +467,7 @@ Everything below is brainstorming. These are ideas for making the library's ment
 
 **Risk**: Nodes could break themselves by writing bad config. Mitigated by validation at read time (which already exists).
 
-### A4. Unify All Grail Tools into the System Bundle
+### A4. Unify All Grail Tools into the System Bundle (Implement alternative option)
 
 **Current state**: Tools are split across `bundles/system/`, `bundles/code-agent/`, `bundles/directory-agent/`, `bundles/companion/`. Each bundle type gets different tools.
 
@@ -477,9 +477,9 @@ Everything below is brainstorming. These are ideas for making the library's ment
 
 **Cost**: Slightly larger tool schemas sent to the LLM (more tokens). But the tools are small and models handle large tool sets well.
 
-**Alternatively**: Keep the bundle system but make it purely additive — a `bundle_name` just means "also include tools from this directory." The system bundle is always included. This is essentially what it already does, just made explicit.
+**Alternative Option**: Keep the bundle system but make it purely additive — a `bundle_name` just means "also include tools from this directory." The system bundle is always included. This is essentially what it already does, just made explicit.
 
-### A5. Drop the Companion Bundle
+### A5. Drop the Companion Bundle (Implement)
 
 **Current state**: `bundles/companion/` has `reflect.pym`, `categorize.pym`, `find_links.pym`, `summarize.pym`. These are reflection/maintenance tools.
 
@@ -487,7 +487,7 @@ Everything below is brainstorming. These are ideas for making the library's ment
 
 **Benefit**: Removes a bundle type. Useful capabilities become universal.
 
-### A6. Replace Custom Event Types with a Single Envelope
+### A6. Replace Custom Event Types with a Single Envelope (Implement "middle ground" option)
 
 **Current state**: 12 event classes, each a Pydantic model with specific fields.
 
@@ -507,7 +507,7 @@ class Event(BaseModel):
 
 **Middle ground**: Keep the typed event classes but make them thin wrappers that serialize to the generic envelope for storage and dispatch. Best of both worlds — type safety in Python, schema-free in the event log.
 
-### A7. Simplify the Subscription System
+### A7. Simplify the Subscription System (Do Not Implement)
 
 **Current state**: Subscriptions are a general pattern-matching system with `event_types`, `from_agents`, `to_agent`, and `path_glob`. Nodes register multiple patterns.
 
@@ -522,7 +522,7 @@ The reconciler already registers exactly these patterns. If we make them implici
 
 **Cost**: Less flexible. Nodes can't subscribe to events outside their scope without explicit registration. But this might be fine — scope-based routing covers the primary use case.
 
-### A8. Rename Everything to Match the Mental Model
+### A8. Rename Everything to Match the Mental Model (Implement)
 
 Small naming improvements that reduce cognitive load:
 
@@ -538,7 +538,7 @@ Small naming improvements that reduce cognitive load:
 | `bundle_name` | `role` | A bundle determines a node's role (code-agent, directory-agent). "Role" is clearer. |
 | `swarm_root` | `workspace_root` | It's where workspaces live. "Swarm" is vague. |
 
-### A9. Make the Event Log the Only Source of Truth
+### A9. Make the Event Log the Only Source of Truth (Do not implement)
 
 **Current state**: NodeStore and EventStore are parallel. Nodes are stored as mutable rows. Events are append-only. When something changes, both are updated.
 
@@ -548,7 +548,7 @@ Small naming improvements that reduce cognitive load:
 
 **Cost**: More complex reads (need to maintain projection). Slower cold start (rebuild from log). But SQLite is fast enough that this is unlikely to matter at Remora's scale.
 
-### A10. Kill the `_preview_text` Logging Pattern
+### A10. Kill the `_preview_text` Logging Pattern (Implement)
 
 **Current state**: `actor.py` has `_preview_text()` that replaces newlines with `\n` for logging. Recent work explicitly ensured responses aren't truncated in logs.
 
@@ -556,7 +556,7 @@ Small naming improvements that reduce cognitive load:
 
 **Benefit**: Cleaner actor code. Better log searchability. No more "is the log truncated?" questions.
 
-### A11. Configuration as a Workspace File
+### A11. Configuration as a Workspace File (Do not implement) 
 
 **Current state**: `Config` is loaded from `remora.yaml` at startup and threaded through constructors. It's immutable after load.
 
@@ -566,7 +566,7 @@ Small naming improvements that reduce cognitive load:
 
 **Cost**: Chicken-and-egg problem — you need config to initialize the workspace service. Solvable with a bootstrap config that just specifies the workspace root.
 
-### A12. Drop the LSP Server (For Now)
+### A12. Drop the LSP Server (Do not implement)
 
 **Current state**: `lsp/server.py` provides hover and CodeLens for discovered nodes. It's 106 LOC with minimal test coverage.
 
@@ -574,7 +574,7 @@ Small naming improvements that reduce cognitive load:
 
 **Benefit**: Less code to maintain. Fewer dependencies. Cleaner focus on the core runtime.
 
-### A13. Implicit Node-to-User Responses via Event Convention
+### A13. Implicit Node-to-User Responses via Event Convention (Implement)
 
 **Current state**: When a user sends a message and a node responds, the response text is buried in `AgentCompleteEvent.result_summary`. The web UI has to watch for completion events to show responses.
 
@@ -582,7 +582,7 @@ Small naming improvements that reduce cognitive load:
 
 **Benefit**: User replies become explicit, intentional, and visible in the event log as first-class messages. The `AgentTextResponse` event type becomes unnecessary — it's just an `AgentMessageEvent` to "user". The UI has a clean subscription pattern for user-facing messages.
 
-### A14. Separate "What a Node Knows" from "What a Node Is"
+### A14. Separate "What a Node Knows" from "What a Node Is" (Investigate Further)
 
 **Current state**: `CodeNode` mixes identity fields (node_id, name, file_path) with content fields (source_code, source_hash) with runtime fields (status, bundle_name). All in one flat model.
 
@@ -593,7 +593,7 @@ Small naming improvements that reduce cognitive load:
 
 This could remain one model in code but with clear field grouping. Or it could split into a normalized schema where identity and content are separate tables, reducing write amplification when only status changes.
 
-### A15. Consider Whether Directories Need to Be Nodes
+### A15. Consider Whether Directories Need to Be Nodes (Do not implement)
 
 **Current state**: Directories are synthesized as nodes during reconciliation. They get workspaces, actors, subscriptions, and LLM turns — the full treatment. This is expensive (every file change triggers directory node turns up the tree).
 
@@ -605,7 +605,7 @@ This could remain one model in code but with clear field grouping. Or it could s
 
 **Middle ground**: Directories are nodes in the graph (for topology) but don't have actors by default. They only spin up an actor when directly addressed by a user or peer. This is "lazy activation" — the actor exists only while processing a message, then evicts immediately.
 
-### A16. Use the Workspace KV Store for Structured Node State
+### A16. Use the Workspace KV Store for Structured Node State (Implement)
 
 **Current state**: Remora only uses the fsdantic file API (`workspace.files.read/write/query`). But fsdantic workspaces also expose a KV store (`workspace.kv.get/set/delete/list`) with typed repositories — Cairn itself uses this for agent lifecycle metadata (`SubmissionRecord`). Remora ignores this entirely.
 
@@ -622,13 +622,13 @@ This could remain one model in code but with clear field grouping. Or it could s
 
 **Opportunity**: The KV store could replace the SQLite-based NodeStore entirely for agent runtime state, leaving SQLite for the event log and graph topology only. Each node's workspace db already exists — why maintain a separate central database for per-node state?
 
-### A17. Use fsdantic Overlay Semantics Instead of Rolling Our Own
+### A17. Use fsdantic Overlay Semantics Instead of Rolling Our Own (Investigate further)
 
 **Current state**: `AgentWorkspace` manually implements read-through fallback: try agent db, catch `FileNotFoundError`, try stable db. `list_dir` merges entries from both. `list_all_paths` queries both and deduplicates. This is ~110 lines of hand-rolled overlay logic.
 
 **Idea**: fsdantic already has overlay operations (`workspace.overlay.merge/list_changes/reset`). Cairn uses these for its accept/reject flow. Remora could use the same overlay primitives instead of reimplementing them in `AgentWorkspace`.
 
-**Benefit**: Removes `AgentWorkspace` entirely or reduces it to a thin wrapper. Uses battle-tested overlay logic from fsdantic. Potentially enables "accept" semantics — a node's state changes could be reviewed and merged into stable, mirroring Cairn's human-in-the-loop pattern.
+**Benefit**: Reduces `AgentWorkspace` to a thin wrapper. Uses battle-tested overlay logic from fsdantic. Potentially enables "accept" semantics — a node's state changes could be reviewed and merged into stable, mirroring Cairn's human-in-the-loop pattern.
 
 **Cost**: Need to verify fsdantic's overlay API covers all Remora's use cases (merged directory listings, path queries, etc.). May require fsdantic version bump.
 
