@@ -78,6 +78,24 @@ async def test_externals_workspace_ops(context_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_externals_kv_ops(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::alpha")
+    await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
+
+    assert await externals["kv_set"]("state/name", "alpha")
+    assert await externals["kv_get"]("state/name") == "alpha"
+    assert await externals["kv_get"]("state/missing") is None
+    assert await externals["kv_list"]("state/") == ["state/name"]
+    assert await externals["kv_delete"]("state/name")
+    assert await externals["kv_get"]("state/name") is None
+
+
+@pytest.mark.asyncio
 async def test_externals_graph_ops(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
     a = make_node("src/app.py::a")

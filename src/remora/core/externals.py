@@ -79,6 +79,20 @@ class AgentContext:
                     matches.append({"file": normalized, "line": index, "text": line})
         return matches
 
+    async def kv_get(self, key: str) -> Any | None:
+        return await self.workspace.kv_get(key)
+
+    async def kv_set(self, key: str, value: Any) -> bool:
+        await self.workspace.kv_set(key, value)
+        return True
+
+    async def kv_delete(self, key: str) -> bool:
+        await self.workspace.kv_delete(key)
+        return True
+
+    async def kv_list(self, prefix: str = "") -> list[str]:
+        return await self.workspace.kv_list(prefix)
+
     async def graph_get_node(self, target_id: str) -> dict[str, Any]:
         node = await self._node_store.get_node(target_id)
         return node.model_dump() if node is not None else {}
@@ -236,6 +250,10 @@ class AgentContext:
             "file_exists": self.file_exists,
             "search_files": self.search_files,
             "search_content": self.search_content,
+            "kv_get": self.kv_get,
+            "kv_set": self.kv_set,
+            "kv_delete": self.kv_delete,
+            "kv_list": self.kv_list,
             "graph_get_node": self.graph_get_node,
             "graph_query_nodes": self.graph_query_nodes,
             "graph_get_edges": self.graph_get_edges,

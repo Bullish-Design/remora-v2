@@ -11,6 +11,7 @@ def test_system_tools_parse() -> None:
     tool_files = sorted(tools_dir.glob("*.pym"))
     assert tool_files
     expected = {"send_message", "broadcast", "query_agents", "subscribe", "unsubscribe"}
+    expected |= {"kv_get", "kv_set"}
     expected |= {"reflect", "categorize", "find_links", "summarize"}
     names = {tool_file.stem for tool_file in tool_files}
     assert expected.issubset(names)

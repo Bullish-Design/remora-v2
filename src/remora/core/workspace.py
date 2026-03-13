@@ -67,6 +67,35 @@ class AgentWorkspace:
                 if str(getattr(entry, "path", "")).lstrip("/")
             )
 
+    async def kv_get(self, key: str) -> Any | None:
+        """Get a value from the workspace KV store."""
+        async with self._lock:
+            return await self._workspace.kv.get(key, None)
+
+    async def kv_set(self, key: str, value: Any) -> None:
+        """Set a value in the workspace KV store."""
+        async with self._lock:
+            await self._workspace.kv.set(key, value)
+
+    async def kv_delete(self, key: str) -> None:
+        """Delete a value from the workspace KV store."""
+        async with self._lock:
+            await self._workspace.kv.delete(key)
+
+    async def kv_list(self, prefix: str = "") -> list[str]:
+        """List KV keys for a prefix."""
+        async with self._lock:
+            records = await self._workspace.kv.list(prefix=prefix)
+        keys: list[str] = []
+        for record in records:
+            if isinstance(record, dict):
+                key = record.get("key")
+            else:
+                key = getattr(record, "key", None)
+            if key:
+                keys.append(str(key))
+        return sorted(keys)
+
 
 class CairnWorkspaceService:
     """Manages per-agent Cairn workspaces."""

@@ -87,6 +87,21 @@ async def test_workspace_overwrite_is_local(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_workspace_kv_ops(tmp_path: Path) -> None:
+    raw_ws = await cairn_wm.open_workspace(tmp_path / "agent-a")
+    workspace = AgentWorkspace(raw_ws, "agent-a")
+
+    await workspace.kv_set("state/name", "alpha")
+    assert await workspace.kv_get("state/name") == "alpha"
+    assert await workspace.kv_get("state/missing") is None
+    assert await workspace.kv_list("state/") == ["state/name"]
+    await workspace.kv_delete("state/name")
+    assert await workspace.kv_get("state/name") is None
+
+    await raw_ws.close()
+
+
+@pytest.mark.asyncio
 async def test_service_initialize(tmp_path: Path) -> None:
     config = Config(swarm_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
