@@ -10,6 +10,10 @@ def test_system_tools_parse() -> None:
     tools_dir = Path("bundles/system/tools")
     tool_files = sorted(tools_dir.glob("*.pym"))
     assert tool_files
+    expected = {"send_message", "broadcast", "query_agents", "subscribe", "unsubscribe"}
+    expected |= {"reflect", "categorize", "find_links", "summarize"}
+    names = {tool_file.stem for tool_file in tool_files}
+    assert expected.issubset(names)
     for tool_file in tool_files:
         script = grail.load(tool_file)
         assert script.name == tool_file.stem
