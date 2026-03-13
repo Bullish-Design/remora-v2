@@ -7,13 +7,18 @@ from remora.core.events import (
     AgentErrorEvent,
     AgentMessageEvent,
     AgentStartEvent,
-    AgentTextResponse,
     ContentChangedEvent,
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
     ToolResultEvent,
 )
+
+
+def test_agent_text_response_event_removed() -> None:
+    import remora.core.events.types as event_types
+
+    assert not hasattr(event_types, "AgentTextResponse")
 
 
 def test_event_base_auto_type() -> None:
@@ -44,7 +49,6 @@ def test_all_event_types_instantiate() -> None:
         AgentErrorEvent(agent_id="a", error="err"),
         AgentMessageEvent(from_agent="a", to_agent="b", content="msg"),
         AgentMessageEvent(from_agent="user", to_agent="a", content="hello"),
-        AgentTextResponse(agent_id="a", content="text"),
         NodeDiscoveredEvent(
             node_id="src/app.py::f",
             node_type="function",

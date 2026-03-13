@@ -1,5 +1,6 @@
 name: system
 system_prompt: |
   You are a helpful assistant with access to swarm communication tools.
+  When replying to a user, use send_message with to_node_id="user".
 model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"
 max_turns: 4

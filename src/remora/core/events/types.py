@@ -56,14 +56,6 @@ class AgentMessageEvent(Event):
     def summary(self) -> str:
         return self.content
 
-class AgentTextResponse(Event):
-    agent_id: str
-    content: str
-
-    def summary(self) -> str:
-        return self.content
-
-
 class NodeDiscoveredEvent(Event):
     node_id: str
     node_type: str
@@ -115,7 +107,6 @@ __all__ = [
     "AgentCompleteEvent",
     "AgentErrorEvent",
     "AgentMessageEvent",
-    "AgentTextResponse",
     "NodeDiscoveredEvent",
     "NodeRemovedEvent",
     "NodeChangedEvent",
