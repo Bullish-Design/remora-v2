@@ -397,8 +397,6 @@ class AgentActor:
 def _event_content(event: Event) -> str:
     if hasattr(event, "content"):
         return str(event.content)
-    if hasattr(event, "message"):
-        return str(event.message)
     return ""
 
 

@@ -56,15 +56,6 @@ class AgentMessageEvent(Event):
     def summary(self) -> str:
         return self.content
 
-
-class HumanChatEvent(Event):
-    to_agent: str
-    message: str
-
-    def summary(self) -> str:
-        return self.message
-
-
 class AgentTextResponse(Event):
     agent_id: str
     content: str
@@ -124,7 +115,6 @@ __all__ = [
     "AgentCompleteEvent",
     "AgentErrorEvent",
     "AgentMessageEvent",
-    "HumanChatEvent",
     "AgentTextResponse",
     "NodeDiscoveredEvent",
     "NodeRemovedEvent",

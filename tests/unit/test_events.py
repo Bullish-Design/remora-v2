@@ -9,7 +9,6 @@ from remora.core.events import (
     AgentStartEvent,
     AgentTextResponse,
     ContentChangedEvent,
-    HumanChatEvent,
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
@@ -44,7 +43,7 @@ def test_all_event_types_instantiate() -> None:
         AgentCompleteEvent(agent_id="a", result_summary="ok"),
         AgentErrorEvent(agent_id="a", error="err"),
         AgentMessageEvent(from_agent="a", to_agent="b", content="msg"),
-        HumanChatEvent(to_agent="a", message="hello"),
+        AgentMessageEvent(from_agent="user", to_agent="a", content="hello"),
         AgentTextResponse(agent_id="a", content="text"),
         NodeDiscoveredEvent(
             node_id="src/app.py::f",

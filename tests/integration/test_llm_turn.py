@@ -11,7 +11,7 @@ from remora.code.reconciler import FileReconciler
 from remora.core.actor import AgentActor, Outbox, Trigger
 from remora.core.config import Config
 from remora.core.db import AsyncDB
-from remora.core.events import EventStore, HumanChatEvent
+from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
@@ -116,9 +116,10 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
             semaphore=asyncio.Semaphore(1),
         )
         correlation_id = "corr-llm-turn"
-        event = HumanChatEvent(
+        event = AgentMessageEvent(
+            from_agent="user",
             to_agent=node.node_id,
-            message=(
+            content=(
                 f"Use the send_message tool exactly once with to_node_id='{node.node_id}' and "
                 "content='integration-ok'. Then give a one-line confirmation."
             ),

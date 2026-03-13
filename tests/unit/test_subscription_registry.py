@@ -5,7 +5,6 @@ import pytest
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
-    HumanChatEvent,
     SubscriptionPattern,
     SubscriptionRegistry,
 )
@@ -20,9 +19,9 @@ def test_subscription_pattern_matches_exact() -> None:
 
 
 def test_subscription_pattern_matches_event_type() -> None:
-    pattern = SubscriptionPattern(event_types=["HumanChatEvent"])
-    assert pattern.matches(HumanChatEvent(to_agent="a", message="hi"))
-    assert not pattern.matches(AgentMessageEvent(from_agent="a", to_agent="b", content="hello"))
+    pattern = SubscriptionPattern(event_types=["AgentMessageEvent"])
+    assert pattern.matches(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
+    assert not pattern.matches(ContentChangedEvent(path="src/app.py"))
 
 
 def test_subscription_pattern_matches_path_glob() -> None:
@@ -33,7 +32,7 @@ def test_subscription_pattern_matches_path_glob() -> None:
 
 def test_subscription_pattern_none_matches_all() -> None:
     pattern = SubscriptionPattern()
-    assert pattern.matches(HumanChatEvent(to_agent="a", message="hi"))
+    assert pattern.matches(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
     assert pattern.matches(ContentChangedEvent(path="any/path.txt"))
 
 

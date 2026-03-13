@@ -8,7 +8,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from remora.core.events import EventBus, EventStore, HumanChatEvent
+from remora.core.events import AgentMessageEvent, EventBus, EventStore
 from remora.core.db import AsyncDB
 from remora.core.graph import NodeStore
 from remora.web.server import create_app
@@ -115,7 +115,7 @@ async def test_api_all_edges(web_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_api_chat_sends_event(web_env) -> None:
+async def test_api_chat_emits_agent_message_event(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     response = await client.post(
         "/api/chat",
@@ -125,9 +125,10 @@ async def test_api_chat_sends_event(web_env) -> None:
 
     events = await event_store.get_events(limit=10)
     assert any(
-        event["event_type"] == "HumanChatEvent"
+        event["event_type"] == "AgentMessageEvent"
+        and event["payload"].get("from_agent") == "user"
         and event["payload"].get("to_agent") == "src/app.py::a"
-        and event["payload"].get("message") == "hello"
+        and event["payload"].get("content") == "hello"
         for event in events
     )
 
@@ -135,13 +136,15 @@ async def test_api_chat_sends_event(web_env) -> None:
 @pytest.mark.asyncio
 async def test_api_events(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
-    await event_store.append(HumanChatEvent(to_agent="src/app.py::a", message="ping"))
+    await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="ping")
+    )
 
     response = await client.get("/api/events")
     assert response.status_code == 200
     payload = response.json()
     assert isinstance(payload, list)
-    assert payload and payload[0]["event_type"] == "HumanChatEvent"
+    assert payload and payload[0]["event_type"] == "AgentMessageEvent"
 
 
 @pytest.mark.asyncio
@@ -163,13 +166,19 @@ async def test_sse_receives_events(web_env) -> None:
                 return line
         raise AssertionError("SSE stream closed before data line was received")
 
-    await event_store.append(HumanChatEvent(to_agent="src/app.py::a", message="from-sse-test"))
+    await event_store.append(
+        AgentMessageEvent(
+            from_agent="user",
+            to_agent="src/app.py::a",
+            content="from-sse-test",
+        )
+    )
     async with client.stream("GET", "/sse?once=1&replay=5") as response:
         data_line = await asyncio.wait_for(read_one_data_line(response), timeout=2.0)
 
     payload = json.loads(data_line.removeprefix("data: ").strip())
-    assert payload["event_type"] == "HumanChatEvent"
-    assert payload["message"] == "from-sse-test"
+    assert payload["event_type"] == "AgentMessageEvent"
+    assert payload["content"] == "from-sse-test"
 
 
 @pytest.mark.asyncio

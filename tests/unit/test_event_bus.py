@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from remora.core.events import AgentMessageEvent, AgentStartEvent, Event, EventBus, HumanChatEvent
+from remora.core.events import AgentMessageEvent, AgentStartEvent, Event, EventBus
 
 
 @pytest.mark.asyncio
@@ -43,8 +43,8 @@ async def test_bus_subscribe_all() -> None:
 
     bus.subscribe_all(handler)
     await bus.emit(AgentStartEvent(agent_id="a"))
-    await bus.emit(HumanChatEvent(to_agent="a", message="hi"))
-    assert seen == ["AgentStartEvent", "HumanChatEvent"]
+    await bus.emit(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
+    assert seen == ["AgentStartEvent", "AgentMessageEvent"]
 
 
 @pytest.mark.asyncio
@@ -75,7 +75,7 @@ async def test_bus_stream() -> None:
 async def test_bus_stream_filtered() -> None:
     bus = EventBus()
     async with bus.stream(AgentStartEvent) as events:
-        await bus.emit(HumanChatEvent(to_agent="x", message="skip"))
+        await bus.emit(AgentMessageEvent(from_agent="user", to_agent="x", content="skip"))
         await bus.emit(AgentStartEvent(agent_id="allowed"))
         received = await asyncio.wait_for(anext(events), timeout=1.0)
     assert isinstance(received, AgentStartEvent)

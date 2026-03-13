@@ -8,7 +8,7 @@ import pytest
 
 from remora.code.discovery import discover
 from remora.core.db import AsyncDB
-from remora.core.events import HumanChatEvent, SubscriptionPattern, SubscriptionRegistry
+from remora.core.events import AgentMessageEvent, SubscriptionPattern, SubscriptionRegistry
 from remora.core.graph import NodeStore
 from tests.factories import make_node
 
@@ -67,7 +67,7 @@ async def test_perf_subscription_matching(tmp_path: Path) -> None:
             SubscriptionPattern(to_agent=f"agent-{idx}"),
         )
 
-    event = HumanChatEvent(to_agent="agent-42", message="ping")
+    event = AgentMessageEvent(from_agent="user", to_agent="agent-42", content="ping")
     started = time.perf_counter()
     for _ in range(1000):
         matched = await registry.get_matching_agents(event)

@@ -18,9 +18,9 @@ from remora.core.db import AsyncDB
 from remora.core.events import (
     AgentCompleteEvent,
     AgentErrorEvent,
+    AgentMessageEvent,
     AgentStartEvent,
     EventStore,
-    HumanChatEvent,
 )
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.types import NodeStatus
@@ -195,7 +195,9 @@ async def test_actor_processes_inbox_message(actor_env, monkeypatch) -> None:
     monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
-    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-1")
+    event = AgentMessageEvent(
+        from_agent="user", to_agent=node.node_id, content="hello", correlation_id="corr-1"
+    )
 
     outbox = Outbox(actor_id=node.node_id, event_store=env["event_store"], correlation_id="corr-1")
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-1", event=event)
@@ -277,7 +279,12 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
     monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
-    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-log")
+    event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="hello",
+        correlation_id="corr-log",
+    )
     outbox = Outbox(
         actor_id=node.node_id,
         event_store=env["event_store"],
@@ -320,7 +327,12 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
     monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
-    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-long")
+    event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="hello",
+        correlation_id="corr-long",
+    )
     outbox = Outbox(
         actor_id=node.node_id,
         event_store=env["event_store"],
@@ -356,7 +368,12 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(actor_env,
     monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
-    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-fail")
+    event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="hello",
+        correlation_id="corr-fail",
+    )
     outbox = Outbox(
         actor_id=node.node_id,
         event_store=env["event_store"],
@@ -445,12 +462,12 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
     trigger_a = Trigger(
         node_id=node_a.node_id,
         correlation_id="corr-sem-a",
-        event=HumanChatEvent(to_agent=node_a.node_id, message="go"),
+        event=AgentMessageEvent(from_agent="user", to_agent=node_a.node_id, content="go"),
     )
     trigger_b = Trigger(
         node_id=node_b.node_id,
         correlation_id="corr-sem-b",
-        event=HumanChatEvent(to_agent=node_b.node_id, message="go"),
+        event=AgentMessageEvent(from_agent="user", to_agent=node_b.node_id, content="go"),
     )
 
     task_a = asyncio.create_task(actor_a._execute_turn(trigger_a, outbox_a))

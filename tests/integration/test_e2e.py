@@ -18,7 +18,6 @@ from remora.core.events import (
     ContentChangedEvent,
     EventBus,
     EventStore,
-    HumanChatEvent,
 )
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.runner import AgentRunner
@@ -126,7 +125,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     assert await workspace.exists("_bundle/bundle.yaml")
     assert await workspace.exists("_bundle/tools/rewrite_self.pym")
 
-    trigger_event = HumanChatEvent(to_agent=node.node_id, message="please rewrite")
+    trigger_event = AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="please rewrite")
     await runtime["event_store"].append(trigger_event)
 
     class MockKernel:
@@ -262,7 +261,7 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
         async def run(self, messages, tool_schemas, max_turns=8):  # noqa: ANN001, ANN201
             del tool_schemas, max_turns
             prompt = messages[1].content or ""
-            if "# Node: alpha" in prompt and "Event: HumanChatEvent" in prompt:
+            if "# Node: alpha" in prompt and "Event: AgentMessageEvent" in prompt:
                 await self._tools["send_message"].execute(
                     {"to_node_id": beta.node_id, "content": "ping"},
                     ToolCall(id="call-alpha-ping", name="send_message", arguments={}),
@@ -309,9 +308,10 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
         pytest.fail("Timed out waiting for alpha/beta message exchange")
 
     await runtime["event_store"].append(
-        HumanChatEvent(
+        AgentMessageEvent(
+            from_agent="user",
             to_agent=alpha.node_id,
-            message="start handshake with beta",
+            content="start handshake with beta",
             correlation_id="corr-agent-interaction",
         )
     )

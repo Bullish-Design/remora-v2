@@ -12,7 +12,7 @@ from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
-from remora.core.events import HumanChatEvent
+from remora.core.events import AgentMessageEvent
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
@@ -64,7 +64,9 @@ def create_app(
         if not node_id or not message:
             return JSONResponse({"error": "node_id and message are required"}, status_code=400)
 
-        await event_store.append(HumanChatEvent(to_agent=node_id, message=message))
+        await event_store.append(
+            AgentMessageEvent(from_agent="user", to_agent=node_id, content=message)
+        )
         return JSONResponse({"status": "sent"})
 
     async def api_events(request: Request) -> JSONResponse:

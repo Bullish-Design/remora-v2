@@ -12,7 +12,6 @@ from remora.core.db import AsyncDB
 from remora.core.events import (
     AgentMessageEvent,
     EventStore,
-    HumanChatEvent,
     SubscriptionPattern,
 )
 from remora.core.graph import AgentStore, NodeStore
@@ -119,7 +118,7 @@ async def test_runner_build_prompt_via_actor(runner_env) -> None:
         Trigger(
             node_id=node.node_id,
             correlation_id="c1",
-            event=HumanChatEvent(to_agent=node.node_id, message="hello"),
+            event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
         ),
     )
     assert node.full_name in prompt
