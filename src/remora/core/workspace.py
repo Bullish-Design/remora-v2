@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from cairn.runtime import workspace_manager as cairn_wm
-from fsdantic import FileNotFoundError as FsdFileNotFoundError
 from fsdantic import ViewQuery
 
 from remora.core.config import Config
@@ -18,21 +17,15 @@ from remora.core.config import Config
 class AgentWorkspace:
     """Per-agent sandboxed filesystem backed by Cairn."""
 
-    def __init__(self, workspace: Any, agent_id: str, stable_workspace: Any | None = None):
+    def __init__(self, workspace: Any, agent_id: str):
         self._workspace = workspace
         self._agent_id = agent_id
-        self._stable = stable_workspace
         self._lock = asyncio.Lock()
 
     async def read(self, path: str) -> str:
-        """Read a file from the agent workspace, falling back to stable if needed."""
+        """Read a file from the agent workspace."""
         async with self._lock:
-            try:
-                content = await self._workspace.files.read(path)
-            except (FileNotFoundError, FsdFileNotFoundError):
-                if self._stable is None:
-                    raise
-                content = await self._stable.files.read(path)
+            content = await self._workspace.files.read(path)
         if isinstance(content, bytes):
             return content.decode("utf-8", errors="replace")
         return str(content)
@@ -43,30 +36,14 @@ class AgentWorkspace:
             await self._workspace.files.write(path, content)
 
     async def exists(self, path: str) -> bool:
-        """Check existence in agent workspace first, then stable workspace."""
+        """Check existence in the agent workspace."""
         async with self._lock:
-            if await self._workspace.files.exists(path):
-                return True
-            if self._stable is not None and await self._stable.files.exists(path):
-                return True
-            return False
+            return await self._workspace.files.exists(path)
 
     async def list_dir(self, path: str = ".") -> list[str]:
-        """List merged directory entries from agent and stable workspaces."""
+        """List directory entries from the agent workspace."""
         async with self._lock:
-            entries: set[str] = set()
-            try:
-                entries.update(await self._workspace.files.list_dir(path, output="name"))
-            except (FileNotFoundError, FsdFileNotFoundError):
-                pass
-
-            if self._stable is not None:
-                try:
-                    entries.update(await self._stable.files.list_dir(path, output="name"))
-                except (FileNotFoundError, FsdFileNotFoundError):
-                    pass
-
-            return sorted(entries)
+            return sorted(await self._workspace.files.list_dir(path, output="name"))
 
     async def delete(self, path: str) -> None:
         """Delete a file from the agent workspace."""
@@ -74,7 +51,7 @@ class AgentWorkspace:
             await self._workspace.files.remove(path)
 
     async def list_all_paths(self) -> list[str]:
-        """List all file paths visible to this workspace (agent + stable)."""
+        """List all file paths in this workspace."""
         async with self._lock:
             query = ViewQuery(
                 path_pattern="**/*",
@@ -82,52 +59,31 @@ class AgentWorkspace:
                 include_stats=False,
                 include_content=False,
             )
-            merged_paths: set[str] = set()
-
-            try:
-                agent_entries = await self._workspace.files.query(query)
-                merged_paths.update(
-                    str(getattr(entry, "path", "")).lstrip("/")
-                    for entry in agent_entries
-                    if str(getattr(entry, "path", "")).lstrip("/")
-                )
-            except (FileNotFoundError, FsdFileNotFoundError):
-                pass
-
-            if self._stable is not None:
-                try:
-                    stable_entries = await self._stable.files.query(query)
-                    merged_paths.update(
-                        str(getattr(entry, "path", "")).lstrip("/")
-                        for entry in stable_entries
-                        if str(getattr(entry, "path", "")).lstrip("/")
-                    )
-                except (FileNotFoundError, FsdFileNotFoundError):
-                    pass
-
-            return sorted(merged_paths)
+            entries = await self._workspace.files.query(query)
+            return sorted(
+                str(getattr(entry, "path", "")).lstrip("/")
+                for entry in entries
+                if str(getattr(entry, "path", "")).lstrip("/")
+            )
 
 
 class CairnWorkspaceService:
-    """Manages stable and per-agent Cairn workspaces."""
+    """Manages per-agent Cairn workspaces."""
 
     def __init__(self, config: Config, project_root: Path):
         self._config = config
         self._project_root = project_root.resolve()
         self._swarm_root = self._project_root / config.swarm_root
         self._manager = cairn_wm.WorkspaceManager()
-        self._stable: Any | None = None
         self._agent_workspaces: dict[str, AgentWorkspace] = {}
         self._raw_agent_workspaces: dict[str, Any] = {}
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
-        """Initialize the stable workspace used for shared read-through."""
+        """Initialize workspace root directories."""
         self._swarm_root.mkdir(parents=True, exist_ok=True)
         agents_root = self._swarm_root / "agents"
         agents_root.mkdir(parents=True, exist_ok=True)
-        self._stable = await cairn_wm.open_workspace(str(self._swarm_root / "stable"))
-        self._manager.track_workspace(self._stable)
 
     async def get_agent_workspace(self, node_id: str) -> AgentWorkspace:
         """Get or create an AgentWorkspace for the given node ID."""
@@ -140,7 +96,7 @@ class CairnWorkspaceService:
             raw_workspace = await cairn_wm.open_workspace(str(workspace_path))
             self._manager.track_workspace(raw_workspace)
 
-            agent_workspace = AgentWorkspace(raw_workspace, node_id, self._stable)
+            agent_workspace = AgentWorkspace(raw_workspace, node_id)
             self._raw_agent_workspaces[node_id] = raw_workspace
             self._agent_workspaces[node_id] = agent_workspace
             return agent_workspace
@@ -172,7 +128,6 @@ class CairnWorkspaceService:
         """Close and release tracked workspaces."""
         self._agent_workspaces.clear()
         self._raw_agent_workspaces.clear()
-        self._stable = None
         await self._manager.close_all()
 
     @staticmethod

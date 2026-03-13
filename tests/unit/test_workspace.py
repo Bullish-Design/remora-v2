@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from cairn.runtime import workspace_manager as cairn_wm
+from fsdantic import FileNotFoundError as FsdFileNotFoundError
 
 from remora.core.config import Config
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
@@ -53,47 +54,35 @@ async def test_workspace_delete(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_workspace_list_all_paths(tmp_path: Path) -> None:
-    stable_ws = await cairn_wm.open_workspace(tmp_path / "stable")
     agent_ws = await cairn_wm.open_workspace(tmp_path / "agent-a")
-    await stable_ws.files.write("shared/base.txt", "base")
     await agent_ws.files.write("notes/a.txt", "a")
 
-    workspace = AgentWorkspace(agent_ws, "agent-a", stable_ws)
+    workspace = AgentWorkspace(agent_ws, "agent-a")
     paths = await workspace.list_all_paths()
 
-    assert "notes/a.txt" in paths
-    assert "shared/base.txt" in paths
+    assert paths == ["notes/a.txt"]
     await agent_ws.close()
-    await stable_ws.close()
 
 
 @pytest.mark.asyncio
-async def test_workspace_stable_fallthrough(tmp_path: Path) -> None:
-    stable_ws = await cairn_wm.open_workspace(tmp_path / "stable")
+async def test_workspace_missing_file_raises_without_fallback(tmp_path: Path) -> None:
     agent_ws = await cairn_wm.open_workspace(tmp_path / "agent-a")
-    await stable_ws.files.write("shared/config.txt", "stable-content")
-
-    workspace = AgentWorkspace(agent_ws, "agent-a", stable_ws)
-    assert await workspace.read("shared/config.txt") == "stable-content"
+    workspace = AgentWorkspace(agent_ws, "agent-a")
+    with pytest.raises((FileNotFoundError, FsdFileNotFoundError)):
+        await workspace.read("shared/config.txt")
 
     await agent_ws.close()
-    await stable_ws.close()
 
 
 @pytest.mark.asyncio
-async def test_workspace_cow_isolation(tmp_path: Path) -> None:
-    stable_ws = await cairn_wm.open_workspace(tmp_path / "stable")
+async def test_workspace_overwrite_is_local(tmp_path: Path) -> None:
     agent_ws = await cairn_wm.open_workspace(tmp_path / "agent-a")
-    await stable_ws.files.write("shared/config.txt", "stable-content")
-
-    workspace = AgentWorkspace(agent_ws, "agent-a", stable_ws)
+    workspace = AgentWorkspace(agent_ws, "agent-a")
+    await workspace.write("shared/config.txt", "stable-content")
     await workspace.write("shared/config.txt", "agent-content")
 
     assert await workspace.read("shared/config.txt") == "agent-content"
-    assert await stable_ws.files.read("shared/config.txt") == "stable-content"
-
     await agent_ws.close()
-    await stable_ws.close()
 
 
 @pytest.mark.asyncio
@@ -101,8 +90,8 @@ async def test_service_initialize(tmp_path: Path) -> None:
     config = Config(swarm_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
-    assert service._stable is not None
     assert (tmp_path / ".remora-test").exists()
+    assert not (tmp_path / ".remora-test" / "stable").exists()
     await service.close()
 
 
