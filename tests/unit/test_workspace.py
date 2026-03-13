@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 from cairn.runtime import workspace_manager as cairn_wm
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
 
@@ -146,7 +147,18 @@ async def test_service_provision_layering(tmp_path: Path) -> None:
 
     system_template = tmp_path / "system-template"
     (system_template / "tools").mkdir(parents=True)
-    (system_template / "bundle.yaml").write_text("name: system\nmax_turns: 2\n", encoding="utf-8")
+    (system_template / "bundle.yaml").write_text(
+        (
+            "name: system\n"
+            "system_prompt: base prompt\n"
+            "model: system-model\n"
+            "max_turns: 2\n"
+            "prompts:\n"
+            "  chat: SYSTEM_CHAT\n"
+            "  reactive: SYSTEM_REACTIVE\n"
+        ),
+        encoding="utf-8",
+    )
     (system_template / "tools" / "shared.pym").write_text("return 'system'\n", encoding="utf-8")
     (system_template / "tools" / "only_system.pym").write_text(
         "return 'system-only'\n",
@@ -155,7 +167,15 @@ async def test_service_provision_layering(tmp_path: Path) -> None:
 
     type_template = tmp_path / "type-template"
     (type_template / "tools").mkdir(parents=True)
-    (type_template / "bundle.yaml").write_text("name: code-agent\nmax_turns: 8\n", encoding="utf-8")
+    (type_template / "bundle.yaml").write_text(
+        (
+            "name: code-agent\n"
+            "max_turns: 8\n"
+            "prompts:\n"
+            "  chat: TYPE_CHAT\n"
+        ),
+        encoding="utf-8",
+    )
     (type_template / "tools" / "shared.pym").write_text("return 'type'\n", encoding="utf-8")
     (type_template / "tools" / "only_type.pym").write_text("return 'type-only'\n", encoding="utf-8")
 
@@ -167,8 +187,14 @@ async def test_service_provision_layering(tmp_path: Path) -> None:
     shared = await workspace.read("_bundle/tools/shared.pym")
     only_system = await workspace.read("_bundle/tools/only_system.pym")
     only_type = await workspace.read("_bundle/tools/only_type.pym")
+    bundle_data = yaml.safe_load(bundle)
 
     assert "name: code-agent" in bundle
+    assert bundle_data["system_prompt"] == "base prompt"
+    assert bundle_data["model"] == "system-model"
+    assert bundle_data["max_turns"] == 8
+    assert bundle_data["prompts"]["chat"] == "TYPE_CHAT"
+    assert bundle_data["prompts"]["reactive"] == "SYSTEM_REACTIVE"
     assert shared.strip() == "return 'type'"
     assert only_system.strip() == "return 'system-only'"
     assert only_type.strip() == "return 'type-only'"

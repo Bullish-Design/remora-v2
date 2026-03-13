@@ -29,9 +29,10 @@ async def project_nodes(
         existing = await node_store.get_node(cst.node_id)
         if existing is not None and existing.source_hash == source_hash:
             if sync_existing_bundles:
+                # System tools/config are always included; role bundle overlays them.
                 template_dirs = [bundle_root / "system"]
                 existing_bundle = existing.bundle_name
-                mapped_bundle = config.bundle_mapping.get(cst.node_type)
+                mapped_bundle = config.bundle_overlays.get(cst.node_type)
                 bundle_name = mapped_bundle or existing_bundle
                 if bundle_name:
                     template_dirs.append(bundle_root / bundle_name)
@@ -39,7 +40,7 @@ async def project_nodes(
             results.append(existing)
             continue
 
-        mapped_bundle = config.bundle_mapping.get(cst.node_type)
+        mapped_bundle = config.bundle_overlays.get(cst.node_type)
         code_node = CodeNode(
             node_id=cst.node_id,
             node_type=cst.node_type,
@@ -64,6 +65,7 @@ async def project_nodes(
         await node_store.upsert_node(code_node)
 
         if existing is None:
+            # System tools/config are always included; role bundle overlays them.
             template_dirs = [bundle_root / "system"]
             if mapped_bundle:
                 template_dirs.append(bundle_root / mapped_bundle)

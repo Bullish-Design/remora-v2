@@ -19,8 +19,7 @@ def test_directory_bundle_yaml_valid() -> None:
     bundle_path = Path("bundles/directory-agent/bundle.yaml")
     data = yaml.safe_load(bundle_path.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
-    assert "system_prompt" in data
-    assert "model" in data
-    assert "max_turns" in data
+    assert "system_prompt" not in data
+    assert data.get("system_prompt_extension")
     assert data.get("prompts", {}).get("chat")
     assert data.get("prompts", {}).get("reactive")

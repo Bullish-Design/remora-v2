@@ -25,7 +25,7 @@ async def projection_env(tmp_path: Path):
     config = Config(
         swarm_root=".remora-phase5",
         bundle_root=str(bundles_root),
-        bundle_mapping={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
+        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -111,7 +111,7 @@ async def test_project_unchanged_node_can_sync_existing_bundle_tools(
 
 
 @pytest.mark.asyncio
-async def test_project_bundle_mapping(tmp_path: Path) -> None:
+async def test_project_bundle_overlays(tmp_path: Path) -> None:
     db = AsyncDB.from_path(tmp_path / "bundle-map.db")
     node_store = NodeStore(db)
     await node_store.create_tables()
@@ -121,7 +121,7 @@ async def test_project_bundle_mapping(tmp_path: Path) -> None:
     config = Config(
         swarm_root=".remora-phase5",
         bundle_root=str(bundles_root),
-        bundle_mapping={"function": "special-agent"},
+        bundle_overlays={"function": "special-agent"},
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()

@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
 from cairn.runtime import workspace_manager as cairn_wm
 from fsdantic import ViewQuery
 
@@ -104,6 +105,7 @@ class CairnWorkspaceService:
     async def provision_bundle(self, node_id: str, template_dirs: list[Path]) -> None:
         """Copy bundle.yaml and tool scripts from ordered template directories."""
         workspace = await self.get_agent_workspace(node_id)
+        merged_bundle: dict[str, Any] = {}
 
         for template_dir in template_dirs:
             if not template_dir.exists():
@@ -111,10 +113,9 @@ class CairnWorkspaceService:
 
             bundle_yaml = template_dir / "bundle.yaml"
             if bundle_yaml.exists():
-                await workspace.write(
-                    "_bundle/bundle.yaml",
-                    bundle_yaml.read_text(encoding="utf-8"),
-                )
+                loaded = yaml.safe_load(bundle_yaml.read_text(encoding="utf-8")) or {}
+                if isinstance(loaded, dict):
+                    merged_bundle = _merge_dicts(merged_bundle, loaded)
 
             tools_dir = template_dir / "tools"
             if tools_dir.exists():
@@ -123,6 +124,12 @@ class CairnWorkspaceService:
                         f"_bundle/tools/{pym_file.name}",
                         pym_file.read_text(encoding="utf-8"),
                     )
+
+        if merged_bundle:
+            await workspace.write(
+                "_bundle/bundle.yaml",
+                yaml.safe_dump(merged_bundle, sort_keys=False),
+            )
 
     async def close(self) -> None:
         """Close and release tracked workspaces."""
@@ -140,3 +147,14 @@ class CairnWorkspaceService:
 
 
 __all__ = ["AgentWorkspace", "CairnWorkspaceService"]
+
+
+def _merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_dicts(existing, value)
+        else:
+            merged[key] = value
+    return merged

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
@@ -17,7 +17,7 @@ _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
 class Config(BaseSettings):
     """Remora configuration loaded from remora.yaml and environment variables."""
 
-    model_config = SettingsConfigDict(env_prefix="REMORA_", frozen=True)
+    model_config = SettingsConfigDict(env_prefix="REMORA_", frozen=True, populate_by_name=True)
 
     # Project
     project_path: str = "."
@@ -34,7 +34,7 @@ class Config(BaseSettings):
 
     # Bundles
     bundle_root: str = "bundles"
-    bundle_mapping: dict[str, str] = Field(
+    bundle_overlays: dict[str, str] = Field(
         default_factory=lambda: {
             "function": "code-agent",
             "class": "code-agent",
@@ -95,6 +95,20 @@ class Config(BaseSettings):
             return value
         cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
         return cleaned
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_bundle_mapping(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "bundle_mapping" in data and "bundle_overlays" not in data:
+            copied = dict(data)
+            copied["bundle_overlays"] = copied.pop("bundle_mapping")
+            return copied
+        return data
+
+    @property
+    def bundle_mapping(self) -> dict[str, str]:
+        """Backward-compatible alias for bundle_overlays."""
+        return self.bundle_overlays
 
 
 def _expand_string(value: str) -> str:

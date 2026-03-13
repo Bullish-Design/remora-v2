@@ -248,6 +248,9 @@ class AgentActor:
                     "system_prompt",
                     "You are an autonomous code agent.",
                 )
+                prompt_extension = bundle_config.get("system_prompt_extension", "")
+                if prompt_extension:
+                    system_prompt = f"{system_prompt}\n\n{prompt_extension}"
                 mode = self._turn_mode(trigger.event)
                 prompts = bundle_config.get("prompts") or {}
                 mode_prompt = prompts.get(mode, "") if hasattr(prompts, "get") else ""

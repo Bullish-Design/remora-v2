@@ -210,7 +210,7 @@ class FileReconciler:
             children = sorted(children_by_dir.get(dir_id, []))
             source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
             existing = existing_by_id.get(dir_id)
-            mapped_bundle = self._config.bundle_mapping.get(NodeType.DIRECTORY.value)
+            mapped_bundle = self._config.bundle_overlays.get(NodeType.DIRECTORY.value)
             refresh_subscriptions = not self._subscriptions_bootstrapped
             refresh_bundle = sync_existing_bundles
 
@@ -281,6 +281,7 @@ class FileReconciler:
 
     async def _provision_bundle(self, node_id: str, bundle_name: str | None) -> None:
         bundle_root = Path(self._config.bundle_root)
+        # System tools/config are always included; role bundle overlays them.
         template_dirs = [bundle_root / "system"]
         if bundle_name:
             template_dirs.append(bundle_root / bundle_name)
