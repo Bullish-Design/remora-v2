@@ -1,12 +1,12 @@
 {
-  "file": "/run/user/1000/remora-grail-zl72vvv9/subscribe.pym",
+  "file": "/run/user/1000/remora-grail-ym07nvdk/subscribe.pym",
   "valid": true,
   "errors": [],
   "warnings": [],
   "info": {
     "externals_count": 1,
     "inputs_count": 3,
-    "lines_of_code": 29,
+    "lines_of_code": 30,
     "monty_features_used": [
       "f_string",
       "list_comprehension"

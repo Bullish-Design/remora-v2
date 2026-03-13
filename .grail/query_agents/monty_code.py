@@ -2,4 +2,5 @@
 
 node_type_value: str | None = node_type.strip() if node_type.strip() else None
 agents = await graph_query_nodes(node_type_value, None)
-return str(agents)
+result = str(agents)
+result

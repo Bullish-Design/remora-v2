@@ -2,5 +2,7 @@
 
 result = await event_unsubscribe(subscription_id)
 if result:
-    return f'Unsubscribed: {subscription_id}'
-return f'Subscription not found: {subscription_id}'
+    message = f'Unsubscribed: {subscription_id}'
+else:
+    message = f'Subscription not found: {subscription_id}'
+message

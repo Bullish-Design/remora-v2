@@ -2,5 +2,7 @@
 
 result = await send_message(to_node_id, content)
 if result:
-    return f'Message sent to {to_node_id}'
-return f'Failed to send message to {to_node_id}'
+    message = f'Message sent to {to_node_id}'
+else:
+    message = f'Failed to send message to {to_node_id}'
+message

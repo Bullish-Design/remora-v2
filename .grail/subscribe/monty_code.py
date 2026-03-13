@@ -4,4 +4,5 @@ event_types_value: list[str] | None = [part.strip() for part in event_types.spli
 from_agents_value: list[str] | None = [part.strip() for part in from_agents.split(',') if part.strip()] if from_agents.strip() else None
 path_value: str | None = path_glob.strip() if path_glob.strip() else None
 subscription_id = await event_subscribe(event_types_value, from_agents_value, path_value)
-return f'Subscription {subscription_id} registered'
+message = f'Subscription {subscription_id} registered'
+message
