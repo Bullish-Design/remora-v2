@@ -355,6 +355,56 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
 
 
 @pytest.mark.asyncio
+async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) -> None:
+    env = actor_env
+    node = make_node("src/app.py::logged-newlines")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write(
+        "_bundle/bundle.yaml",
+        "system_prompt: \"line1\\nline2\"\nmodel: mock\nmax_turns: 1\n",
+    )
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="hello\nworld",
+        correlation_id="corr-log-nl",
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-log-nl",
+    )
+    trigger = Trigger(node_id=node.node_id, correlation_id="corr-log-nl", event=event)
+
+    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+        await actor._execute_turn(trigger, outbox)
+
+    request = next(
+        message
+        for message in (record.getMessage() for record in caplog.records)
+        if "Model request node=src/app.py::logged-newlines corr=corr-log-nl" in message
+    )
+    assert "line1\nline2" in request
+    assert "hello\nworld" in request
+    assert "line1\\nline2" not in request
+    assert "hello\\nworld" not in request
+
+
+@pytest.mark.asyncio
 async def test_actor_execute_turn_emits_error_event_on_kernel_failure(actor_env, monkeypatch) -> None:
     env = actor_env
     node = make_node("src/app.py::kernel-fail")

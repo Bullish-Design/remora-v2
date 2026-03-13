@@ -304,8 +304,8 @@ class AgentActor:
                         self._config.model_base_url,
                         model_name,
                         [schema.name for schema in tool_schemas],
-                        _preview_text(system_prompt),
-                        _preview_text(messages[1].content or ""),
+                        system_prompt,
+                        messages[1].content or "",
                     )
                     result = await kernel.run(messages, tool_schemas, max_turns=max_turns)
                 finally:
@@ -316,7 +316,7 @@ class AgentActor:
                     "Agent turn complete node=%s corr=%s response=%s",
                     node_id,
                     trigger.correlation_id,
-                    _preview_text(response_text),
+                    response_text,
                 )
                 await outbox.emit(
                     AgentCompleteEvent(
@@ -414,7 +414,3 @@ def _event_content(event: Event) -> str:
 
 
 __all__ = ["Outbox", "RecordingOutbox", "Trigger", "AgentActor"]
-
-
-def _preview_text(value: str) -> str:
-    return value.replace("\n", "\\n")

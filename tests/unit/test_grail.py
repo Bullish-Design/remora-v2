@@ -214,3 +214,27 @@ async def test_grail_tool_execute_logs_full_output_not_truncated(caplog) -> None
     )
     assert "TAIL" in completion
     assert "..." not in completion
+
+
+@pytest.mark.asyncio
+async def test_grail_tool_logging_preserves_newlines_in_output(caplog) -> None:
+    class ScriptStub:
+        name = "demo"
+        inputs = {}
+        externals = {}
+
+        async def run(self, inputs, externals):  # noqa: ANN001, ANN201
+            del inputs, externals
+            return "line1\nline2"
+
+    tool = GrailTool(script=ScriptStub(), externals={}, agent_id="node-x")
+    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+        await tool.execute({}, ToolCall(id="call-10", name="demo", arguments={}))
+
+    completion = next(
+        message
+        for message in (record.getMessage() for record in caplog.records)
+        if "Tool complete agent=node-x tool=demo call_id=call-10" in message
+    )
+    assert "line1\nline2" in completion
+    assert "line1\\nline2" not in completion
