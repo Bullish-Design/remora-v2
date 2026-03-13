@@ -8,4 +8,5 @@ async def propose_rewrite(new_source: str) -> str: ...
 
 
 proposal_id = await propose_rewrite(new_source)
-return f"Rewrite proposal created: {proposal_id}"
+message = f"Rewrite proposal created: {proposal_id}"
+message

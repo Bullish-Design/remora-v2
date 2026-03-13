@@ -7,5 +7,5 @@ content: str = Input("content")
 @external
 async def broadcast(pattern: str, content: str) -> str: ...
 
-
-return await broadcast(pattern, content)
+result = await broadcast(pattern, content)
+result

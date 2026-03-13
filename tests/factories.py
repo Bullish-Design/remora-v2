@@ -74,5 +74,5 @@ def write_bundle_templates(root: Path, bundle_name: str = "code-agent") -> None:
         f"name: {bundle_name}\nmax_turns: 8\n",
         encoding="utf-8",
     )
-    (system / "tools" / "send_message.pym").write_text("return 'ok'\n", encoding="utf-8")
-    (bundle / "tools" / "rewrite_self.pym").write_text("return 'ok'\n", encoding="utf-8")
+    (system / "tools" / "send_message.pym").write_text("result = 'ok'\nresult\n", encoding="utf-8")
+    (bundle / "tools" / "rewrite_self.pym").write_text("result = 'ok'\nresult\n", encoding="utf-8")

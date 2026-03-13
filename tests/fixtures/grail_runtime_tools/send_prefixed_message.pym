@@ -8,9 +8,9 @@ content: str = Input("content")
 async def send_message(to_node_id: str, content: str) -> bool: ...
 
 
-result = await send_message(to_node_id, content)
-if result:
-    message = f"Message sent to {to_node_id}"
+sent = await send_message(to_node_id, "[runtime] " + content)
+if sent:
+    result = "sent:" + to_node_id
 else:
-    message = f"Failed to send message to {to_node_id}"
-message
+    result = "failed:" + to_node_id
+result
