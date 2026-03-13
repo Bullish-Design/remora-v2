@@ -26,6 +26,17 @@ class Event(BaseModel):
         """Return a human-readable summary of this event."""
         return ""
 
+    def to_envelope(self) -> dict[str, Any]:
+        payload = self.model_dump(
+            exclude={"event_type", "timestamp", "correlation_id"},
+        )
+        return {
+            "event_type": self.event_type,
+            "timestamp": self.timestamp,
+            "correlation_id": self.correlation_id,
+            "payload": payload,
+        }
+
 
 class AgentStartEvent(Event):
     agent_id: str
@@ -55,6 +66,7 @@ class AgentMessageEvent(Event):
 
     def summary(self) -> str:
         return self.content
+
 
 class NodeDiscoveredEvent(Event):
     node_id: str

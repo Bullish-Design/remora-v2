@@ -90,9 +90,16 @@ def create_app(
             if replay_limit > 0:
                 rows = await event_store.get_events(limit=replay_limit)
                 for row in reversed(rows):
-                    payload = row.get("payload", {})
-                    payload_text = json.dumps(payload, separators=(",", ":"))
                     event_name = row.get("event_type", "Event")
+                    payload = row.get("payload", {})
+                    replay_payload: dict[str, Any] = {
+                        "event_type": event_name,
+                        "timestamp": row.get("timestamp"),
+                        "correlation_id": row.get("correlation_id"),
+                    }
+                    if isinstance(payload, dict):
+                        replay_payload.update(payload)
+                    payload_text = json.dumps(replay_payload, separators=(",", ":"))
                     yield f"event: {event_name}\ndata: {payload_text}\n\n"
             if once:
                 return

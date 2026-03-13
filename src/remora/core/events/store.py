@@ -70,11 +70,12 @@ class EventStore:
 
     async def append(self, event: Event) -> int:
         """Append an event and fan-out to bus and matching subscription triggers."""
-        payload = event.model_dump()
+        envelope = event.to_envelope()
+        payload = envelope["payload"]
         summary = event.summary()
-        agent_id = getattr(event, "agent_id", None)
-        from_agent = getattr(event, "from_agent", None)
-        to_agent = getattr(event, "to_agent", None)
+        agent_id = payload.get("agent_id")
+        from_agent = payload.get("from_agent")
+        to_agent = payload.get("to_agent")
 
         event_id = await self._db.insert(
             """
@@ -85,12 +86,12 @@ class EventStore:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                event.event_type,
+                envelope["event_type"],
                 agent_id,
                 from_agent,
                 to_agent,
-                event.correlation_id,
-                event.timestamp,
+                envelope["correlation_id"],
+                envelope["timestamp"],
                 json.dumps(payload),
                 summary,
             ),
