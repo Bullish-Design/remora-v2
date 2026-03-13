@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "name": "to_node_id",
+      "type": "str",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "content",
+      "type": "str",
+      "required": true,
+      "default": null
+    }
+  ]
+}

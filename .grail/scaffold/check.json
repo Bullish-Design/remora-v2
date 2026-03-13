@@ -6,7 +6,7 @@
   "info": {
     "externals_count": 1,
     "inputs_count": 3,
-    "lines_of_code": 20,
+    "lines_of_code": 22,
     "monty_features_used": [
       "f_string"
     ]

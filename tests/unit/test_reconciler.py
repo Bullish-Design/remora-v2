@@ -83,6 +83,16 @@ async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: 
     for node in stored:
         expected = 3 if node.node_type == "directory" else 2
         assert len(grouped[node.node_id]) == expected
+        if node.node_type == "directory":
+            directory_patterns = grouped[node.node_id]
+            assert any(
+                pattern.get("event_types") == ["NodeChangedEvent"]
+                for pattern in directory_patterns
+            )
+            assert not any(
+                "NodeDiscoveredEvent" in (pattern.get("event_types") or [])
+                for pattern in directory_patterns
+            )
 
 
 @pytest.mark.asyncio
@@ -268,3 +278,50 @@ async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_p
         if event["event_type"] == "NodeRemovedEvent"
     ]
     assert "src/gone" in removed_ids
+
+
+@pytest.mark.asyncio
+async def test_directory_subscriptions_upgraded_on_startup(reconcile_env, tmp_path: Path) -> None:
+    node_store, agent_store, event_store, workspace_service, config, reconciler = reconcile_env
+    write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
+    await reconciler.full_scan()
+
+    conn = event_store.connection
+    assert conn is not None
+    conn.execute("DELETE FROM subscriptions WHERE agent_id = '.'")
+    conn.execute(
+        """
+        INSERT INTO subscriptions (agent_id, pattern_json, created_at)
+        VALUES (?, ?, strftime('%s','now'))
+        """,
+        (
+            ".",
+            json.dumps(
+                {
+                    "event_types": ["NodeDiscoveredEvent", "NodeRemovedEvent", "NodeChangedEvent"],
+                    "from_agents": None,
+                    "to_agent": None,
+                    "path_glob": "**",
+                }
+            ),
+        ),
+    )
+    conn.commit()
+
+    restart_reconciler = FileReconciler(
+        config,
+        node_store,
+        agent_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+    )
+    await restart_reconciler.reconcile_cycle()
+
+    rows = conn.execute("SELECT pattern_json FROM subscriptions WHERE agent_id = '.'").fetchall()
+    patterns = [json.loads(row["pattern_json"]) for row in rows]
+    assert any(pattern.get("event_types") == ["NodeChangedEvent"] for pattern in patterns)
+    assert not any(
+        "NodeDiscoveredEvent" in (pattern.get("event_types") or [])
+        for pattern in patterns
+    )

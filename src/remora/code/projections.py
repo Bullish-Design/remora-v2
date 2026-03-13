@@ -17,6 +17,8 @@ async def project_nodes(
     node_store: NodeStore,
     workspace_service: CairnWorkspaceService,
     config: Config,
+    *,
+    sync_existing_bundles: bool = False,
 ) -> list[CodeNode]:
     """Project CSTNodes into CodeNodes and provision bundles for new nodes."""
     results: list[CodeNode] = []
@@ -26,6 +28,14 @@ async def project_nodes(
         source_hash = hashlib.sha256(cst.text.encode("utf-8")).hexdigest()
         existing = await node_store.get_node(cst.node_id)
         if existing is not None and existing.source_hash == source_hash:
+            if sync_existing_bundles:
+                template_dirs = [bundle_root / "system"]
+                existing_bundle = existing.bundle_name
+                mapped_bundle = config.bundle_mapping.get(cst.node_type)
+                bundle_name = mapped_bundle or existing_bundle
+                if bundle_name:
+                    template_dirs.append(bundle_root / bundle_name)
+                await workspace_service.provision_bundle(cst.node_id, template_dirs)
             results.append(existing)
             continue
 

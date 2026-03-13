@@ -1,0 +1,22 @@
+{
+  "externals": [
+    {
+      "name": "send_message",
+      "async": true,
+      "parameters": [
+        {
+          "name": "to_node_id",
+          "type": "str",
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "str",
+          "default": null
+        }
+      ],
+      "return_type": "bool",
+      "docstring": null
+    }
+  ]
+}

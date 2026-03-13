@@ -12,4 +12,5 @@ if lines:
 else:
     content = content + 'No events available.'
 await write_file('notes/summary.md', content)
-return 'Summary updated'
+result = 'Summary updated'
+result

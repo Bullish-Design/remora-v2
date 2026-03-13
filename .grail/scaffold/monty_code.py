@@ -3,5 +3,7 @@
 payload = {'agent_id': agent_id, 'intent': intent, 'element_type': element_type or 'function'}
 sent = await event_emit('ScaffoldRequestEvent', payload)
 if sent:
-    return f'Scaffold request submitted: {intent}'
-return 'Failed to submit scaffold request'
+    result = f'Scaffold request submitted: {intent}'
+else:
+    result = 'Failed to submit scaffold request'
+result

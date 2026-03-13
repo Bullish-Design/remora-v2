@@ -1,0 +1,12 @@
+{
+  "file": "/run/user/1000/remora-grail-drt3oqpo/count_children.pym",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "info": {
+    "externals_count": 1,
+    "inputs_count": 0,
+    "lines_of_code": 10,
+    "monty_features_used": []
+  }
+}

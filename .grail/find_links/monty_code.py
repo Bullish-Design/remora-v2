@@ -13,4 +13,5 @@ if lines:
 else:
     content = content + 'No links found.'
 await write_file('meta/links.md', content)
-return f'Recorded {len(lines)} links'
+result = f'Recorded {len(lines)} links'
+result

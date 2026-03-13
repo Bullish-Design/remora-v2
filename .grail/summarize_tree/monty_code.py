@@ -23,5 +23,7 @@ def render(node_id: str, depth: int=0) -> list[str]:
     return lines
 tree_lines = render(current_id)
 if not tree_lines:
-    return 'Empty directory.'
-return 'Directory tree:\n' + '\n'.join(tree_lines)
+    result = 'Empty directory.'
+else:
+    result = 'Directory tree:\n' + '\n'.join(tree_lines)
+result

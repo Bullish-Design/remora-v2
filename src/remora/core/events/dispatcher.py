@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from remora.core.events.subscriptions import SubscriptionRegistry
 from remora.core.events.types import Event
+
+logger = logging.getLogger(__name__)
 
 
 class TriggerDispatcher:
@@ -35,7 +38,15 @@ class TriggerDispatcher:
         """Match event against subscriptions and route to agent inboxes."""
         if self._router is None:
             return
-        for agent_id in await self._subscriptions.get_matching_agents(event):
+        matching_agents = await self._subscriptions.get_matching_agents(event)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Dispatch event=%s corr=%s matched_agents=%d",
+                event.event_type,
+                event.correlation_id,
+                len(matching_agents),
+            )
+        for agent_id in matching_agents:
             self._router(agent_id, event)
 
     @property

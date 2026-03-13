@@ -48,6 +48,12 @@ class FileReconciler:
         self._project_root = project_root.resolve()
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._running = False
+        # Re-register directory subscriptions once after startup so older
+        # subscription shapes are migrated without requiring a DB reset.
+        self._subscriptions_bootstrapped = False
+        # Re-copy bundle templates once after startup so existing agent workspaces
+        # pick up updated tool scripts.
+        self._bundles_bootstrapped = False
 
     async def full_scan(self) -> list[CodeNode]:
         """Perform a full startup scan and return current graph nodes."""
@@ -191,6 +197,8 @@ class FileReconciler:
             source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
             existing = existing_by_id.get(dir_id)
             mapped_bundle = self._config.bundle_mapping.get(NodeType.DIRECTORY.value)
+            refresh_subscriptions = not self._subscriptions_bootstrapped
+            refresh_bundle = not self._bundles_bootstrapped
 
             directory_node = CodeNode(
                 node_id=dir_id,
@@ -237,6 +245,12 @@ class FileReconciler:
             if metadata_changed or hash_changed:
                 await self._node_store.upsert_node(directory_node)
 
+            if refresh_subscriptions:
+                await self._register_subscriptions(directory_node)
+                await self._ensure_agent(directory_node)
+            if refresh_bundle:
+                await self._provision_bundle(directory_node.node_id, directory_node.bundle_name)
+
             if hash_changed:
                 await self._register_subscriptions(directory_node)
                 await self._ensure_agent(directory_node)
@@ -248,6 +262,9 @@ class FileReconciler:
                         file_path=directory_node.file_path,
                     )
                 )
+
+        self._subscriptions_bootstrapped = True
+        self._bundles_bootstrapped = True
 
     async def _provision_bundle(self, node_id: str, bundle_name: str | None) -> None:
         bundle_root = Path(self._config.bundle_root)
@@ -305,6 +322,7 @@ class FileReconciler:
             self._node_store,
             self._workspace_service,
             self._config,
+            sync_existing_bundles=not self._bundles_bootstrapped,
         )
 
         dir_node_id = self._directory_id_for_file(file_path)
@@ -383,7 +401,7 @@ class FileReconciler:
             await self._event_store.subscriptions.register(
                 node.node_id,
                 SubscriptionPattern(
-                    event_types=["NodeDiscoveredEvent", "NodeRemovedEvent", "NodeChangedEvent"],
+                    event_types=["NodeChangedEvent"],
                     path_glob=subtree_glob,
                 ),
             )

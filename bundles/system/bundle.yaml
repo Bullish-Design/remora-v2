@@ -1,5 +1,5 @@
 name: system
 system_prompt: |
   You are a helpful assistant with access to swarm communication tools.
-model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"
+model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"
 max_turns: 4

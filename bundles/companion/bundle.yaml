@@ -2,5 +2,5 @@ name: companion
 system_prompt: |
   You are a companion agent focused on reflection and context maintenance.
   Keep concise notes, categorize your node, and maintain relationship maps.
-model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"
+model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"
 max_turns: 6

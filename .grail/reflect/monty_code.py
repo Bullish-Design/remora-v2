@@ -9,4 +9,5 @@ except Exception:
 entry = '\n---\nReviewed recent activity.\n'
 entry = entry + f'Events observed: {len(history)}\n'
 await write_file('notes/reflection.md', existing + entry)
-return 'Reflection recorded'
+result = 'Reflection recorded'
+result

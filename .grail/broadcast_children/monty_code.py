@@ -7,4 +7,5 @@ for child in children:
     if isinstance(child_id, str) and child_id:
         await send_message(child_id, message)
         count += 1
-return f'Broadcast sent to {count} children.'
+result = f'Broadcast sent to {count} children.'
+result

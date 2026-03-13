@@ -13,7 +13,7 @@ import yaml
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
 from structured_agents import Message
 
-from remora.core.config import Config
+from remora.core.config import Config, _expand_env_vars
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
@@ -262,6 +262,15 @@ class AgentActor:
                 )
                 externals = context.to_externals_dict()
                 tools = await self._resolve_maybe_awaitable(discover_tools(workspace, externals))
+                logger.info(
+                    "Agent turn start node=%s corr=%s model=%s tools=%d max_turns=%d trigger=%s",
+                    node_id,
+                    trigger.correlation_id,
+                    model_name,
+                    len(tools),
+                    max_turns,
+                    trigger.event.event_type if trigger.event is not None else "manual",
+                )
 
                 messages = [
                     Message(role="system", content=system_prompt),
@@ -277,11 +286,30 @@ class AgentActor:
                 )
                 try:
                     tool_schemas = [tool.schema for tool in tools]
+                    logger.info(
+                        (
+                            "Model request node=%s corr=%s base_url=%s model=%s "
+                            "tools=%s system=%s user=%s"
+                        ),
+                        node_id,
+                        trigger.correlation_id,
+                        self._config.model_base_url,
+                        model_name,
+                        [schema.name for schema in tool_schemas],
+                        _preview_text(system_prompt, limit=300),
+                        _preview_text(messages[1].content or "", limit=700),
+                    )
                     result = await kernel.run(messages, tool_schemas, max_turns=max_turns)
                 finally:
                     await kernel.close()
 
                 response_text = extract_response_text(result)
+                logger.info(
+                    "Agent turn complete node=%s corr=%s response=%s",
+                    node_id,
+                    trigger.correlation_id,
+                    _preview_text(response_text, limit=500),
+                )
                 await outbox.emit(
                     AgentCompleteEvent(
                         agent_id=node_id,
@@ -360,7 +388,7 @@ class AgentActor:
             text = await workspace.read("_bundle/bundle.yaml")
         except (FileNotFoundError, FsdFileNotFoundError):
             return {}
-        return yaml.safe_load(text) or {}
+        return _expand_env_vars(yaml.safe_load(text) or {})
 
 
 def _event_content(event: Event) -> str:
@@ -372,3 +400,10 @@ def _event_content(event: Event) -> str:
 
 
 __all__ = ["Outbox", "RecordingOutbox", "Trigger", "AgentActor"]
+
+
+def _preview_text(value: str, *, limit: int) -> str:
+    compact = value.replace("\n", "\\n")
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3] + "..."

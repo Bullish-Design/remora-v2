@@ -1,105 +1,52 @@
-# 10-Minute Real-World Demo Runbook (Setup -> Live Demo -> Shutdown)
+# 10-Minute Real-World Demo Runbook (Using `/home/andrew/Documents/Projects/remora-test`)
 
-This runbook shows Remora as a real engineering assistant over a small but realistic Python service repo, including:
-- directory/root nodes (`"."`, `src`, `src/services`, etc.)
-- live reconcile (discover/change/remove)
-- event stream visibility
-- agent triggering via `/api/chat`
-- optional autonomous rewrite if model is available
+This runbook demonstrates Remora against a prebuilt sample repo at:
 
-## 1. Prereqs
+`/home/andrew/Documents/Projects/remora-test`
+
+It shows:
+- Directory/root nodes (`.` plus folder hierarchy)
+- Live reconcile (discover/change/remove)
+- Event streaming over SSE
+- Agent triggering through `/api/chat`
+- Optional autonomous rewrite flow
+
+## 1. Terminals and Environment
 
 Use 3 terminals:
-- `T1`: Remora server
-- `T2`: API + control commands
-- `T3`: live SSE stream
-
-Assume:
-- Remora repo is at `/home/andrew/Documents/Projects/remora-v2`
-- You can run `devenv shell -- ...`
+- `T1`: Remora runtime
+- `T2`: Control commands and API calls
+- `T3`: SSE event stream
 
 In `T2`:
 ```bash
 export REMORA_ROOT=/home/andrew/Documents/Projects/remora-v2
-export DEMO_ROOT=/tmp/remora-realworld-demo
+export DEMO_ROOT=/home/andrew/Documents/Projects/remora-test
 cd "$REMORA_ROOT"
 devenv shell -- uv sync --extra dev
 ```
 
-Optional (for full autonomous rewrite):
+Optional model settings:
 ```bash
 export REMORA_MODEL_BASE_URL=http://127.0.0.1:8000/v1
 export REMORA_MODEL_API_KEY=dummy
-export REMORA_MODEL=Qwen/Qwen3-4B
+export REMORA_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
 ```
 
-## 2. Create a realistic demo project
+## 2. Reset Demo Repo to Baseline (repeatable)
 
-In `T2`:
+The sample project is already initialized as a git repo. Before each demo run:
+
 ```bash
-rm -rf "$DEMO_ROOT"
-mkdir -p "$DEMO_ROOT/src/api" "$DEMO_ROOT/src/services" "$DEMO_ROOT/src/utils"
-
-cat > "$DEMO_ROOT/src/api/orders.py" << 'PYEOF'
-from src.services.pricing import compute_total
-from src.services.discounts import discount_for_tier
-
-def create_order(user_tier: str, item_prices: list[float]) -> dict:
-    subtotal = compute_total(item_prices)
-    discount = discount_for_tier(user_tier, subtotal)
-    total = subtotal - discount
-    return {"subtotal": subtotal, "discount": discount, "total": total}
-PYEOF
-
-cat > "$DEMO_ROOT/src/services/pricing.py" << 'PYEOF'
-def compute_total(item_prices: list[float]) -> float:
-    return sum(item_prices)
-PYEOF
-
-cat > "$DEMO_ROOT/src/services/discounts.py" << 'PYEOF'
-def discount_for_tier(tier: str, subtotal: float) -> float:
-    if tier == "gold":
-        return subtotal * 0.15
-    if tier == "silver":
-        return subtotal * 0.05
-    return 0.0
-PYEOF
-
-cat > "$DEMO_ROOT/src/utils/money.py" << 'PYEOF'
-def format_usd(value: float) -> str:
-    return f"${value:.2f}"
-PYEOF
-
-cat > "$DEMO_ROOT/src/main.py" << 'PYEOF'
-from src.api.orders import create_order
-
-if __name__ == "__main__":
-    result = create_order("gold", [10.0, 20.0, 5.0])
-    print(result)
-PYEOF
-
-cat > "$DEMO_ROOT/remora.yaml" << EOF2
-discovery_paths:
-  - src
-discovery_languages:
-  - python
-swarm_root: .remora
-bundle_root: ${REMORA_ROOT}/bundles
-model_base_url: \${REMORA_MODEL_BASE_URL:-http://localhost:8000/v1}
-model_api_key: \${REMORA_MODEL_API_KEY:-}
-model_default: \${REMORA_MODEL:-Qwen/Qwen3-4B}
-bundle_mapping:
-  function: code-agent
-  class: code-agent
-  method: code-agent
-  file: code-agent
-  directory: directory-agent
-EOF2
-
 cd "$DEMO_ROOT"
-git init
-git add .
-git commit -m "demo baseline"
+git reset --hard HEAD
+git clean -fd
+```
+
+Quick sanity checks:
+```bash
+find src -maxdepth 3 -type f | sort
+cat remora.yaml
 ```
 
 ## 3. Start Remora
@@ -110,85 +57,83 @@ cd "$REMORA_ROOT"
 devenv shell -- remora start --project-root "$DEMO_ROOT" --port 8080
 ```
 
-Keep this running.
-
-## 4. Verify graph + directory hierarchy
+## 4. Verify Graph and Directory Hierarchy
 
 In `T2`:
-
 ```bash
 curl -sS http://127.0.0.1:8080/api/nodes | jq 'length'
 ```
 
-Show node counts by type:
+Node counts by type:
 ```bash
 curl -sS http://127.0.0.1:8080/api/nodes | \
 jq -r 'group_by(.node_type)[] | "\(.[0].node_type)\t\(length)"'
 ```
 
-Show directory parent chain:
+Directory chain:
 ```bash
 curl -sS http://127.0.0.1:8080/api/nodes | \
 jq -r '.[] | select(.node_type=="directory") | [.node_id, (.parent_id // "null")] | @tsv' | sort
 ```
 
-Show top-level children of root:
+Children of root (`.`):
 ```bash
 curl -sS http://127.0.0.1:8080/api/nodes | \
 jq -r '.[] | select(.parent_id==".") | [.node_type, .node_id] | @tsv' | sort
 ```
 
-## 5. Start live event stream
+## 5. Start Live Event Stream
 
 In `T3`:
 ```bash
 curl -N "http://127.0.0.1:8080/sse?replay=20"
 ```
 
-You’ll see event lines streaming in as changes happen.
+## 6. Trigger Real Structural Changes
 
-## 6. Live structural change demo (real-time reconcile)
+In `T2`, perform three realistic repo edits:
 
-In `T2`, make three changes:
-
-1) add file:
+1) Add new service file:
 ```bash
-cat > "$DEMO_ROOT/src/services/tax.py" << 'PYEOF'
-def apply_tax(amount: float, rate: float = 0.07) -> float:
-    return amount * (1.0 + rate)
+cat > "$DEMO_ROOT/src/services/fraud.py" << 'PYEOF'
+def risk_score(amount: float, user_tier: str) -> float:
+    base = amount / 100.0
+    if user_tier.lower().strip() == "gold":
+        return max(0.0, base - 0.2)
+    return min(1.0, base)
 PYEOF
 ```
 
-2) modify file:
+2) Modify existing pricing logic:
 ```bash
 cat > "$DEMO_ROOT/src/services/pricing.py" << 'PYEOF'
 def compute_total(item_prices: list[float]) -> float:
     subtotal = sum(item_prices)
+    # Guard against tiny floating artifacts
     return round(subtotal, 2)
 PYEOF
 ```
 
-3) remove file:
+3) Remove utility file:
 ```bash
 rm -f "$DEMO_ROOT/src/utils/money.py"
 ```
 
-Now narrate from `T3` stream:
-- `NodeDiscoveredEvent` for new nodes
-- `NodeChangedEvent` on changed nodes/directories
-- `NodeRemovedEvent` for removed nodes
-- `ContentChangedEvent` where applicable
+Narrate from `T3` as events appear:
+- `NodeDiscoveredEvent`
+- `NodeChangedEvent`
+- `NodeRemovedEvent`
+- `ContentChangedEvent`
 
-Re-query directory structure in `T2`:
+Re-check hierarchy in `T2`:
 ```bash
 curl -sS http://127.0.0.1:8080/api/nodes | \
 jq -r '.[] | select(.node_type=="directory") | [.node_id, (.parent_id // "null")] | @tsv' | sort
 ```
 
-## 7. Trigger agents via real API chat
+## 7. Trigger Directory and Function Agents
 
-Pick node IDs dynamically:
-
+In `T2`, select targets dynamically:
 ```bash
 ORDER_NODE=$(curl -sS http://127.0.0.1:8080/api/nodes | jq -r '.[] | select(.name=="create_order") | .node_id' | head -n1)
 DIR_NODE="src/services"
@@ -196,72 +141,74 @@ echo "ORDER_NODE=$ORDER_NODE"
 echo "DIR_NODE=$DIR_NODE"
 ```
 
-Send a directory-level request:
+Ask directory node for structural coordination insight:
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/api/chat \
   -H 'Content-Type: application/json' \
-  -d "{\"node_id\":\"$DIR_NODE\",\"message\":\"Summarize your immediate children and suggest one refactor.\"}"
+  -d "{\"node_id\":\"$DIR_NODE\",\"message\":\"Summarize your immediate children and suggest one refactor for service cohesion.\"}"
 ```
 
-Send a function-level request:
+Ask function node for robustness review:
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/api/chat \
   -H 'Content-Type: application/json' \
-  -d "{\"node_id\":\"$ORDER_NODE\",\"message\":\"Review create_order for robustness and apply a minimal safe rewrite if needed.\"}"
+  -d "{\"node_id\":\"$ORDER_NODE\",\"message\":\"Review create_order for input safety and suggest a minimal safe patch.\"}"
 ```
 
-Inspect lifecycle events:
+Show lifecycle events:
 ```bash
 curl -sS "http://127.0.0.1:8080/api/events?limit=80" | \
 jq -r '.[] | select(.event_type=="AgentStartEvent" or .event_type=="AgentCompleteEvent" or .event_type=="AgentErrorEvent") | [.event_type, (.payload.agent_id // ""), (.payload.error // .payload.result_summary // "")] | @tsv'
 ```
 
-## 8. Optional: show autonomous code change (if model is available)
+## 8. Optional Autonomous Rewrite Proof
 
-Check diff:
+Inspect current patch:
 ```bash
-git -C "$DEMO_ROOT" diff -- src/api/orders.py src/services/pricing.py
+cd "$DEMO_ROOT"
+git diff -- src/api/orders.py src/services/pricing.py
 ```
 
-If there’s no edit yet, send a more explicit instruction:
+If needed, send explicit rewrite instruction:
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/api/chat \
   -H 'Content-Type: application/json' \
-  -d "{\"node_id\":\"$ORDER_NODE\",\"message\":\"Use rewrite_self to add input validation: reject empty item_prices and unknown user_tier values.\"}"
+  -d "{\"node_id\":\"$ORDER_NODE\",\"message\":\"Use rewrite_self to add validation: reject empty item_prices and unknown user_tier values.\"}"
 ```
 
-Then re-check:
+Then check patch again:
 ```bash
 sleep 3
 git -C "$DEMO_ROOT" diff -- src/api/orders.py
 ```
 
-## 9. Quick project root orchestrator moment
+## 9. Root Project Node Moment
 
-Send to root node:
+Ask the root orchestrator:
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"node_id":".","message":"Give a 5-line project structure summary and one cross-directory improvement suggestion."}'
 ```
 
-Then show recent events:
+Show recent event mix:
 ```bash
 curl -sS "http://127.0.0.1:8080/api/events?limit=30" | jq -r '.[].event_type'
 ```
 
 ## 10. Shutdown
 
-In `T1`, stop Remora with `Ctrl+C`.
+In `T1`: `Ctrl+C`
 
-Verify stopped (`T2`):
+Verify process stopped (`T2`):
 ```bash
 pgrep -af "remora start --project-root $DEMO_ROOT" || echo "Remora stopped"
 ```
 
-Optional cleanup:
+Optional cleanup between demos:
 ```bash
-rm -rf "$DEMO_ROOT/.remora"
-# Or remove full demo:
-# rm -rf "$DEMO_ROOT"
+cd "$DEMO_ROOT"
+git reset --hard HEAD
+git clean -fd
+rm -rf .remora
 ```

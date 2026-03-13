@@ -12,4 +12,5 @@ elif 'class ' in source_code:
     category = 'oop'
 content = f'# Categories\n\nType: {node_type}\nPrimary: {category}\n'
 await write_file('meta/categories.md', content)
-return f'Categorization updated: {category}'
+result = f'Categorization updated: {category}'
+result

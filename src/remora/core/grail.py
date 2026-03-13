@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -68,9 +69,13 @@ class GrailTool:
         *,
         externals: dict[str, Any],
         name_override: str | None = None,
+        agent_id: str = "?",
+        source_file: str | None = None,
     ):
         self._script = script
         self._externals = externals
+        self._agent_id = agent_id
+        self._source_file = source_file or f"{script.name}.pym"
         self._schema = ToolSchema(
             name=name_override or script.name,
             description=f"Tool: {script.name}",
@@ -83,6 +88,15 @@ class GrailTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolCall | None) -> ToolResult:
         call_id = context.id if context else ""
+        started = time.perf_counter()
+        logger.info(
+            "Tool start agent=%s tool=%s call_id=%s source=%s args=%s",
+            self._agent_id,
+            self._schema.name,
+            call_id or "-",
+            self._source_file,
+            _preview(arguments, limit=300),
+        )
         try:
             used_externals = {
                 name: fn
@@ -91,6 +105,14 @@ class GrailTool:
             }
             result = await self._script.run(inputs=arguments, externals=used_externals)
             output = result if isinstance(result, str) else json.dumps(result)
+            logger.info(
+                "Tool complete agent=%s tool=%s call_id=%s duration_ms=%.1f output=%s",
+                self._agent_id,
+                self._schema.name,
+                call_id or "-",
+                (time.perf_counter() - started) * 1000.0,
+                _preview(output, limit=400),
+            )
             return ToolResult(
                 call_id=call_id,
                 name=self._schema.name,
@@ -98,6 +120,15 @@ class GrailTool:
                 is_error=False,
             )
         except Exception as exc:  # noqa: BLE001 - tool boundary must return errors
+            logger.exception(
+                "Tool failed agent=%s tool=%s call_id=%s duration_ms=%.1f source=%s args=%s",
+                self._agent_id,
+                self._schema.name,
+                call_id or "-",
+                (time.perf_counter() - started) * 1000.0,
+                self._source_file,
+                _preview(arguments, limit=300),
+            )
             return ToolResult(
                 call_id=call_id,
                 name=self._schema.name,
@@ -111,9 +142,11 @@ async def discover_tools(
     externals: dict[str, Any],
 ) -> list[GrailTool]:
     """Discover .pym tools under _bundle/tools in an agent workspace."""
+    agent_id = str(getattr(workspace, "_agent_id", "?"))
     try:
         tool_files = await workspace.list_dir("_bundle/tools")
     except (FileNotFoundError, FsdFileNotFoundError):
+        logger.info("No tools directory for agent=%s", agent_id)
         return []
 
     tools: list[GrailTool] = []
@@ -123,11 +156,27 @@ async def discover_tools(
         try:
             source = await workspace.read(f"_bundle/tools/{filename}")
             script = _load_script_from_source(source, filename.removesuffix(".pym"))
-            tools.append(GrailTool(script=script, externals=externals))
-        except Exception as exc:  # noqa: BLE001 - skip invalid tool and continue
-            logger.warning("Failed to load tool %s: %s", filename, exc)
+            tools.append(
+                GrailTool(
+                    script=script,
+                    externals=externals,
+                    agent_id=agent_id,
+                    source_file=filename,
+                )
+            )
+        except Exception:  # noqa: BLE001 - skip invalid tool and continue
+            logger.exception("Failed to load tool %s for agent=%s", filename, agent_id)
 
+    logger.info("Loaded %d Grail tool(s) for agent=%s", len(tools), agent_id)
     return tools
 
 
 __all__ = ["GrailTool", "discover_tools"]
+
+
+def _preview(value: Any, *, limit: int) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, default=str)
+    text = text.replace("\n", "\\n")
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."

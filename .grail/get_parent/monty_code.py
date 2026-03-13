@@ -4,8 +4,11 @@ node_id = await my_node_id()
 self_node = await graph_get_node(node_id)
 parent_id = self_node.get('parent_id') if self_node else None
 if not parent_id:
-    return 'This is the root directory - no parent.'
-parent = await graph_get_node(parent_id)
-if not parent:
-    return 'Parent not found.'
-return f"Parent: {parent.get('name', '?')} ({parent_id})"
+    result = 'This is the root directory - no parent.'
+else:
+    parent = await graph_get_node(parent_id)
+    if not parent:
+        result = 'Parent not found.'
+    else:
+        result = f"Parent: {parent.get('name', '?')} ({parent_id})"
+result

@@ -43,3 +43,6 @@ def test_cli_start_smoke(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert (tmp_path / ".remora" / "remora.db").exists()
+    log_path = tmp_path / ".remora" / "remora.log"
+    assert log_path.exists()
+    assert "Initializing runtime services" in log_path.read_text(encoding="utf-8")

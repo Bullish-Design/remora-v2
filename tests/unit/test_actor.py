@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
+from structured_agents import Message
+from tests.factories import make_node
 
 from remora.core.actor import AgentActor, Outbox, RecordingOutbox, Trigger
 from remora.core.config import Config
@@ -14,7 +18,6 @@ from remora.core.db import AsyncDB
 from remora.core.events import AgentCompleteEvent, AgentStartEvent, EventStore, HumanChatEvent
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
-from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -173,9 +176,6 @@ async def test_actor_processes_inbox_message(actor_env, monkeypatch) -> None:
     ws = await env["workspace_service"].get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    from types import SimpleNamespace
-    from structured_agents import Message
-
     class MockKernel:
         async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
             del max_turns
@@ -212,3 +212,80 @@ async def test_actor_missing_node(actor_env) -> None:
     await actor._execute_turn(trigger, outbox)
     events = await actor_env["event_store"].get_events(limit=5)
     assert not any(event["event_type"] == "AgentStartEvent" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_read_bundle_config_expands_model_from_env_default(actor_env, monkeypatch) -> None:
+    monkeypatch.delenv("REMORA_MODEL", raising=False)
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::f")
+    await workspace.write(
+        "_bundle/bundle.yaml",
+        'model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"\n',
+    )
+
+    bundle_config = await AgentActor._read_bundle_config(workspace)
+    assert bundle_config["model"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+
+
+@pytest.mark.asyncio
+async def test_read_bundle_config_allows_env_override_for_placeholder(
+    actor_env,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("REMORA_MODEL", "my-org/custom-model")
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::g")
+    await workspace.write("_bundle/bundle.yaml", 'model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"\n')
+
+    bundle_config = await AgentActor._read_bundle_config(workspace)
+    assert bundle_config["model"] == "my-org/custom-model"
+
+
+@pytest.mark.asyncio
+async def test_read_bundle_config_literal_model_overrides_env(actor_env, monkeypatch) -> None:
+    monkeypatch.setenv("REMORA_MODEL", "my-org/custom-model")
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::h")
+    await workspace.write("_bundle/bundle.yaml", "model: pinned/model\n")
+
+    bundle_config = await AgentActor._read_bundle_config(workspace)
+    assert bundle_config["model"] == "pinned/model"
+
+
+@pytest.mark.asyncio
+async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, caplog) -> None:
+    env = actor_env
+    node = make_node("src/app.py::logged")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-log")
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-log",
+    )
+    trigger = Trigger(node_id=node.node_id, correlation_id="corr-log", event=event)
+
+    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+        await actor._execute_turn(trigger, outbox)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "Model request node=src/app.py::logged corr=corr-log" in message for message in messages
+    )
+    assert any(
+        "Agent turn complete node=src/app.py::logged corr=corr-log response=ok" in message
+        for message in messages
+    )

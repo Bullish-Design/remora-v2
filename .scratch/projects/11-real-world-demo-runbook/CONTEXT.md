@@ -1,10 +1,11 @@
 # Context
 
 ## Current Status
-Runbook is authored and saved.
+Runbook saved and updated to use the fixed sample repo at `/home/andrew/Documents/Projects/remora-test`.
 
 ## What Was Added
-A full step-by-step real-world Remora demo script (setup -> live usage -> shutdown) suitable for a 10-minute presentation.
+- A populated demo project structure in `/home/andrew/Documents/Projects/remora-test` with realistic API/service/model/util files.
+- A rewritten step-by-step demo walkthrough that targets this existing directory directly.
 
 ## Next Step
-Reuse this runbook directly, or adapt paths/ports/model env for a specific environment.
+Install/start Remora in `remora-test` and follow `DEMO_RUNBOOK.md` verbatim.

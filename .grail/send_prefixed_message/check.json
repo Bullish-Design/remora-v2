@@ -1,0 +1,12 @@
+{
+  "file": "/run/user/1000/remora-grail-b0ufadzh/send_prefixed_message.pym",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "info": {
+    "externals_count": 1,
+    "inputs_count": 2,
+    "lines_of_code": 16,
+    "monty_features_used": []
+  }
+}

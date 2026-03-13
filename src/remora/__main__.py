@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Annotated
 
@@ -15,6 +17,7 @@ from remora.code.discovery import discover as discover_nodes
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.core.config import load_config
 from remora.core.db import AsyncDB
+from remora.core.events import Event
 from remora.core.services import RuntimeServices
 from remora.web.server import create_app
 
@@ -38,6 +41,14 @@ RUN_SECONDS_ARG = typer.Option(
     "--run-seconds",
     help="Run for N seconds then shut down (useful for smoke tests).",
 )
+LOG_LEVEL_ARG = typer.Option(
+    "--log-level",
+    help="Python logging level (DEBUG, INFO, WARNING, ERROR).",
+)
+LOG_EVENTS_ARG = typer.Option(
+    "--log-events/--no-log-events",
+    help="Emit one runtime log line for each persisted event.",
+)
 
 
 @app.command("start")
@@ -47,8 +58,11 @@ def start_command(
     port: Annotated[int, PORT_ARG] = 8080,
     no_web: Annotated[bool, NO_WEB_ARG] = False,
     run_seconds: Annotated[float, RUN_SECONDS_ARG] = 0.0,
+    log_level: Annotated[str, LOG_LEVEL_ARG] = "INFO",
+    log_events: Annotated[bool, LOG_EVENTS_ARG] = False,
 ) -> None:
     """Start Remora components and run until interrupted."""
+    _configure_logging(log_level)
     try:
         asyncio.run(
             _start(
@@ -57,6 +71,7 @@ def start_command(
                 port=port,
                 no_web=no_web,
                 run_seconds=run_seconds,
+                log_events=log_events,
             )
         )
     except KeyboardInterrupt:
@@ -82,20 +97,49 @@ async def _start(
     port: int,
     no_web: bool,
     run_seconds: float = 0.0,
+    log_events: bool = False,
 ) -> None:
+    logger = logging.getLogger(__name__)
     project_root = project_root.resolve()
     config = load_config(config_path)
 
     db_path = project_root / config.swarm_root / "remora.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path = db_path.parent / "remora.log"
+    _configure_file_logging(log_path)
     db = AsyncDB.from_path(db_path)
     services = RuntimeServices(config, project_root, db)
+    logger.info("Logging to %s", log_path)
+    logger.info("Initializing runtime services")
     await services.initialize()
     assert services.reconciler is not None
     assert services.runner is not None
 
-    logging.info("Starting code discovery...")
-    await services.reconciler.full_scan()
+    if log_events:
+        event_logger = logging.getLogger("remora.events")
+
+        def log_event(event: Event) -> None:
+            event_logger.info(
+                "event=%s corr=%s agent=%s from=%s to=%s path=%s",
+                event.event_type,
+                event.correlation_id or "-",
+                getattr(event, "agent_id", "-"),
+                getattr(event, "from_agent", "-"),
+                getattr(event, "to_agent", "-"),
+                getattr(event, "path", None) or getattr(event, "file_path", "-"),
+            )
+
+        services.event_bus.subscribe_all(log_event)
+        logger.info("Event activity logging enabled")
+
+    logger.info("Starting full discovery scan")
+    scan_started = time.perf_counter()
+    scanned_nodes = await services.reconciler.full_scan()
+    logger.info(
+        "Discovery complete: nodes=%d duration=%.2fs",
+        len(scanned_nodes),
+        time.perf_counter() - scan_started,
+    )
 
     runner_task = asyncio.create_task(services.runner.run_forever(), name="remora-runner")
     reconciler_task = asyncio.create_task(
@@ -112,6 +156,7 @@ async def _start(
             services.event_bus,
             project_root=project_root,
         )
+        logger.info("Starting web server on 127.0.0.1:%d", port)
         web_config = uvicorn.Config(
             web_app,
             host="127.0.0.1",
@@ -121,6 +166,8 @@ async def _start(
         )
         web_server = uvicorn.Server(web_config)
         tasks.append(asyncio.create_task(web_server.serve(), name="remora-web"))
+    else:
+        logger.info("Web server disabled (--no-web)")
 
     try:
         if run_seconds > 0:
@@ -159,6 +206,41 @@ async def _discover(
 def main() -> None:
     """CLI entrypoint used by `python -m remora` and script wrappers."""
     app(prog_name="remora")
+
+
+def _configure_logging(level_name: str) -> None:
+    level = getattr(logging, level_name.upper(), None)
+    if not isinstance(level, int):
+        raise typer.BadParameter(f"Invalid log level: {level_name}")
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+
+
+def _configure_file_logging(log_path: Path) -> None:
+    root_logger = logging.getLogger()
+    resolved_path = log_path.resolve()
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            try:
+                if Path(handler.baseFilename).resolve() == resolved_path:
+                    return
+            except OSError:
+                continue
+
+    file_handler = RotatingFileHandler(
+        filename=log_path,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(root_logger.level)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    root_logger.addHandler(file_handler)
 
 if __name__ == "__main__":
     main()

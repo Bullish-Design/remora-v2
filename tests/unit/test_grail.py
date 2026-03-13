@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import grail
@@ -143,3 +144,45 @@ def test_load_script_from_source_uses_cache() -> None:
     first = _load_script_from_source(SCRIPT_SOURCE, "demo")
     second = _load_script_from_source(SCRIPT_SOURCE, "demo")
     assert first is second
+
+
+@pytest.mark.asyncio
+async def test_discover_tools_logs_load_failure(caplog) -> None:
+    workspace = _WorkspaceStub({"_bundle/tools/bad.pym": "def broken(:\n"})
+
+    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+        tools = await discover_tools(workspace, externals={})
+
+    assert tools == []
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Failed to load tool bad.pym" in message for message in messages)
+    assert any("Loaded 0 Grail tool(s)" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_grail_tool_execute_logs_start_and_failure(tmp_path: Path, caplog) -> None:
+    _ = _load_script(tmp_path)
+
+    class ScriptStub:
+        name = "demo"
+        inputs = {}
+        externals = {"echo": object()}
+
+        async def run(self, inputs, externals):  # noqa: ANN001, ANN201
+            return await externals["echo"](inputs["name"])
+
+    async def fail(_: str) -> str:
+        raise RuntimeError("boom")
+
+    tool = GrailTool(script=ScriptStub(), externals={"echo": fail}, agent_id="node-x")
+    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+        result = await tool.execute({"name": "x"}, ToolCall(id="call-3", name="demo", arguments={}))
+
+    assert result.is_error is True
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "Tool start agent=node-x tool=demo call_id=call-3" in message for message in messages
+    )
+    assert any(
+        "Tool failed agent=node-x tool=demo call_id=call-3" in message for message in messages
+    )

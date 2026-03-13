@@ -2,6 +2,8 @@
 
 children = await graph_get_children()
 if not children:
-    return 'No children found.'
-lines = [f"- [{child.get('node_type', '?')}] {child.get('name', '?')} ({child.get('node_id', '?')})" for child in children]
-return 'Children:\n' + '\n'.join(lines)
+    result = 'No children found.'
+else:
+    lines = [f"- [{child.get('node_type', '?')}] {child.get('name', '?')} ({child.get('node_id', '?')})" for child in children]
+    result = 'Children:\n' + '\n'.join(lines)
+result
