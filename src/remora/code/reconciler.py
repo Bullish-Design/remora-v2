@@ -63,7 +63,11 @@ class FileReconciler:
     async def reconcile_cycle(self) -> None:
         """Run one reconciliation cycle over changed/new/deleted files."""
         current_mtimes = self._collect_file_mtimes()
-        await self._materialize_directories(set(current_mtimes.keys()))
+        sync_existing_bundles = not self._bundles_bootstrapped
+        await self._materialize_directories(
+            set(current_mtimes.keys()),
+            sync_existing_bundles=sync_existing_bundles,
+        )
 
         changed_paths = [
             file_path
@@ -73,13 +77,18 @@ class FileReconciler:
         deleted_paths = sorted(set(self._file_state) - set(current_mtimes))
 
         for file_path in sorted(changed_paths):
-            await self._reconcile_file(file_path, current_mtimes[file_path])
+            await self._reconcile_file(
+                file_path,
+                current_mtimes[file_path],
+                sync_existing_bundles=sync_existing_bundles,
+            )
 
         for file_path in deleted_paths:
             _mtime, node_ids = self._file_state[file_path]
             for node_id in sorted(node_ids):
                 await self._remove_node(node_id)
             self._file_state.pop(file_path, None)
+        self._bundles_bootstrapped = True
 
     async def run_forever(self) -> None:
         """Continuously reconcile changed files using watchfiles."""
@@ -153,7 +162,12 @@ class FileReconciler:
                 continue
         return mtimes
 
-    async def _materialize_directories(self, file_paths: set[str]) -> None:
+    async def _materialize_directories(
+        self,
+        file_paths: set[str],
+        *,
+        sync_existing_bundles: bool,
+    ) -> None:
         """Derive directory nodes from the set of discovered file paths."""
         file_rel_paths = {self._relative_file_path(path) for path in file_paths}
         dir_paths: set[str] = {"."}
@@ -198,7 +212,7 @@ class FileReconciler:
             existing = existing_by_id.get(dir_id)
             mapped_bundle = self._config.bundle_mapping.get(NodeType.DIRECTORY.value)
             refresh_subscriptions = not self._subscriptions_bootstrapped
-            refresh_bundle = not self._bundles_bootstrapped
+            refresh_bundle = sync_existing_bundles
 
             directory_node = CodeNode(
                 node_id=dir_id,
@@ -264,7 +278,6 @@ class FileReconciler:
                 )
 
         self._subscriptions_bootstrapped = True
-        self._bundles_bootstrapped = True
 
     async def _provision_bundle(self, node_id: str, bundle_name: str | None) -> None:
         bundle_root = Path(self._config.bundle_root)
@@ -296,7 +309,13 @@ class FileReconciler:
         rel_file_path = self._relative_file_path(file_path)
         return self._parent_dir_id(rel_file_path)
 
-    async def _reconcile_file(self, file_path: str, mtime_ns: int) -> None:
+    async def _reconcile_file(
+        self,
+        file_path: str,
+        mtime_ns: int,
+        *,
+        sync_existing_bundles: bool = False,
+    ) -> None:
         discovered = discover(
             [Path(file_path)],
             language_map=self._config.language_map,
@@ -322,7 +341,7 @@ class FileReconciler:
             self._node_store,
             self._workspace_service,
             self._config,
-            sync_existing_bundles=not self._bundles_bootstrapped,
+            sync_existing_bundles=sync_existing_bundles,
         )
 
         dir_node_id = self._directory_id_for_file(file_path)

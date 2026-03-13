@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from tests.factories import make_cst, write_bundle_templates
 
 from remora.code.projections import project_nodes
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
-from tests.factories import make_cst, write_bundle_templates
 
 
 @pytest_asyncio.fixture
@@ -83,6 +82,32 @@ async def test_project_changed_node(projection_env) -> None:
     assert stored is not None
     assert stored.source_code == second.text
     assert "customized" in bundle_text
+
+
+@pytest.mark.asyncio
+async def test_project_unchanged_node_can_sync_existing_bundle_tools(
+    projection_env,
+    tmp_path: Path,
+) -> None:
+    node_store, workspace_service, config = projection_env
+    cst = make_cst(file_path="src/a.py", name="a")
+
+    await project_nodes([cst], node_store, workspace_service, config)
+    workspace = await workspace_service.get_agent_workspace(cst.node_id)
+    await workspace.write("_bundle/tools/rewrite_self.pym", "result = 'stale'\nresult\n")
+
+    bundle_tool = tmp_path / "bundles" / "code-agent" / "tools" / "rewrite_self.pym"
+    bundle_tool.write_text("result = 'fresh'\nresult\n", encoding="utf-8")
+
+    await project_nodes(
+        [cst],
+        node_store,
+        workspace_service,
+        config,
+        sync_existing_bundles=True,
+    )
+    tool_text = await workspace.read("_bundle/tools/rewrite_self.pym")
+    assert "fresh" in tool_text
 
 
 @pytest.mark.asyncio

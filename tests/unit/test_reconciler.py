@@ -325,3 +325,29 @@ async def test_directory_subscriptions_upgraded_on_startup(reconcile_env, tmp_pa
         "NodeDiscoveredEvent" in (pattern.get("event_types") or [])
         for pattern in patterns
     )
+
+
+@pytest.mark.asyncio
+async def test_directory_bundles_refreshed_on_startup(reconcile_env, tmp_path: Path) -> None:
+    node_store, agent_store, event_store, workspace_service, config, reconciler = reconcile_env
+    write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
+    await reconciler.full_scan()
+
+    root_workspace = await workspace_service.get_agent_workspace(".")
+    await root_workspace.write("_bundle/tools/send_message.pym", "result = 'stale'\nresult\n")
+
+    system_tool = tmp_path / "bundles" / "system" / "tools" / "send_message.pym"
+    system_tool.write_text("result = 'fresh'\nresult\n", encoding="utf-8")
+
+    restart_reconciler = FileReconciler(
+        config,
+        node_store,
+        agent_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+    )
+    await restart_reconciler.reconcile_cycle()
+
+    refreshed = await root_workspace.read("_bundle/tools/send_message.pym")
+    assert "fresh" in refreshed
