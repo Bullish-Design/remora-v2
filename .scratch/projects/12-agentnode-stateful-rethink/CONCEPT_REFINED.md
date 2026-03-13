@@ -9,6 +9,7 @@ A `user` is one event source among many. The system should optimize for durable 
 
 - Keep one core AgentNode concept.
 - Keep event-driven actor execution.
+- Keep Grail tools as primary source of agent functionality.
 - Treat chat as standard event traffic.
 - Use `user` terminology (not `human`).
 - Make response behavior depend on trigger event type.
@@ -82,7 +83,6 @@ This avoids repeating generic directory explanation text on non-user triggers.
 Strict contracts remain mandatory.
 
 - Invalid enum inputs must fail fast.
-- Do not coerce invalid values (for example, `"all"` for `node_type`).
 - Improve tool guidance/examples so model uses valid values intentionally.
 
 ## Why This Better Fits the Core Concept

@@ -212,11 +212,16 @@ def _configure_logging(level_name: str) -> None:
     level = getattr(logging, level_name.upper(), None)
     if not isinstance(level, int):
         raise typer.BadParameter(f"Invalid log level: {level_name}")
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        force=True,
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    if root_logger.handlers:
+        return
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     )
+    root_logger.addHandler(stream_handler)
 
 
 def _configure_file_logging(log_path: Path) -> None:

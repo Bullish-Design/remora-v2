@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
+import logging
 from pathlib import Path
 
 from typer.testing import CliRunner
 
-from remora.__main__ import app
+from remora.__main__ import _configure_logging, app
 
 
 def test_cli_help() -> None:
@@ -46,3 +48,22 @@ def test_cli_start_smoke(tmp_path: Path) -> None:
     log_path = tmp_path / ".remora" / "remora.log"
     assert log_path.exists()
     assert "Initializing runtime services" in log_path.read_text(encoding="utf-8")
+
+
+def test_configure_logging_keeps_existing_root_handlers() -> None:
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    original_level = root_logger.level
+    marker = logging.StreamHandler(io.StringIO())
+    root_logger.addHandler(marker)
+
+    try:
+        _configure_logging("INFO")
+        assert marker in root_logger.handlers
+        assert root_logger.level == logging.INFO
+    finally:
+        root_logger.setLevel(original_level)
+        for handler in list(root_logger.handlers):
+            if handler not in original_handlers:
+                root_logger.removeHandler(handler)
+                handler.close()

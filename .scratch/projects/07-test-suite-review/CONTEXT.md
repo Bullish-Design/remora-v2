@@ -1,52 +1,48 @@
 # Context
 
 ## Status
-Setup complete. Comprehensive test suite review written. Awaiting user direction.
+`TEST_REVIEW_REVIEW.md` recommendations are implemented for the pytest suite. Verified against a live vLLM endpoint.
 
-## What Was Done
-1. Created project directory: `.scratch/projects/07-test-suite-review/`
-2. Analyzed all 30 test files and 163 tests
-3. Identified mocking patterns and coverage gaps
-4. Wrote comprehensive `TEST_REVIEW.md` with:
-   - Test inventory by module
-   - Mocking analysis (12 monkeypatch, 6 custom stub classes)
-   - Gap analysis (no kernel tests, no real LLM calls, no real Grail execution)
-   - Test quality assessment (good/bad patterns)
-   - 10 recommendations with code examples
-   - Proposed test file structure
+## What Was Implemented
 
-## Key Findings
+1. Added real LLM integration test:
+   - `tests/integration/test_llm_turn.py`
+   - Executes a real agent turn with:
+     - real `FileReconciler` discovery/materialization
+     - real `discover_tools` and Grail tool execution
+     - real kernel call against `REMORA_TEST_MODEL_URL`
+   - Asserts:
+     - `AgentStartEvent` and `AgentCompleteEvent` emitted
+     - no `AgentErrorEvent`
+     - at least one `AgentMessageEvent` from `send_message` tool
 
-### Critical Gaps
-1. **No `test_kernel.py`** — Kernel module has no tests at all
-2. **No real LLM calls** — All LLM interaction is mocked via `MockKernel`
-3. **No real Grail execution** — Tools tested via stubs, not actual scripts
-4. **Error paths untested** — Timeouts, rate limits, failures not covered
+2. Added actor error-path test:
+   - `test_actor_execute_turn_emits_error_event_on_kernel_failure`
+   - Forces `create_kernel` to raise `ConnectionError`.
+   - Verifies `AgentErrorEvent` emission and final `ERROR` status in both `NodeStore` and `AgentStore`.
 
-### What IS Tested Well
-- SQLite operations (real database, no mocks)
-- Workspace filesystem (real Cairn workspaces)
-- Tree-sitter discovery (real parsing)
-- Event routing and subscriptions
-- HTTP API endpoints
+3. Added semaphore saturation test:
+   - `test_actor_execute_turn_respects_shared_semaphore`
+   - Two actors share `Semaphore(1)` with blocking kernel.
+   - Verifies second turn blocks until first releases; max in-flight kernel runs stays at 1.
 
-### Mock Usage
-- `MockKernel` — Bypasses all LLM interaction
-- `FakeRewriteTool` — Bypasses tool execution
-- `_WorkspaceStub` — Bypasses workspace (but workspace tests use real)
-- `ScriptStub` — Bypasses Grail script parsing
+4. Added full two-agent E2E interaction test:
+   - `tests/integration/test_e2e.py::test_e2e_two_agents_interact_via_send_message_tool`
+   - Builds a real discovered graph with two function nodes (`alpha`, `beta`).
+   - Uses real event routing + real Grail `send_message` tool execution.
+   - Verifies `alpha -> beta` ping and `beta -> alpha` pong in persisted events.
 
-### False Confidence Tests
-- `test_e2e_human_chat_to_rewrite` — Claims E2E but mocks kernel and tools
-- `test_actor_processes_inbox_message` — Claims message processing but mocks execution
+5. CI recommendation handling:
+   - Review recommendation suggested adding `REMORA_TEST_MODEL_URL` in CI.
+   - User explicitly requested no GitHub CI work, so this was intentionally not implemented.
 
-## Recommended Priority Actions
-1. Add `test_kernel.py` (trivial effort)
-2. Add Grail integration test with real scripts (small effort)
-3. Add test markers for categorization (trivial effort)
-4. Add error path tests (medium effort)
+## Verification
 
-## Files Created
-- `.scratch/projects/07-test-suite-review/TEST_REVIEW.md`
-- `.scratch/projects/07-test-suite-review/PLAN.md`
-- `.scratch/projects/07-test-suite-review/CONTEXT.md` (this file)
+- Targeted run (new/changed tests + live LLM):
+  - `3 passed`
+- Full suite run with live LLM env:
+  - `187 passed in 19.13s`
+
+Runtime values used for live integration verification:
+- `REMORA_TEST_MODEL_URL=http://remora-server:8000/v1`
+- `REMORA_TEST_MODEL_NAME=Qwen/Qwen3-4B-Instruct-2507-FP8`

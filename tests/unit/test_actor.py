@@ -15,8 +15,15 @@ from tests.factories import make_node
 from remora.core.actor import AgentActor, Outbox, RecordingOutbox, Trigger
 from remora.core.config import Config
 from remora.core.db import AsyncDB
-from remora.core.events import AgentCompleteEvent, AgentStartEvent, EventStore, HumanChatEvent
+from remora.core.events import (
+    AgentCompleteEvent,
+    AgentErrorEvent,
+    AgentStartEvent,
+    EventStore,
+    HumanChatEvent,
+)
 from remora.core.graph import AgentStore, NodeStore
+from remora.core.types import NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -332,3 +339,126 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
     )
     assert "TAIL" in completion
     assert "..." not in completion
+
+
+@pytest.mark.asyncio
+async def test_actor_execute_turn_emits_error_event_on_kernel_failure(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::kernel-fail")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    def fail_create_kernel(**_kwargs):  # noqa: ANN003, ANN202
+        raise ConnectionError("connection refused")
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", fail_create_kernel)
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-fail")
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-fail",
+    )
+    trigger = Trigger(node_id=node.node_id, correlation_id="corr-fail", event=event)
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=10)
+    event_types = [event["event_type"] for event in events]
+    assert AgentStartEvent.__name__ in event_types
+    assert AgentErrorEvent.__name__ in event_types
+    assert AgentCompleteEvent.__name__ not in event_types
+
+    error_event = next(event for event in events if event["event_type"] == AgentErrorEvent.__name__)
+    assert "connection refused" in error_event["payload"]["error"]
+
+    updated_node = await env["node_store"].get_node(node.node_id)
+    updated_agent = await env["agent_store"].get_agent(node.node_id)
+    assert updated_node is not None
+    assert updated_agent is not None
+    assert updated_node.status == NodeStatus.ERROR
+    assert updated_agent.status == NodeStatus.ERROR
+
+
+@pytest.mark.asyncio
+async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node_a = make_node("src/app.py::sem-a")
+    node_b = make_node("src/app.py::sem-b")
+    await env["node_store"].upsert_node(node_a)
+    await env["node_store"].upsert_node(node_b)
+
+    ws_a = await env["workspace_service"].get_agent_workspace(node_a.node_id)
+    ws_b = await env["workspace_service"].get_agent_workspace(node_b.node_id)
+    await ws_a.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+    await ws_b.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    gate = asyncio.Event()
+    first_run_started = asyncio.Event()
+    in_flight = 0
+    max_in_flight = 0
+    counter_lock = asyncio.Lock()
+
+    class BlockingKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            nonlocal in_flight, max_in_flight
+            async with counter_lock:
+                in_flight += 1
+                max_in_flight = max(max_in_flight, in_flight)
+            first_run_started.set()
+            await gate.wait()
+            async with counter_lock:
+                in_flight -= 1
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: BlockingKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    shared_semaphore = asyncio.Semaphore(1)
+    actor_a = AgentActor(
+        node_id=node_a.node_id,
+        event_store=env["event_store"],
+        node_store=env["node_store"],
+        agent_store=env["agent_store"],
+        workspace_service=env["workspace_service"],
+        config=env["config"],
+        semaphore=shared_semaphore,
+    )
+    actor_b = AgentActor(
+        node_id=node_b.node_id,
+        event_store=env["event_store"],
+        node_store=env["node_store"],
+        agent_store=env["agent_store"],
+        workspace_service=env["workspace_service"],
+        config=env["config"],
+        semaphore=shared_semaphore,
+    )
+
+    outbox_a = Outbox(actor_id=node_a.node_id, event_store=env["event_store"], correlation_id="corr-sem-a")
+    outbox_b = Outbox(actor_id=node_b.node_id, event_store=env["event_store"], correlation_id="corr-sem-b")
+    trigger_a = Trigger(
+        node_id=node_a.node_id,
+        correlation_id="corr-sem-a",
+        event=HumanChatEvent(to_agent=node_a.node_id, message="go"),
+    )
+    trigger_b = Trigger(
+        node_id=node_b.node_id,
+        correlation_id="corr-sem-b",
+        event=HumanChatEvent(to_agent=node_b.node_id, message="go"),
+    )
+
+    task_a = asyncio.create_task(actor_a._execute_turn(trigger_a, outbox_a))
+    await asyncio.wait_for(first_run_started.wait(), timeout=1.0)
+    task_b = asyncio.create_task(actor_b._execute_turn(trigger_b, outbox_b))
+    await asyncio.sleep(0.05)
+    assert not task_b.done()
+
+    gate.set()
+    await asyncio.gather(task_a, task_b)
+    assert max_in_flight == 1

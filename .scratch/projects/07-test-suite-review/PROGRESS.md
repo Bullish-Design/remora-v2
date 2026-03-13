@@ -1,22 +1,24 @@
 # Progress
 
-## Status: SETUP COMPLETE
+## Status: REVIEW-REVIEW FIXES IMPLEMENTED
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Create project directory | ✅ Done | `.scratch/projects/07-test-suite-review/` |
-| Inventory all test files | ✅ Done | 30 files, 163 tests |
-| Analyze mocking patterns | ✅ Done | 12 monkeypatch, 6 stub classes |
-| Identify coverage gaps | ✅ Done | kernel, LLM, Grail execution |
-| Document test quality | ✅ Done | Good/bad patterns identified |
-| Write TEST_REVIEW.md | ✅ Done | Comprehensive 7-part review |
-| Create PLAN.md | ✅ Done | 4-phase implementation |
-| Create CONTEXT.md | ✅ Done | Current state |
-| Run test suite | ✅ Done | 163 passed in 11.59s |
+| Parse `TEST_REVIEW_REVIEW.md` recommendations | ✅ Done | Extracted 4 recommendations |
+| Add real LLM turn integration test | ✅ Done | `tests/integration/test_llm_turn.py` |
+| Add actor kernel-failure error-path test | ✅ Done | `tests/unit/test_actor.py` |
+| Add actor semaphore saturation test | ✅ Done | `tests/unit/test_actor.py` |
+| Add full two-agent E2E interaction test | ✅ Done | `tests/integration/test_e2e.py::test_e2e_two_agents_interact_via_send_message_tool` |
+| Run targeted tests with real model endpoint | ✅ Done | 3 passed |
+| Run full pytest suite with real model endpoint | ✅ Done | 187 passed |
+| CI workflow change | ⏭️ Skipped by request | User explicitly asked for pytest-only work (no GitHub CI) |
 
 ## Last Activity
-- Wrote PROGRESS.md
-- All setup complete
+- Implemented all pytest-suite-related recommendations from `TEST_REVIEW_REVIEW.md`
+- Validated with live model:
+  - URL: `http://remora-server:8000/v1`
+  - Model: `Qwen/Qwen3-4B-Instruct-2507-FP8`
+- Full suite result: `187 passed in 19.13s`
 
 ## Next Steps
-User to review `TEST_REVIEW.md` and decide which phases to implement.
+- Optional: Add more real-LLM scenarios (multi-tool turn, longer conversation, failure/retry behavior).
