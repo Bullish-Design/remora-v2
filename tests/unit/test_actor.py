@@ -289,3 +289,46 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
         "Agent turn complete node=src/app.py::logged corr=corr-log response=ok" in message
         for message in messages
     )
+
+
+@pytest.mark.asyncio
+async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, caplog) -> None:
+    env = actor_env
+    node = make_node("src/app.py::logged-long")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    long_response = "r" * 1400 + "TAIL"
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content=long_response))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    event = HumanChatEvent(to_agent=node.node_id, message="hello", correlation_id="corr-long")
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-long",
+    )
+    trigger = Trigger(node_id=node.node_id, correlation_id="corr-long", event=event)
+
+    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+        await actor._execute_turn(trigger, outbox)
+
+    messages = [record.getMessage() for record in caplog.records]
+    completion = next(
+        message
+        for message in messages
+        if "Agent turn complete node=src/app.py::logged-long corr=corr-long response=" in message
+    )
+    assert "TAIL" in completion
+    assert "..." not in completion

@@ -95,7 +95,7 @@ class GrailTool:
             self._schema.name,
             call_id or "-",
             self._source_file,
-            _preview(arguments, limit=300),
+            _preview(arguments),
         )
         try:
             used_externals = {
@@ -111,7 +111,7 @@ class GrailTool:
                 self._schema.name,
                 call_id or "-",
                 (time.perf_counter() - started) * 1000.0,
-                _preview(output, limit=400),
+                _preview(output),
             )
             return ToolResult(
                 call_id=call_id,
@@ -127,7 +127,7 @@ class GrailTool:
                 call_id or "-",
                 (time.perf_counter() - started) * 1000.0,
                 self._source_file,
-                _preview(arguments, limit=300),
+                _preview(arguments),
             )
             return ToolResult(
                 call_id=call_id,
@@ -174,9 +174,6 @@ async def discover_tools(
 __all__ = ["GrailTool", "discover_tools"]
 
 
-def _preview(value: Any, *, limit: int) -> str:
+def _preview(value: Any) -> str:
     text = value if isinstance(value, str) else json.dumps(value, default=str)
-    text = text.replace("\n", "\\n")
-    if len(text) <= limit:
-        return text
-    return text[: limit - 3] + "..."
+    return text.replace("\n", "\\n")

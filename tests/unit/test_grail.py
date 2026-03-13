@@ -186,3 +186,31 @@ async def test_grail_tool_execute_logs_start_and_failure(tmp_path: Path, caplog)
     assert any(
         "Tool failed agent=node-x tool=demo call_id=call-3" in message for message in messages
     )
+
+
+@pytest.mark.asyncio
+async def test_grail_tool_execute_logs_full_output_not_truncated(caplog) -> None:
+    long_output = "x" * 1200 + "TAIL"
+
+    class ScriptStub:
+        name = "demo"
+        inputs = {}
+        externals = {}
+
+        async def run(self, inputs, externals):  # noqa: ANN001, ANN201
+            del inputs, externals
+            return long_output
+
+    tool = GrailTool(script=ScriptStub(), externals={}, agent_id="node-x")
+    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+        result = await tool.execute({}, ToolCall(id="call-9", name="demo", arguments={}))
+
+    assert result.is_error is False
+    messages = [record.getMessage() for record in caplog.records]
+    completion = next(
+        message
+        for message in messages
+        if "Tool complete agent=node-x tool=demo call_id=call-9" in message
+    )
+    assert "TAIL" in completion
+    assert "..." not in completion
