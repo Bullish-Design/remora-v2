@@ -76,7 +76,4 @@ Remora is a reactive agent swarm system where code nodes (functions, classes, me
 devenv shell -- python -m pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q
 ```
 
-Known pre-existing failures:
-- `test_lsp_handlers_register_and_advertise_capabilities` — missing `workspace/executeCommand` in capabilities.
-- 2 cairn merge-ops tests (skipped via `--ignore`).
-- 1 benchmark timeout (skipped via `--ignore`).
+
