@@ -17,6 +17,7 @@ from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.node import CodeNode
+from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import AgentWorkspace
 
 
@@ -88,9 +89,27 @@ class AgentContext:
         status: str | None = None,
         file_path: str | None = None,
     ) -> list[dict[str, Any]]:
+        normalized_node_type: str | None = None
+        if node_type is not None:
+            normalized_node_type = node_type.strip()
+            valid_node_types = {item.value for item in NodeType}
+            if normalized_node_type not in valid_node_types:
+                choices = ", ".join(sorted(valid_node_types))
+                raise ValueError(
+                    f"Invalid node_type '{node_type}'. Expected one of: {choices}"
+                )
+
+        normalized_status: str | None = None
+        if status is not None:
+            normalized_status = status.strip()
+            valid_statuses = {item.value for item in NodeStatus}
+            if normalized_status not in valid_statuses:
+                choices = ", ".join(sorted(valid_statuses))
+                raise ValueError(f"Invalid status '{status}'. Expected one of: {choices}")
+
         nodes = await self._node_store.list_nodes(
-            node_type=node_type,
-            status=status,
+            node_type=normalized_node_type,
+            status=normalized_status,
             file_path=file_path,
         )
         return [node.model_dump() for node in nodes]

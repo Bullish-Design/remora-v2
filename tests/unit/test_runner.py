@@ -4,15 +4,20 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from tests.factories import make_node
 
 from remora.core.actor import AgentActor
 from remora.core.config import Config
 from remora.core.db import AsyncDB
-from remora.core.events import AgentMessageEvent, EventStore, HumanChatEvent, SubscriptionPattern
+from remora.core.events import (
+    AgentMessageEvent,
+    EventStore,
+    HumanChatEvent,
+    SubscriptionPattern,
+)
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.runner import AgentRunner
 from remora.core.workspace import CairnWorkspaceService
-from tests.factories import make_node
 
 
 @pytest_asyncio.fixture
@@ -119,3 +124,4 @@ async def test_runner_build_prompt_via_actor(runner_env) -> None:
     )
     assert node.full_name in prompt
     assert "hello" in prompt
+    assert "Type: function | File: src/app.py" in prompt

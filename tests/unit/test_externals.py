@@ -101,6 +101,24 @@ async def test_externals_graph_ops(context_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_externals_graph_query_nodes_rejects_invalid_enums(context_env) -> None:
+    node_store, agent_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::a")
+    await node_store.upsert_node(node)
+    await agent_store.upsert_agent(node.to_agent())
+
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, agent_store, event_store)
+    externals = context.to_externals_dict()
+
+    with pytest.raises(ValueError, match="Invalid node_type"):
+        await externals["graph_query_nodes"]("NodeType.DIRECTORY", None)
+
+    with pytest.raises(ValueError, match="Invalid status"):
+        await externals["graph_query_nodes"](None, "NodeStatus.IDLE")
+
+
+@pytest.mark.asyncio
 async def test_externals_event_ops(context_env) -> None:
     node_store, agent_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::alpha")

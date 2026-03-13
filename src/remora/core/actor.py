@@ -347,9 +347,12 @@ class AgentActor:
     @staticmethod
     def _build_prompt(node: CodeNode, trigger: Trigger) -> str:
         """Build the turn prompt from node identity and trigger details."""
+        node_type = (
+            node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
+        )
         parts = [
             f"# Node: {node.full_name}",
-            f"Type: {node.node_type} | File: {node.file_path}",
+            f"Type: {node_type} | File: {node.file_path}",
         ]
         if node.source_code:
             parts.extend(
