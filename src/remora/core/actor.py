@@ -248,6 +248,11 @@ class AgentActor:
                     "system_prompt",
                     "You are an autonomous code agent.",
                 )
+                mode = self._turn_mode(trigger.event)
+                prompts = bundle_config.get("prompts") or {}
+                mode_prompt = prompts.get(mode, "") if hasattr(prompts, "get") else ""
+                if mode_prompt:
+                    system_prompt = f"{system_prompt}\n\n{mode_prompt}"
                 model_name = bundle_config.get("model", self._config.model_default)
                 max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
 
@@ -392,6 +397,11 @@ class AgentActor:
         except (FileNotFoundError, FsdFileNotFoundError):
             return {}
         return _expand_env_vars(yaml.safe_load(text) or {})
+
+    @staticmethod
+    def _turn_mode(event: Event | None) -> str:
+        from_agent = getattr(event, "from_agent", None) if event is not None else None
+        return "chat" if from_agent == "user" else "reactive"
 
 
 def _event_content(event: Event) -> str:

@@ -20,6 +20,7 @@ from remora.core.events import (
     AgentErrorEvent,
     AgentMessageEvent,
     AgentStartEvent,
+    ContentChangedEvent,
     EventStore,
 )
 from remora.core.graph import AgentStore, NodeStore
@@ -479,3 +480,106 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
     gate.set()
     await asyncio.gather(task_a, task_b)
     assert max_in_flight == 1
+
+
+@pytest.mark.asyncio
+async def test_actor_chat_mode_injects_prompt(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::mode-chat")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write(
+        "_bundle/bundle.yaml",
+        (
+            "system_prompt: base\n"
+            "model: mock\n"
+            "max_turns: 1\n"
+            "prompts:\n"
+            "  chat: CHAT_MODE\n"
+            "  reactive: REACTIVE_MODE\n"
+        ),
+    )
+
+    captured_system_prompt = ""
+
+    class CapturingKernel:
+        async def run(self, messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            nonlocal captured_system_prompt
+            del max_turns
+            captured_system_prompt = messages[0].content or ""
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: CapturingKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="hello",
+        correlation_id="corr-mode-chat",
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-mode-chat",
+    )
+    trigger = Trigger(node_id=node.node_id, correlation_id="corr-mode-chat", event=event)
+    await actor._execute_turn(trigger, outbox)
+
+    assert "CHAT_MODE" in captured_system_prompt
+    assert "REACTIVE_MODE" not in captured_system_prompt
+
+
+@pytest.mark.asyncio
+async def test_actor_reactive_mode_injects_prompt(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::mode-reactive")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write(
+        "_bundle/bundle.yaml",
+        (
+            "system_prompt: base\n"
+            "model: mock\n"
+            "max_turns: 1\n"
+            "prompts:\n"
+            "  chat: CHAT_MODE\n"
+            "  reactive: REACTIVE_MODE\n"
+        ),
+    )
+
+    captured_system_prompt = ""
+
+    class CapturingKernel:
+        async def run(self, messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            nonlocal captured_system_prompt
+            del max_turns
+            captured_system_prompt = messages[0].content or ""
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: CapturingKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    event = ContentChangedEvent(path=node.file_path, change_type="modified")
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-mode-reactive",
+    )
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-mode-reactive",
+        event=event,
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    assert "REACTIVE_MODE" in captured_system_prompt
+    assert "CHAT_MODE" not in captured_system_prompt
