@@ -12,6 +12,7 @@ from remora.core.db import AsyncDB
 from remora.core.events import EventStore
 from remora.core.graph import NodeStore
 from remora.lsp.server import (
+    DocumentStore,
     _find_node_at_line,
     _node_to_hover,
     _node_to_lens,
@@ -111,6 +112,60 @@ async def test_lsp_did_change_writes_file_and_emits_event(
     )
 
     await did_change(params)
-    assert file_path.read_text(encoding="utf-8") == "print('goodbye')\n"
+    documents = handlers["documents"]
+    assert isinstance(documents, DocumentStore)
+    assert documents.get(f"file://{file_path}") == "print('goodbye')\n"
     events = await event_store.get_events(limit=5)
-    assert any(event["event_type"] == "ContentChangedEvent" for event in events)
+    assert not any(
+        event["event_type"] == "ContentChangedEvent"
+        and event["payload"].get("path") == str(file_path)
+        and event["payload"].get("change_type") == "modified"
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_lsp_open_change_save_lifecycle(lsp_env, tmp_path: Path) -> None:
+    node_store, event_store = lsp_env
+    server = create_lsp_server(node_store, event_store)
+    handlers = server._remora_handlers  # type: ignore[attr-defined]
+    did_open = handlers["did_open"]
+    did_change = handlers["did_change"]
+    did_save = handlers["did_save"]
+    documents = handlers["documents"]
+
+    file_path = tmp_path / "src" / "lifecycle.py"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    uri = f"file://{file_path}"
+
+    await did_open(
+        lsp.DidOpenTextDocumentParams(
+            text_document=lsp.TextDocumentItem(
+                uri=uri,
+                language_id="python",
+                version=1,
+                text="print('hello')\n",
+            )
+        )
+    )
+    await did_change(
+        lsp.DidChangeTextDocumentParams(
+            text_document=lsp.VersionedTextDocumentIdentifier(uri=uri, version=2),
+            content_changes=[lsp.TextDocumentContentChangeWholeDocument(text="print('goodbye')\n")],
+        )
+    )
+    await did_save(
+        lsp.DidSaveTextDocumentParams(
+            text_document=lsp.TextDocumentIdentifier(uri=uri),
+        )
+    )
+
+    assert isinstance(documents, DocumentStore)
+    assert documents.get(uri) == "print('goodbye')\n"
+    events = await event_store.get_events(limit=20)
+    paths = [
+        (event["event_type"], event["payload"].get("path"), event["payload"].get("change_type"))
+        for event in events
+    ]
+    assert ("ContentChangedEvent", str(file_path), "opened") in paths
+    assert ("ContentChangedEvent", str(file_path), "modified") in paths

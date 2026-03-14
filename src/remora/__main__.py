@@ -180,12 +180,7 @@ async def _start(
         logger.info("Web server disabled (--no-web)")
 
     if lsp:
-        lsp_server = create_lsp_server(
-            services.node_store,
-            services.event_store,
-            services.workspace_service,
-            services.db,
-        )
+        lsp_server = create_lsp_server(services.node_store, services.event_store)
         logger.info("Starting LSP server on stdin/stdout")
         lsp_task = asyncio.create_task(
             asyncio.to_thread(lsp_server.start_io),

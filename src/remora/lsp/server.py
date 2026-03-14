@@ -13,15 +13,44 @@ from remora.core.events import ContentChangedEvent
 from remora.core.node import Node
 
 
-def create_lsp_server(
-    node_store,
-    event_store,
-    workspace_service=None,
-    db=None,
-) -> LanguageServer:  # noqa: ANN001
+class DocumentStore:
+    """In-memory document text tracked by the LSP server."""
+
+    def __init__(self) -> None:
+        self._documents: dict[str, str] = {}
+
+    def open(self, uri: str, text: str) -> None:
+        self._documents[uri] = text
+
+    def close(self, uri: str) -> None:
+        self._documents.pop(uri, None)
+
+    def get(self, uri: str) -> str | None:
+        return self._documents.get(uri)
+
+    def apply_changes(
+        self,
+        uri: str,
+        changes: Sequence[lsp.TextDocumentContentChangeEvent],
+    ) -> str:
+        text = self._documents.get(uri, "")
+        for change in changes:
+            change_text = getattr(change, "text", "") or ""
+            range_value = getattr(change, "range", None)
+            if range_value is None:
+                text = change_text
+                continue
+            start = _position_to_offset(text, range_value.start)
+            end = _position_to_offset(text, range_value.end)
+            text = text[:start] + change_text + text[end:]
+        self._documents[uri] = text
+        return text
+
+
+def create_lsp_server(node_store, event_store) -> LanguageServer:  # noqa: ANN001
     """Create an LSP server that projects Remora state into editor surfaces."""
-    del workspace_service, db
     server = LanguageServer("remora", "2.0.0")
+    documents = DocumentStore()
 
     @server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)
     async def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
@@ -45,24 +74,17 @@ def create_lsp_server(
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
     async def did_open(params: lsp.DidOpenTextDocumentParams) -> None:
+        documents.open(params.text_document.uri, params.text_document.text)
         file_path = _uri_to_path(params.text_document.uri)
         await event_store.append(ContentChangedEvent(path=file_path, change_type="opened"))
 
+    @server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
+    async def did_close(params: lsp.DidCloseTextDocumentParams) -> None:
+        documents.close(params.text_document.uri)
+
     @server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
     async def did_change(params: lsp.DidChangeTextDocumentParams) -> None:
-        file_path = _uri_to_path(params.text_document.uri)
-        new_text = _resolve_document_text(file_path, params.content_changes)
-        path_obj = Path(file_path)
-        path_obj.parent.mkdir(parents=True, exist_ok=True)
-        path_obj.write_text(new_text, encoding="utf-8")
-        await event_store.append(ContentChangedEvent(path=file_path, change_type="modified"))
-        if getattr(server, "_server", None) is not None:
-            server.text_document_publish_diagnostics(
-                lsp.PublishDiagnosticsParams(
-                    uri=params.text_document.uri,
-                    diagnostics=[],
-                )
-            )
+        documents.apply_changes(params.text_document.uri, params.content_changes)
 
     # Expose handlers for direct unit testing without spinning up an LSP transport.
     server._remora_handlers = {  # type: ignore[attr-defined]
@@ -70,7 +92,9 @@ def create_lsp_server(
         "hover": hover,
         "did_save": did_save,
         "did_open": did_open,
+        "did_close": did_close,
         "did_change": did_change,
+        "documents": documents,
     }
 
     return server
@@ -125,28 +149,6 @@ def _uri_to_path(uri: str) -> str:
     if parsed.scheme == "file":
         return str(Path(unquote(parsed.path)))
     return uri
-
-
-def _resolve_document_text(
-    file_path: str,
-    changes: Sequence[lsp.TextDocumentContentChangeEvent],
-) -> str:
-    path = Path(file_path)
-    current_text = path.read_text(encoding="utf-8") if path.exists() else ""
-    if not changes:
-        return current_text
-
-    text = current_text
-    for change in changes:
-        change_text = getattr(change, "text", "") or ""
-        range_value = getattr(change, "range", None)
-        if range_value is None:
-            text = change_text
-            continue
-        start = _position_to_offset(text, range_value.start)
-        end = _position_to_offset(text, range_value.end)
-        text = text[:start] + change_text + text[end:]
-    return text
 
 
 def _position_to_offset(text: str, position: lsp.Position) -> int:
