@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import aiosqlite
 from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
-from remora.core.db import AsyncDB
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.runner import ActorPool
@@ -18,7 +18,7 @@ from remora.core.workspace import CairnWorkspaceService
 class RuntimeServices:
     """Central container holding runtime services."""
 
-    def __init__(self, config: Config, project_root: Path, db: AsyncDB):
+    def __init__(self, config: Config, project_root: Path, db: aiosqlite.Connection):
         self.config = config
         self.project_root = project_root.resolve()
         self.db = db
@@ -81,7 +81,7 @@ class RuntimeServices:
         if self.runner is not None:
             await self.runner.stop_and_wait()
         await self.workspace_service.close()
-        self.db.close()
+        await self.db.close()
 
 
 __all__ = ["RuntimeServices"]

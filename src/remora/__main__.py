@@ -16,7 +16,7 @@ from remora.code.discovery import CSTNode
 from remora.code.discovery import discover as discover_nodes
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.core.config import load_config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import Event
 from remora.core.services import RuntimeServices
 from remora.lsp import create_lsp_server
@@ -115,7 +115,7 @@ async def _start(
     db_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = db_path.parent / "remora.log"
     _configure_file_logging(log_path)
-    db = AsyncDB.from_path(db_path)
+    db = await open_database(db_path)
     services = RuntimeServices(config, project_root, db)
     logger.info("Logging to %s", log_path)
     logger.info("Initializing runtime services")
