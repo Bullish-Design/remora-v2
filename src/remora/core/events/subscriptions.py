@@ -6,9 +6,9 @@ import json
 import time
 from pathlib import PurePath
 
+import aiosqlite
 from pydantic import BaseModel
 
-from remora.core.db import AsyncDB
 from remora.core.events.types import Event
 
 _ANY_EVENT_KEY = "*"
@@ -48,13 +48,13 @@ class SubscriptionPattern(BaseModel):
 class SubscriptionRegistry:
     """SQLite-backed subscription store with event_type-indexed in-memory cache."""
 
-    def __init__(self, db: AsyncDB):
+    def __init__(self, db: aiosqlite.Connection):
         self._db = db
         self._cache: dict[str, list[tuple[str, SubscriptionPattern]]] | None = None
 
     async def create_tables(self) -> None:
         """Create subscription storage tables."""
-        await self._db.execute_script(
+        await self._db.executescript(
             """
             CREATE TABLE IF NOT EXISTS subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,38 +65,42 @@ class SubscriptionRegistry:
             CREATE INDEX IF NOT EXISTS idx_subs_agent ON subscriptions(agent_id);
             """
         )
+        await self._db.commit()
 
     async def register(self, agent_id: str, pattern: SubscriptionPattern) -> int:
         """Register a subscription and return its primary-key ID."""
-        sub_id = await self._db.insert(
+        cursor = await self._db.execute(
             """
             INSERT INTO subscriptions (agent_id, pattern_json, created_at)
             VALUES (?, ?, ?)
             """,
             (agent_id, json.dumps(pattern.model_dump()), time.time()),
         )
+        await self._db.commit()
         self._cache = None
-        return sub_id
+        return int(cursor.lastrowid)
 
     async def unregister(self, subscription_id: int) -> bool:
         """Remove a subscription by ID. Returns True when a row was deleted."""
-        deleted = await self._db.delete(
+        cursor = await self._db.execute(
             "DELETE FROM subscriptions WHERE id = ?",
             (subscription_id,),
         )
-        if deleted:
+        await self._db.commit()
+        if cursor.rowcount > 0:
             self._cache = None
-        return deleted > 0
+        return cursor.rowcount > 0
 
     async def unregister_by_agent(self, agent_id: str) -> int:
         """Remove all subscriptions for an agent and return deleted count."""
-        deleted = await self._db.delete(
+        cursor = await self._db.execute(
             "DELETE FROM subscriptions WHERE agent_id = ?",
             (agent_id,),
         )
-        if deleted > 0:
+        await self._db.commit()
+        if cursor.rowcount > 0:
             self._cache = None
-        return deleted
+        return cursor.rowcount
 
     async def get_matching_agents(self, event: Event) -> list[str]:
         """Resolve agent IDs whose patterns match the supplied event."""
@@ -117,9 +121,10 @@ class SubscriptionRegistry:
 
     async def _rebuild_cache(self) -> None:
         """Load all subscriptions and rebuild event_type-indexed cache."""
-        rows = await self._db.fetch_all(
+        cursor = await self._db.execute(
             "SELECT agent_id, pattern_json FROM subscriptions ORDER BY id ASC"
         )
+        rows = await cursor.fetchall()
 
         cache: dict[str, list[tuple[str, SubscriptionPattern]]] = {}
         for row in rows:

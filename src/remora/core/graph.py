@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from remora.core.db import AsyncDB
+import aiosqlite
 from remora.core.node import Agent, Node
 from remora.core.types import NodeStatus, NodeType, validate_status_transition
 
@@ -25,12 +25,12 @@ class Edge:
 class NodeStore:
     """SQLite-backed storage for the Node graph."""
 
-    def __init__(self, db: AsyncDB):
+    def __init__(self, db: aiosqlite.Connection):
         self._db = db
 
     async def create_tables(self) -> None:
         """Create nodes and edges tables with indexes."""
-        await self._db.execute_script(
+        await self._db.executescript(
             """
             CREATE TABLE IF NOT EXISTS nodes (
                 node_id TEXT PRIMARY KEY,
@@ -63,6 +63,7 @@ class NodeStore:
             CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
             """
         )
+        await self._db.commit()
 
     async def upsert_node(self, node: Node) -> None:
         """Insert or replace a node by node_id."""
@@ -73,10 +74,15 @@ class NodeStore:
             f"INSERT OR REPLACE INTO nodes ({columns}) VALUES ({placeholders})",
             tuple(row.values()),
         )
+        await self._db.commit()
 
     async def get_node(self, node_id: str) -> Node | None:
         """Fetch a single node by ID."""
-        row = await self._db.fetch_one("SELECT * FROM nodes WHERE node_id = ?", (node_id,))
+        cursor = await self._db.execute(
+            "SELECT * FROM nodes WHERE node_id = ?",
+            (node_id,),
+        )
+        row = await cursor.fetchone()
         return None if row is None else Node.from_row(row)
 
     async def list_nodes(
@@ -100,15 +106,17 @@ class NodeStore:
 
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
         sql = f"SELECT * FROM nodes{where_clause} ORDER BY node_id ASC"
-        rows = await self._db.fetch_all(sql, tuple(params))
+        cursor = await self._db.execute(sql, tuple(params))
+        rows = await cursor.fetchall()
         return [Node.from_row(row) for row in rows]
 
     async def get_children(self, parent_id: str) -> list[Node]:
         """Get all nodes whose parent_id matches."""
-        rows = await self._db.fetch_all(
+        cursor = await self._db.execute(
             "SELECT * FROM nodes WHERE parent_id = ? ORDER BY node_id ASC",
             (parent_id,),
         )
+        rows = await cursor.fetchall()
         return [Node.from_row(row) for row in rows]
 
     async def delete_node(self, node_id: str) -> bool:
@@ -117,8 +125,12 @@ class NodeStore:
             "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
             (node_id, node_id),
         )
-        deleted = await self._db.delete("DELETE FROM nodes WHERE node_id = ?", (node_id,))
-        return deleted > 0
+        cursor = await self._db.execute(
+            "DELETE FROM nodes WHERE node_id = ?",
+            (node_id,),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
 
     async def set_status(self, node_id: str, status: str | NodeStatus) -> None:
         """Update a node status in-place."""
@@ -127,6 +139,7 @@ class NodeStore:
             "UPDATE nodes SET status = ? WHERE node_id = ?",
             (status_value, node_id),
         )
+        await self._db.commit()
 
     async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
         """Transition node status if the transition is valid."""
@@ -154,6 +167,7 @@ class NodeStore:
             """,
             (from_id, to_id, edge_type),
         )
+        await self._db.commit()
 
     async def get_edges(self, node_id: str, direction: str = "both") -> list[Edge]:
         """Get edges for a node in outgoing, incoming, or both directions."""
@@ -172,28 +186,32 @@ class NodeStore:
         else:
             raise ValueError("direction must be one of: outgoing, incoming, both")
 
-        rows = await self._db.fetch_all(sql, params)
+        cursor = await self._db.execute(sql, params)
+        rows = await cursor.fetchall()
         return [
             Edge(
                 from_id=row["from_id"],
                 to_id=row["to_id"],
                 edge_type=row["edge_type"],
             )
-        for row in rows
+            for row in rows
         ]
 
     async def delete_edges(self, node_id: str) -> int:
         """Delete all edges connected to a node and return deleted count."""
-        return await self._db.delete(
+        cursor = await self._db.execute(
             "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
             (node_id, node_id),
         )
+        await self._db.commit()
+        return cursor.rowcount
 
     async def list_all_edges(self) -> list[Edge]:
         """Return all edges in the graph."""
-        rows = await self._db.fetch_all(
+        cursor = await self._db.execute(
             "SELECT from_id, to_id, edge_type FROM edges ORDER BY id ASC"
         )
+        rows = await cursor.fetchall()
         return [
             Edge(from_id=row["from_id"], to_id=row["to_id"], edge_type=row["edge_type"])
             for row in rows
@@ -203,11 +221,11 @@ class NodeStore:
 class AgentStore:
     """SQLite persistence for agent state, separate from code elements."""
 
-    def __init__(self, db: AsyncDB):
+    def __init__(self, db: aiosqlite.Connection):
         self._db = db
 
     async def create_tables(self) -> None:
-        await self._db.execute_script(
+        await self._db.executescript(
             """
             CREATE TABLE IF NOT EXISTS agents (
                 agent_id TEXT PRIMARY KEY,
@@ -219,6 +237,7 @@ class AgentStore:
             CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
+        await self._db.commit()
 
     async def upsert_agent(self, agent: Agent) -> None:
         row = agent.to_row()
@@ -228,9 +247,14 @@ class AgentStore:
             f"INSERT OR REPLACE INTO agents ({columns}) VALUES ({placeholders})",
             tuple(row.values()),
         )
+        await self._db.commit()
 
     async def get_agent(self, agent_id: str) -> Agent | None:
-        row = await self._db.fetch_one("SELECT * FROM agents WHERE agent_id = ?", (agent_id,))
+        cursor = await self._db.execute(
+            "SELECT * FROM agents WHERE agent_id = ?",
+            (agent_id,),
+        )
+        row = await cursor.fetchone()
         return None if row is None else Agent.from_row(row)
 
     async def set_status(self, agent_id: str, status: NodeStatus | str) -> None:
@@ -239,6 +263,7 @@ class AgentStore:
             "UPDATE agents SET status = ? WHERE agent_id = ?",
             (status_value, agent_id),
         )
+        await self._db.commit()
 
     async def transition_status(self, agent_id: str, target: NodeStatus) -> bool:
         agent = await self.get_agent(agent_id)
@@ -257,17 +282,24 @@ class AgentStore:
 
     async def list_agents(self, status: NodeStatus | None = None) -> list[Agent]:
         if status is None:
-            rows = await self._db.fetch_all("SELECT * FROM agents ORDER BY agent_id ASC")
+            cursor = await self._db.execute(
+                "SELECT * FROM agents ORDER BY agent_id ASC"
+            )
         else:
-            rows = await self._db.fetch_all(
+            cursor = await self._db.execute(
                 "SELECT * FROM agents WHERE status = ? ORDER BY agent_id ASC",
                 (status.value,),
             )
+        rows = await cursor.fetchall()
         return [Agent.from_row(row) for row in rows]
 
     async def delete_agent(self, agent_id: str) -> bool:
-        deleted = await self._db.delete("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
-        return deleted > 0
+        cursor = await self._db.execute(
+            "DELETE FROM agents WHERE agent_id = ?",
+            (agent_id,),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
 
 
 __all__ = ["Edge", "NodeStore", "AgentStore"]

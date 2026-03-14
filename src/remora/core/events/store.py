@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from remora.core.db import AsyncDB
+import aiosqlite
 from remora.core.events.bus import EventBus
 from remora.core.events.dispatcher import TriggerDispatcher
 from remora.core.events.subscriptions import SubscriptionRegistry
@@ -17,7 +17,7 @@ class EventStore:
 
     def __init__(
         self,
-        db: AsyncDB,
+        db: aiosqlite.Connection,
         event_bus: EventBus | None = None,
         dispatcher: TriggerDispatcher | None = None,
     ) -> None:
@@ -35,7 +35,7 @@ class EventStore:
 
     async def create_tables(self) -> None:
         """Create event storage tables and indexes."""
-        await self._db.execute_script(
+        await self._db.executescript(
             """
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +53,7 @@ class EventStore:
             CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
             """
         )
+        await self._db.commit()
         await self._dispatcher.subscriptions.create_tables()
 
     async def append(self, event: Event) -> int:
@@ -64,7 +65,7 @@ class EventStore:
         from_agent = payload.get("from_agent")
         to_agent = payload.get("to_agent")
 
-        event_id = await self._db.insert(
+        cursor = await self._db.execute(
             """
             INSERT INTO events (
                 event_type, agent_id, from_agent, to_agent,
@@ -83,6 +84,8 @@ class EventStore:
                 summary,
             ),
         )
+        await self._db.commit()
+        event_id = int(cursor.lastrowid)
 
         await self._event_bus.emit(event)
         await self._dispatcher.dispatch(event)
@@ -90,10 +93,11 @@ class EventStore:
 
     async def get_events(self, limit: int = 100) -> list[dict[str, Any]]:
         """Get recent events, newest first."""
-        rows = await self._db.fetch_all(
+        cursor = await self._db.execute(
             "SELECT * FROM events ORDER BY id DESC LIMIT ?",
             (limit,),
         )
+        rows = await cursor.fetchall()
         result = [dict(row) for row in rows]
         for row in result:
             row["payload"] = json.loads(row["payload"])
@@ -105,7 +109,7 @@ class EventStore:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Get recent events that involve an agent as source, target, or owner."""
-        rows = await self._db.fetch_all(
+        cursor = await self._db.execute(
             """
             SELECT * FROM events
             WHERE agent_id = ? OR from_agent = ? OR to_agent = ?
@@ -114,6 +118,7 @@ class EventStore:
             """,
             (agent_id, agent_id, agent_id, limit),
         )
+        rows = await cursor.fetchall()
         result = [dict(row) for row in rows]
         for row in result:
             row["payload"] = json.loads(row["payload"])
