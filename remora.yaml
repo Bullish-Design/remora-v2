@@ -14,6 +14,7 @@ bundle_overlays:
   class: "code-agent"
   method: "code-agent"
   file: "code-agent"
+  directory: "directory-agent"
 model_base_url: "http://remora-server:8000/v1"
 model_default: "Qwen/Qwen3-4B-Instruct-2507-FP8"
 model_api_key: "${OPENAI_API_KEY:-}"
