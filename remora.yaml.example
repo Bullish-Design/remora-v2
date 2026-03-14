@@ -9,7 +9,7 @@ language_map:
 query_paths:
   - "queries/"
 bundle_root: "bundles"
-bundle_mapping:
+bundle_overlays:
   function: "code-agent"
   class: "code-agent"
   method: "code-agent"
@@ -19,7 +19,7 @@ model_default: "Qwen/Qwen3-4B"
 model_api_key: "${OPENAI_API_KEY:-}"
 timeout_s: 300.0
 max_turns: 8
-swarm_root: ".remora"
+workspace_root: ".remora"
 max_concurrency: 4
 max_trigger_depth: 5
 trigger_cooldown_ms: 1000

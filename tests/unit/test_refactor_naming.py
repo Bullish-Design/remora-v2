@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
+from pydantic import ValidationError
+
 from remora.core.config import Config
 from remora.core.node import DiscoveredElement, Node
 
@@ -26,9 +30,12 @@ def test_node_uses_role_field() -> None:
     assert node.to_agent().role == "code-agent"
 
 
-def test_config_workspace_root_aliases_legacy_swarm_root() -> None:
+def test_config_workspace_root_works() -> None:
     config = Config(workspace_root=".remora-workspace")
     assert config.workspace_root == ".remora-workspace"
 
-    legacy = Config(swarm_root=".remora-legacy")
-    assert legacy.workspace_root == ".remora-legacy"
+
+def test_legacy_swarm_root_key_rejected() -> None:
+    """Old 'swarm_root' key is no longer silently migrated."""
+    with pytest.raises(ValidationError):
+        Config(swarm_root=".remora-legacy")

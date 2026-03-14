@@ -96,28 +96,6 @@ class Config(BaseSettings):
         cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
         return cleaned
 
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_bundle_mapping(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            copied = dict(data)
-            if "bundle_mapping" in copied and "bundle_overlays" not in copied:
-                copied["bundle_overlays"] = copied.pop("bundle_mapping")
-            if "swarm_root" in copied and "workspace_root" not in copied:
-                copied["workspace_root"] = copied.pop("swarm_root")
-            return copied
-        return data
-
-    @property
-    def bundle_mapping(self) -> dict[str, str]:
-        """Backward-compatible alias for bundle_overlays."""
-        return self.bundle_overlays
-
-    @property
-    def swarm_root(self) -> str:
-        """Backward-compatible alias for workspace_root."""
-        return self.workspace_root
-
 
 def _expand_string(value: str) -> str:
     """Expand ${VAR:-default} shell-style values."""

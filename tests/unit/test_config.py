@@ -15,14 +15,14 @@ def test_default_config(monkeypatch) -> None:
     assert config.max_turns == 8
     assert config.bundle_overlays["function"] == "code-agent"
     assert config.bundle_overlays["directory"] == "directory-agent"
-    assert config.bundle_mapping["function"] == "code-agent"
     assert config.language_map[".py"] == "python"
     assert "queries/" in config.query_paths
 
 
-def test_legacy_bundle_mapping_alias_still_loads() -> None:
-    config = Config(bundle_mapping={"function": "special-agent"})
-    assert config.bundle_overlays["function"] == "special-agent"
+def test_legacy_bundle_mapping_key_rejected() -> None:
+    """Old 'bundle_mapping' key is no longer silently migrated."""
+    with pytest.raises(ValidationError):
+        Config(bundle_mapping={"function": "special-agent"})
 
 
 def test_load_from_yaml(tmp_path: Path) -> None:

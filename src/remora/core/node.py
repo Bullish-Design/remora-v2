@@ -39,15 +39,6 @@ class Agent(BaseModel):
     status: NodeStatus = NodeStatus.IDLE
     role: str | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_bundle_name(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "bundle_name" in data and "role" not in data:
-            copied = dict(data)
-            copied["role"] = copied.pop("bundle_name")
-            return copied
-        return data
-
     def to_row(self) -> dict[str, Any]:
         data = self.model_dump()
         data["status"] = data["status"].value if hasattr(data["status"], "value") else data["status"]
@@ -56,10 +47,6 @@ class Agent(BaseModel):
     @classmethod
     def from_row(cls, row: sqlite3.Row | dict[str, Any]) -> "Agent":
         return cls(**dict(row))
-
-    @property
-    def bundle_name(self) -> str | None:
-        return self.role
 
 
 class Node(BaseModel):
@@ -81,15 +68,6 @@ class Node(BaseModel):
     parent_id: str | None = None
     status: NodeStatus = NodeStatus.IDLE
     role: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_bundle_name(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "bundle_name" in data and "role" not in data:
-            copied = dict(data)
-            copied["role"] = copied.pop("bundle_name")
-            return copied
-        return data
 
     def to_element(self) -> DiscoveredElement:
         return DiscoveredElement(
@@ -129,10 +107,6 @@ class Node(BaseModel):
         """Hydrate a model from a sqlite row representation."""
         data = dict(row)
         return cls(**data)
-
-    @property
-    def bundle_name(self) -> str | None:
-        return self.role
 
 
 __all__ = ["DiscoveredElement", "Agent", "Node"]
