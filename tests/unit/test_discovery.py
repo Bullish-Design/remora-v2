@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from remora.code.discovery import CSTNode, discover
+from remora.code.languages import LanguageRegistry
 from tests.factories import write_file
 
 
@@ -140,6 +141,38 @@ def test_unconfigured_extension_is_skipped(tmp_path: Path) -> None:
     write_file(tmp_path / "x.foo", "hello")
     nodes = discover([tmp_path], language_map={".py": "python"})
     assert nodes == []
+
+
+def test_discover_reuses_cached_language_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    write_file(tmp_path / "example.py", "def greet(name):\n    return f'hi {name}'\n")
+
+    import remora.code.discovery as discovery_module
+
+    init_calls = 0
+
+    class CountingRegistry(LanguageRegistry):
+        def __init__(self) -> None:
+            nonlocal init_calls
+            init_calls += 1
+            super().__init__()
+
+    monkeypatch.setattr(discovery_module, "LanguageRegistry", CountingRegistry)
+    discovery_module._get_language_registry.cache_clear()
+    discovery_module._get_registry_plugin.cache_clear()
+    discovery_module._get_parser.cache_clear()
+    discovery_module._load_query.cache_clear()
+
+    discover([tmp_path], language_map={".py": "python"})
+    discover([tmp_path], language_map={".py": "python"})
+
+    assert init_calls == 1
+
+
+def test_discover_uses_injected_language_registry(tmp_path: Path) -> None:
+    write_file(tmp_path / "example.py", "def greet(name):\n    return f'hi {name}'\n")
+    registry = LanguageRegistry()
+    nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
+    assert any(node.name == "greet" for node in nodes)
 
 
 def test_cstnode_frozen() -> None:

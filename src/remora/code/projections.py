@@ -41,7 +41,7 @@ async def project_nodes(
             continue
 
         mapped_bundle = config.bundle_overlays.get(cst.node_type)
-        code_node = Node(
+        node = Node(
             node_id=cst.node_id,
             node_type=cst.node_type,
             name=cst.name,
@@ -62,7 +62,7 @@ async def project_nodes(
             ),
         )
 
-        await node_store.upsert_node(code_node)
+        await node_store.upsert_node(node)
 
         if existing is None:
             # System tools/config are always included; role bundle overlays them.
@@ -71,7 +71,7 @@ async def project_nodes(
                 template_dirs.append(bundle_root / mapped_bundle)
             await workspace_service.provision_bundle(cst.node_id, template_dirs)
 
-        results.append(code_node)
+        results.append(node)
 
     return results
 

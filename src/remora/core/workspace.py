@@ -134,6 +134,11 @@ class CairnWorkspaceService:
     async def provision_bundle(self, node_id: str, template_dirs: list[Path]) -> None:
         """Copy bundle.yaml and tool scripts from ordered template directories."""
         workspace = await self.get_agent_workspace(node_id)
+        fingerprint = _bundle_template_fingerprint(template_dirs)
+        existing_fingerprint = await workspace.kv_get("_bundle/template_fingerprint")
+        if existing_fingerprint == fingerprint:
+            return
+
         merged_bundle: dict[str, Any] = {}
 
         for template_dir in template_dirs:
@@ -159,6 +164,7 @@ class CairnWorkspaceService:
                 "_bundle/bundle.yaml",
                 yaml.safe_dump(merged_bundle, sort_keys=False),
             )
+        await workspace.kv_set("_bundle/template_fingerprint", fingerprint)
 
     async def close(self) -> None:
         """Close and release tracked workspaces."""
@@ -187,3 +193,26 @@ def _merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = value
     return merged
+
+
+def _bundle_template_fingerprint(template_dirs: list[Path]) -> str:
+    hasher = hashlib.sha256()
+    for template_dir in template_dirs:
+        resolved_dir = template_dir.resolve()
+        hasher.update(str(resolved_dir).encode("utf-8"))
+        if not resolved_dir.exists():
+            hasher.update(b"missing")
+            continue
+
+        bundle_yaml = resolved_dir / "bundle.yaml"
+        if bundle_yaml.exists():
+            hasher.update(b"bundle.yaml")
+            hasher.update(bundle_yaml.read_bytes())
+
+        tools_dir = resolved_dir / "tools"
+        if tools_dir.exists():
+            for pym_file in sorted(tools_dir.glob("*.pym")):
+                hasher.update(pym_file.name.encode("utf-8"))
+                hasher.update(pym_file.read_bytes())
+
+    return hasher.hexdigest()

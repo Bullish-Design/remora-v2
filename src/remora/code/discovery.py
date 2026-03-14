@@ -45,6 +45,7 @@ def discover(
     query_paths: list[Path] | None = None,
     ignore_patterns: tuple[str, ...] = (),
     languages: list[str] | None = None,
+    language_registry: LanguageRegistry | None = None,
 ) -> list[CSTNode]:
     """Discover nodes in files using language-specific tree-sitter queries."""
     requested_languages = {name.lower() for name in languages} if languages else None
@@ -53,7 +54,7 @@ def discover(
         for ext, name in (language_map or _DEFAULT_LANGUAGE_MAP).items()
     }
     effective_query_paths = [path.resolve() for path in (query_paths or [])]
-    language_registry = LanguageRegistry()
+    registry = language_registry or _get_language_registry()
 
     nodes: list[CSTNode] = []
     for source_file in walk_source_files(paths, ignore_patterns):
@@ -61,7 +62,7 @@ def discover(
         language_name = effective_language_map.get(ext)
         if language_name is None:
             continue
-        plugin = language_registry.get_by_name(language_name)
+        plugin = registry.get_by_name(language_name)
         if plugin is None:
             raise ValueError(
                 f"Configured language '{language_name}' not found for extension '{ext}'"
@@ -75,10 +76,15 @@ def discover(
 
 @lru_cache(maxsize=16)
 def _get_registry_plugin(name: str) -> LanguagePlugin:
-    plugin = LanguageRegistry().get_by_name(name)
+    plugin = _get_language_registry().get_by_name(name)
     if plugin is None:
         raise ValueError(f"Unknown language plugin: {name}")
     return plugin
+
+
+@lru_cache(maxsize=1)
+def _get_language_registry() -> LanguageRegistry:
+    return LanguageRegistry()
 
 
 @lru_cache(maxsize=16)

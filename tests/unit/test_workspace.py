@@ -155,6 +155,28 @@ async def test_service_provision_bundle(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_service_provision_bundle_skips_when_fingerprint_unchanged(tmp_path: Path) -> None:
+    config = Config(workspace_root=".remora-test")
+    service = CairnWorkspaceService(config, tmp_path)
+    await service.initialize()
+
+    template = tmp_path / "bundle-template"
+    (template / "tools").mkdir(parents=True)
+    (template / "bundle.yaml").write_text("name: code-agent\n", encoding="utf-8")
+    (template / "tools" / "echo.pym").write_text("return 'template'\n", encoding="utf-8")
+
+    node_id = "src/app.py::a"
+    await service.provision_bundle(node_id, [template])
+    workspace = await service.get_agent_workspace(node_id)
+    await workspace.write("_bundle/tools/echo.pym", "return 'local-edit'\n")
+
+    await service.provision_bundle(node_id, [template])
+    assert await workspace.read("_bundle/tools/echo.pym") == "return 'local-edit'\n"
+    assert await workspace.kv_get("_bundle/template_fingerprint") is not None
+    await service.close()
+
+
+@pytest.mark.asyncio
 async def test_service_provision_layering(tmp_path: Path) -> None:
     config = Config(workspace_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
