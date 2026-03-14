@@ -10,7 +10,7 @@ from remora.core.actor import Actor
 from remora.core.config import Config
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,6 @@ class ActorPool:
         self,
         event_store: EventStore,
         node_store: NodeStore,
-        agent_store: AgentStore,
         workspace_service: CairnWorkspaceService,
         config: Config,
         dispatcher: TriggerDispatcher | None = None,
@@ -35,7 +34,6 @@ class ActorPool:
         self._event_store = event_store
         self._dispatcher = dispatcher or event_store.dispatcher
         self._node_store = node_store
-        self._agent_store = agent_store
         self._workspace_service = workspace_service
         self._config = config
         self._running = False
@@ -57,7 +55,6 @@ class ActorPool:
                 node_id=node_id,
                 event_store=self._event_store,
                 node_store=self._node_store,
-                agent_store=self._agent_store,
                 workspace_service=self._workspace_service,
                 config=self._config,
                 semaphore=self._semaphore,

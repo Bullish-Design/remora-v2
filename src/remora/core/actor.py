@@ -19,7 +19,7 @@ from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.externals import TurnContext
 from remora.core.grail import GrailTool, discover_tools
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.node import Node
 from remora.core.types import NodeStatus
@@ -128,7 +128,6 @@ class Actor:
         node_id: str,
         event_store: EventStore,
         node_store: NodeStore,
-        agent_store: AgentStore,
         workspace_service: CairnWorkspaceService,
         config: Config,
         semaphore: asyncio.Semaphore,
@@ -137,7 +136,6 @@ class Actor:
         self.inbox: asyncio.Queue[Event] = asyncio.Queue()
         self._event_store = event_store
         self._node_store = node_store
-        self._agent_store = agent_store
         self._workspace_service = workspace_service
         self._config = config
         self._semaphore = semaphore
@@ -269,7 +267,6 @@ class Actor:
                 await self._complete_agent_turn(node_id, response_text, outbox, trigger)
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
                 logger.exception("Agent turn failed for %s", node_id)
-                await self._agent_store.transition_status(node_id, NodeStatus.ERROR)
                 await self._node_store.transition_status(node_id, NodeStatus.ERROR)
                 await outbox.emit(
                     AgentErrorEvent(
@@ -289,13 +286,10 @@ class Actor:
             logger.warning("Trigger for unknown node: %s", node_id)
             return None
 
-        if await self._agent_store.get_agent(node_id) is None:
-            await self._agent_store.upsert_agent(node.to_agent())
-        if not await self._agent_store.transition_status(node_id, NodeStatus.RUNNING):
+        if not await self._node_store.transition_status(node_id, NodeStatus.RUNNING):
             logger.warning("Failed to transition node %s into running state", node_id)
             return None
 
-        await self._node_store.transition_status(node_id, NodeStatus.RUNNING)
         await outbox.emit(
             AgentStartEvent(
                 agent_id=node_id,
@@ -333,7 +327,6 @@ class Actor:
             workspace=workspace,
             correlation_id=trigger.correlation_id,
             node_store=self._node_store,
-            agent_store=self._agent_store,
             event_store=self._event_store,
             outbox=outbox,
         )
@@ -396,9 +389,6 @@ class Actor:
 
     async def _reset_agent_state(self, node_id: str, depth_key: str | None) -> None:
         try:
-            current_agent = await self._agent_store.get_agent(node_id)
-            if current_agent is not None and current_agent.status == NodeStatus.RUNNING:
-                await self._agent_store.transition_status(node_id, NodeStatus.IDLE)
             current_node = await self._node_store.get_node(node_id)
             if current_node is not None and current_node.status == NodeStatus.RUNNING:
                 await self._node_store.transition_status(node_id, NodeStatus.IDLE)

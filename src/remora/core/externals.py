@@ -15,7 +15,7 @@ from remora.core.events import (
 )
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.node import Node
 from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import AgentWorkspace
@@ -30,7 +30,6 @@ class TurnContext:
         workspace: AgentWorkspace,
         correlation_id: str | None,
         node_store: NodeStore,
-        agent_store: AgentStore,
         event_store: EventStore,
         outbox: Any,
     ) -> None:
@@ -38,7 +37,6 @@ class TurnContext:
         self.workspace = workspace
         self.correlation_id = correlation_id
         self._node_store = node_store
-        self._agent_store = agent_store
         self._event_store = event_store
         self._outbox = outbox
 
@@ -142,7 +140,6 @@ class TurnContext:
         return [node.model_dump() for node in children]
 
     async def graph_set_status(self, target_id: str, new_status: str) -> bool:
-        await self._agent_store.set_status(target_id, new_status)
         await self._node_store.set_status(target_id, new_status)
         return True
 

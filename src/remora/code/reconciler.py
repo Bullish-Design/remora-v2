@@ -20,7 +20,7 @@ from remora.core.events import (
     NodeRemovedEvent,
     SubscriptionPattern,
 )
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.node import Node
 from remora.core.types import NodeType
 from remora.core.workspace import CairnWorkspaceService
@@ -35,14 +35,12 @@ class FileReconciler:
         self,
         config: Config,
         node_store: NodeStore,
-        agent_store: AgentStore,
         event_store: EventStore,
         workspace_service: CairnWorkspaceService,
         project_root: Path,
     ):
         self._config = config
         self._node_store = node_store
-        self._agent_store = agent_store
         self._event_store = event_store
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
@@ -252,7 +250,6 @@ class FileReconciler:
             if existing is None:
                 await self._node_store.upsert_node(directory_node)
                 await self._register_subscriptions(directory_node)
-                await self._ensure_agent(directory_node)
                 await self._provision_bundle(directory_node.node_id, directory_node.role)
                 await self._event_store.append(
                     NodeDiscoveredEvent(
@@ -277,13 +274,11 @@ class FileReconciler:
 
             if refresh_subscriptions:
                 await self._register_subscriptions(directory_node)
-                await self._ensure_agent(directory_node)
             if refresh_bundle:
                 await self._provision_bundle(directory_node.node_id, directory_node.role)
 
             if hash_changed:
                 await self._register_subscriptions(directory_node)
-                await self._ensure_agent(directory_node)
                 await self._event_store.append(
                     NodeChangedEvent(
                         node_id=directory_node.node_id,
@@ -386,7 +381,6 @@ class FileReconciler:
         for node_id in additions:
             node = projected_by_id[node_id]
             await self._register_subscriptions(node)
-            await self._ensure_agent(node)
             await self._event_store.append(
                 NodeDiscoveredEvent(
                     node_id=node.node_id,
@@ -402,7 +396,6 @@ class FileReconciler:
             new_hash = node.source_hash
             if old_hash is not None and old_hash != new_hash:
                 await self._register_subscriptions(node)
-                await self._ensure_agent(node)
                 await self._event_store.append(
                     NodeChangedEvent(
                         node_id=node_id,
@@ -431,7 +424,6 @@ class FileReconciler:
             return
 
         await self._event_store.subscriptions.unregister_by_agent(node_id)
-        await self._agent_store.delete_agent(node_id)
         await self._node_store.delete_node(node_id)
         await self._event_store.append(
             NodeRemovedEvent(
@@ -474,10 +466,6 @@ class FileReconciler:
                 path_glob=node.file_path,
             ),
         )
-
-    async def _ensure_agent(self, node: Node) -> None:
-        if await self._agent_store.get_agent(node.node_id) is None:
-            await self._agent_store.upsert_agent(node.to_agent())
 
     async def _on_content_changed(self, event: ContentChangedEvent) -> None:
         """Immediately reconcile a file reported changed by upstream systems."""

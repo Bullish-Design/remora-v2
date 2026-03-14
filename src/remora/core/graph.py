@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import aiosqlite
-from remora.core.node import Agent, Node
+from remora.core.node import Node
 from remora.core.types import NodeStatus, NodeType, validate_status_transition
 
 logger = logging.getLogger(__name__)
@@ -218,88 +218,4 @@ class NodeStore:
         ]
 
 
-class AgentStore:
-    """SQLite persistence for agent state, separate from code elements."""
-
-    def __init__(self, db: aiosqlite.Connection):
-        self._db = db
-
-    async def create_tables(self) -> None:
-        await self._db.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS agents (
-                agent_id TEXT PRIMARY KEY,
-                element_id TEXT,
-                status TEXT DEFAULT 'idle',
-                role TEXT,
-                FOREIGN KEY (element_id) REFERENCES nodes(node_id) ON DELETE SET NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
-            """
-        )
-        await self._db.commit()
-
-    async def upsert_agent(self, agent: Agent) -> None:
-        row = agent.to_row()
-        columns = ", ".join(row.keys())
-        placeholders = ", ".join("?" for _ in row)
-        await self._db.execute(
-            f"INSERT OR REPLACE INTO agents ({columns}) VALUES ({placeholders})",
-            tuple(row.values()),
-        )
-        await self._db.commit()
-
-    async def get_agent(self, agent_id: str) -> Agent | None:
-        cursor = await self._db.execute(
-            "SELECT * FROM agents WHERE agent_id = ?",
-            (agent_id,),
-        )
-        row = await cursor.fetchone()
-        return None if row is None else Agent.from_row(row)
-
-    async def set_status(self, agent_id: str, status: NodeStatus | str) -> None:
-        status_value = status.value if isinstance(status, NodeStatus) else status
-        await self._db.execute(
-            "UPDATE agents SET status = ? WHERE agent_id = ?",
-            (status_value, agent_id),
-        )
-        await self._db.commit()
-
-    async def transition_status(self, agent_id: str, target: NodeStatus) -> bool:
-        agent = await self.get_agent(agent_id)
-        if agent is None:
-            return False
-        if not validate_status_transition(agent.status, target):
-            logger.warning(
-                "Invalid agent status transition for %s: %s -> %s",
-                agent_id,
-                agent.status,
-                target,
-            )
-            return False
-        await self.set_status(agent_id, target)
-        return True
-
-    async def list_agents(self, status: NodeStatus | None = None) -> list[Agent]:
-        if status is None:
-            cursor = await self._db.execute(
-                "SELECT * FROM agents ORDER BY agent_id ASC"
-            )
-        else:
-            cursor = await self._db.execute(
-                "SELECT * FROM agents WHERE status = ? ORDER BY agent_id ASC",
-                (status.value,),
-            )
-        rows = await cursor.fetchall()
-        return [Agent.from_row(row) for row in rows]
-
-    async def delete_agent(self, agent_id: str) -> bool:
-        cursor = await self._db.execute(
-            "DELETE FROM agents WHERE agent_id = ?",
-            (agent_id,),
-        )
-        await self._db.commit()
-        return cursor.rowcount > 0
-
-
-__all__ = ["Edge", "NodeStore", "AgentStore"]
+__all__ = ["Edge", "NodeStore"]
