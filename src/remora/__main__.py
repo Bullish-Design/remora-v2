@@ -38,6 +38,10 @@ PROJECT_ROOT_ARG = typer.Option(
 )
 CONFIG_ARG = typer.Option("--config")
 PORT_ARG = typer.Option("--port", min=1, max=65535)
+BIND_ARG = typer.Option(
+    "--bind",
+    help="Address to bind the web server to (use 0.0.0.0 for all interfaces).",
+)
 NO_WEB_ARG = typer.Option("--no-web")
 RUN_SECONDS_ARG = typer.Option(
     "--run-seconds",
@@ -62,6 +66,7 @@ def start_command(
     project_root: Annotated[Path, PROJECT_ROOT_ARG] = Path("."),
     config_path: Annotated[Path | None, CONFIG_ARG] = None,
     port: Annotated[int, PORT_ARG] = 8080,
+    bind: Annotated[str, BIND_ARG] = "127.0.0.1",
     no_web: Annotated[bool, NO_WEB_ARG] = False,
     run_seconds: Annotated[float, RUN_SECONDS_ARG] = 0.0,
     log_level: Annotated[str, LOG_LEVEL_ARG] = "INFO",
@@ -76,6 +81,7 @@ def start_command(
                 project_root=project_root,
                 config_path=config_path,
                 port=port,
+                bind=bind,
                 no_web=no_web,
                 run_seconds=run_seconds,
                 log_events=log_events,
@@ -104,6 +110,7 @@ async def _start(
     config_path: Path | None,
     port: int,
     no_web: bool,
+    bind: str = "127.0.0.1",
     run_seconds: float = 0.0,
     log_events: bool = False,
     lsp: bool = False,
@@ -167,10 +174,10 @@ async def _start(
             services.event_bus,
             project_root=project_root,
         )
-        logger.info("Starting web server on 127.0.0.1:%d", port)
+        logger.info("Starting web server on %s:%d", bind, port)
         web_config = uvicorn.Config(
             web_app,
-            host="127.0.0.1",
+            host=bind,
             port=port,
             log_level="warning",
             access_log=False,

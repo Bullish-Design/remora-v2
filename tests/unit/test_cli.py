@@ -23,6 +23,7 @@ def test_cli_start_help() -> None:
     result = runner.invoke(app, ["start", "--help"])
     assert result.exit_code == 0
     assert "--project-root" in result.stdout
+    assert "--bind" in result.stdout
     assert "--no-web" in result.stdout
 
 
@@ -38,6 +39,8 @@ def test_cli_start_smoke(tmp_path: Path) -> None:
             "start",
             "--project-root",
             str(tmp_path),
+            "--bind",
+            "127.0.0.1",
             "--no-web",
             "--run-seconds",
             "0.1",
