@@ -46,6 +46,7 @@ class AgentStartEvent(Event):
 class AgentCompleteEvent(Event):
     agent_id: str
     result_summary: str = ""
+    full_response: str = ""
 
     def summary(self) -> str:
         return self.result_summary

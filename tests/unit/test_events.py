@@ -89,3 +89,14 @@ def test_all_event_types_instantiate() -> None:
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
     ]
     assert all(event.event_type for event in events)
+
+
+def test_agent_complete_event_preserves_full_response() -> None:
+    long_text = "x" * 500
+    event = AgentCompleteEvent(
+        agent_id="test",
+        result_summary=long_text[:200],
+        full_response=long_text,
+    )
+    assert len(event.result_summary) == 200
+    assert len(event.full_response) == 500

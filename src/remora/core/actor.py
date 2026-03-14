@@ -387,6 +387,7 @@ class Actor:
             AgentCompleteEvent(
                 agent_id=node_id,
                 result_summary=response_text[:200],
+                full_response=response_text,
                 correlation_id=trigger.correlation_id,
             )
         )
