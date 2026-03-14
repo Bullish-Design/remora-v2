@@ -84,3 +84,33 @@ async def test_lsp_did_save_emits_event(lsp_env, tmp_path: Path) -> None:
     assert events
     assert events[0]["event_type"] == "ContentChangedEvent"
     assert events[0]["payload"]["path"] == str(file_path)
+
+
+@pytest.mark.asyncio
+async def test_lsp_did_change_writes_file_and_emits_event(
+    lsp_env,
+    tmp_path: Path,
+) -> None:
+    node_store, event_store = lsp_env
+    server = create_lsp_server(node_store, event_store)
+    handlers = server._remora_handlers  # type: ignore[attr-defined]
+    did_change = handlers["did_change"]
+
+    file_path = tmp_path / "src" / "app.py"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("print('hello')\n", encoding="utf-8")
+    change = lsp.TextDocumentContentChangeWholeDocument(
+        text="print('goodbye')\n",
+    )
+    params = lsp.DidChangeTextDocumentParams(
+        text_document=lsp.VersionedTextDocumentIdentifier(
+            uri=f"file://{file_path}",
+            version=2,
+        ),
+        content_changes=[change],
+    )
+
+    await did_change(params)
+    assert file_path.read_text(encoding="utf-8") == "print('goodbye')\n"
+    events = await event_store.get_events(limit=5)
+    assert any(event["event_type"] == "ContentChangedEvent" for event in events)

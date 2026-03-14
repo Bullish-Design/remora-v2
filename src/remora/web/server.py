@@ -66,6 +66,10 @@ def create_app(
         if not node_id or not message:
             return JSONResponse({"error": "node_id and message are required"}, status_code=400)
 
+        node = await node_store.get_node(node_id)
+        if node is None:
+            return JSONResponse({"error": "node not found"}, status_code=404)
+
         await event_store.append(
             AgentMessageEvent(from_agent="user", to_agent=node_id, content=message)
         )

@@ -200,6 +200,11 @@ async def _start(
             await asyncio.gather(*tasks)
     finally:
         await services.close()
+        reconciler_stop_task = (
+            services.reconciler.stop_task
+            if services.reconciler is not None
+            else None
+        )
         if web_server is not None:
             web_server.should_exit = True
         for task in tasks:
@@ -214,6 +219,8 @@ async def _start(
                 await asyncio.to_thread(lsp_server.exit)
             except Exception:
                 pass
+        if reconciler_stop_task is not None and reconciler_stop_task not in tasks:
+            tasks.append(reconciler_stop_task)
         await asyncio.gather(*tasks, return_exceptions=True)
 
 

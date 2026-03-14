@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from remora.core.events.types import Event, EventHandler
 
@@ -19,15 +20,20 @@ class EventBus:
     async def emit(self, event: Event) -> None:
         """Emit an event to all specific and global handlers."""
         for event_type in type(event).__mro__:
-            handlers = self._handlers.get(event_type, [])
-            for handler in handlers:
-                result = handler(event)
-                if asyncio.iscoroutine(result):
-                    await result
-        for handler in self._all_handlers:
+            await self._dispatch_handlers(self._handlers.get(event_type, []), event)
+        await self._dispatch_handlers(self._all_handlers, event)
+
+    @staticmethod
+    async def _dispatch_handlers(
+        handlers: list[EventHandler], event: Event
+    ) -> None:
+        tasks: list[asyncio.Task[Any]] = []
+        for handler in handlers:
             result = handler(event)
             if asyncio.iscoroutine(result):
-                await result
+                tasks.append(asyncio.create_task(result))
+        if tasks:
+            await asyncio.gather(*tasks)
 
     def subscribe(self, event_type: type[Event], handler: EventHandler) -> None:
         """Register a handler for a specific event type."""

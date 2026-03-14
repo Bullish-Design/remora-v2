@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from remora.code.languages import LanguageRegistry
@@ -71,6 +72,12 @@ class RuntimeServices:
         """Shut down all services."""
         if self.reconciler is not None:
             self.reconciler.stop()
+            stop_task = self.reconciler.stop_task
+            if stop_task is not None:
+                try:
+                    await stop_task
+                except asyncio.CancelledError:
+                    pass
         if self.runner is not None:
             await self.runner.stop_and_wait()
         await self.workspace_service.close()

@@ -83,7 +83,8 @@
     }
   </style>
 </head>
-<body>
+  <!-- Configure Sigma via the data attribute below. Increase `data-sigma-iterations` for slower, smoother layouts. -->
+<body data-sigma-iterations="30">
   <div id="graph"></div>
   <aside id="sidebar">
     <h1>Remora</h1>
@@ -105,6 +106,7 @@
   <script>
     const graph = new graphology.Graph();
     const renderer = new Sigma(graph, document.getElementById("graph"));
+    const SIGMA_ITERATIONS = Number(document.body.dataset.sigmaIterations) || 30;
     let selectedNode = null;
 
     const colorByType = {
@@ -128,16 +130,35 @@
       return getComputedStyle(document.documentElement).getPropertyValue("--done").trim();
     }
 
+    function hashNodeId(nodeId) {
+      let hash = 5381;
+      for (let i = 0; i < nodeId.length; i++) {
+        hash = (hash * 33) ^ nodeId.charCodeAt(i);
+      }
+      return hash >>> 0;
+    }
+
+    function deterministicPosition(nodeId) {
+      const hash = hashNodeId(nodeId);
+      const radius = 0.25 + ((hash % 100) / 100) * 0.5;
+      const angle = (hash % 360) * (Math.PI / 180);
+      return {
+        x: 0.5 + radius * Math.cos(angle),
+        y: 0.5 + radius * Math.sin(angle),
+      };
+    }
+
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
       for (const node of nodes) {
         if (!graph.hasNode(node.node_id)) {
+          const { x, y } = deterministicPosition(node.node_id);
           graph.addNode(node.node_id, {
             label: node.name,
             size: 8,
-            x: Math.random(),
-            y: Math.random(),
+            x,
+            y,
             color: nodeColor(node.node_type, node.status),
             node_type: node.node_type
           });
@@ -155,7 +176,7 @@
       }
 
       if (window.graphologyLayoutForceatlas2) {
-        window.graphologyLayoutForceatlas2.assign(graph, { iterations: 30 });
+        window.graphologyLayoutForceatlas2.assign(graph, { iterations: SIGMA_ITERATIONS });
       }
       renderer.refresh();
     }
@@ -210,11 +231,12 @@
     evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
       const data = JSON.parse(event.data);
       if (!graph.hasNode(data.node_id)) {
+        const { x, y } = deterministicPosition(data.node_id);
         graph.addNode(data.node_id, {
           label: data.name || data.node_id.split("::").pop(),
           size: 8,
-          x: Math.random(),
-          y: Math.random(),
+          x,
+          y,
           node_type: data.node_type || "function",
           color: nodeColor(data.node_type || "function", "idle")
         });

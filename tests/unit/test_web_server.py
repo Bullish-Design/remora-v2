@@ -134,6 +134,16 @@ async def test_api_chat_emits_agent_message_event(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_chat_missing_node_returns_404(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.post(
+        "/api/chat",
+        json={"node_id": "missing-node", "message": "hello"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_api_events(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     await event_store.append(

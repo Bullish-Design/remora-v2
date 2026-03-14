@@ -49,12 +49,13 @@ class FileReconciler:
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
         self._running = False
-        # Re-register directory subscriptions once after startup so older
-        # subscription shapes are migrated without requiring a DB reset.
+        # Re-register directory subscriptions once after startup to ensure
+        # subscription state is consistent with current directory projections.
         self._subscriptions_bootstrapped = False
         # Re-copy bundle templates once after startup so existing agent workspaces
         # pick up updated tool scripts.
         self._bundles_bootstrapped = False
+        self._stop_task: asyncio.Task | None = None
 
     async def full_scan(self) -> list[Node]:
         """Perform a full startup scan and return current graph nodes."""
@@ -101,6 +102,8 @@ class FileReconciler:
 
     def stop(self) -> None:
         self._running = False
+        if self._stop_task is not None and not self._stop_task.done():
+            self._stop_task.cancel()
 
     async def start(self, event_bus: EventBus) -> None:
         """Subscribe to content change events for immediate reconciliation."""
@@ -140,15 +143,27 @@ class FileReconciler:
         """Create a threading event set when reconciler is stopped."""
         import threading
 
+        if self._stop_task is not None and not self._stop_task.done():
+            self._stop_task.cancel()
+
         event = threading.Event()
 
         async def _checker() -> None:
-            while self._running:
-                await asyncio.sleep(0.5)
-            event.set()
+            try:
+                while self._running:
+                    await asyncio.sleep(0.5)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                event.set()
 
-        asyncio.create_task(_checker())
+        self._stop_task = asyncio.create_task(_checker())
         return event
+
+    @property
+    def stop_task(self) -> asyncio.Task | None:
+        """Expose the current _stop_event task for observers."""
+        return self._stop_task
 
     def _collect_file_mtimes(self) -> dict[str, int]:
         mtimes: dict[str, int] = {}

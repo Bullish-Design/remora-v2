@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 from urllib.parse import unquote, urlparse
 
 from lsprotocol import types as lsp
@@ -47,12 +48,29 @@ def create_lsp_server(
         file_path = _uri_to_path(params.text_document.uri)
         await event_store.append(ContentChangedEvent(path=file_path, change_type="opened"))
 
+    @server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
+    async def did_change(params: lsp.DidChangeTextDocumentParams) -> None:
+        file_path = _uri_to_path(params.text_document.uri)
+        new_text = _resolve_document_text(file_path, params.content_changes)
+        path_obj = Path(file_path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        path_obj.write_text(new_text, encoding="utf-8")
+        await event_store.append(ContentChangedEvent(path=file_path, change_type="modified"))
+        if getattr(server, "_server", None) is not None:
+            server.text_document_publish_diagnostics(
+                lsp.PublishDiagnosticsParams(
+                    uri=params.text_document.uri,
+                    diagnostics=[],
+                )
+            )
+
     # Expose handlers for direct unit testing without spinning up an LSP transport.
     server._remora_handlers = {  # type: ignore[attr-defined]
         "code_lens": code_lens,
         "hover": hover,
         "did_save": did_save,
         "did_open": did_open,
+        "did_change": did_change,
     }
 
     return server
@@ -106,7 +124,40 @@ def _uri_to_path(uri: str) -> str:
     parsed = urlparse(uri)
     if parsed.scheme == "file":
         return str(Path(unquote(parsed.path)))
-    return uri.removeprefix("file://")
+    return uri
+
+
+def _resolve_document_text(
+    file_path: str,
+    changes: Sequence[lsp.TextDocumentContentChangeEvent],
+) -> str:
+    path = Path(file_path)
+    current_text = path.read_text(encoding="utf-8") if path.exists() else ""
+    if not changes:
+        return current_text
+
+    text = current_text
+    for change in changes:
+        change_text = getattr(change, "text", "") or ""
+        range_value = getattr(change, "range", None)
+        if range_value is None:
+            text = change_text
+            continue
+        start = _position_to_offset(text, range_value.start)
+        end = _position_to_offset(text, range_value.end)
+        text = text[:start] + change_text + text[end:]
+    return text
+
+
+def _position_to_offset(text: str, position: lsp.Position) -> int:
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        lines = [""]
+    line_index = min(position.line, len(lines) - 1)
+    offset = sum(len(line) for line in lines[:line_index])
+    line_text = lines[line_index]
+    char_index = min(position.character, len(line_text))
+    return offset + char_index
 
 
 __all__ = ["create_lsp_server"]
