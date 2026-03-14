@@ -52,10 +52,6 @@ class SubscriptionRegistry:
         self._db = db
         self._cache: dict[str, list[tuple[str, SubscriptionPattern]]] | None = None
 
-    @property
-    def db(self) -> AsyncDB:
-        return self._db
-
     async def create_tables(self) -> None:
         """Create subscription storage tables."""
         await self._db.execute_script(

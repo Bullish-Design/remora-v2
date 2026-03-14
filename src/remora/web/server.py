@@ -52,10 +52,12 @@ def create_app(
         return JSONResponse(payload)
 
     async def api_all_edges(_request: Request) -> JSONResponse:
-        rows = await node_store.db.fetch_all(
-            "SELECT from_id, to_id, edge_type FROM edges ORDER BY id ASC"
-        )
-        return JSONResponse([dict(row) for row in rows])
+        edges = await node_store.list_all_edges()
+        payload = [
+            {"from_id": edge.from_id, "to_id": edge.to_id, "edge_type": edge.edge_type}
+            for edge in edges
+        ]
+        return JSONResponse(payload)
 
     async def api_chat(request: Request) -> JSONResponse:
         data = await request.json()

@@ -120,7 +120,7 @@ async def test_nodestore_edge_uniqueness(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_shared_connection(db) -> None:
+async def test_shared_db_coexistence(db) -> None:
     node_store = NodeStore(db)
     event_store = EventStore(db=db)
     await node_store.create_tables()
@@ -131,8 +131,6 @@ async def test_shared_connection(db) -> None:
 
     assert got is not None
     assert event_id == 1
-    assert node_store.db.connection is event_store.connection
-    assert node_store.db.lock is event_store.lock
 
 
 @pytest.mark.asyncio

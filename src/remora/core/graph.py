@@ -28,10 +28,6 @@ class NodeStore:
     def __init__(self, db: AsyncDB):
         self._db = db
 
-    @property
-    def db(self) -> AsyncDB:
-        return self._db
-
     async def create_tables(self) -> None:
         """Create nodes and edges tables with indexes."""
         await self._db.execute_script(
@@ -75,7 +71,6 @@ class NodeStore:
             CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
-        await self._migrate_role_columns()
 
     async def upsert_node(self, node: Node) -> None:
         """Insert or replace a node by node_id."""
@@ -192,7 +187,7 @@ class NodeStore:
                 to_id=row["to_id"],
                 edge_type=row["edge_type"],
             )
-            for row in rows
+        for row in rows
         ]
 
     async def delete_edges(self, node_id: str) -> int:
@@ -202,18 +197,15 @@ class NodeStore:
             (node_id, node_id),
         )
 
-    async def _migrate_role_columns(self) -> None:
-        node_columns = await self._table_columns("nodes")
-        if "bundle_name" in node_columns and "role" not in node_columns:
-            await self._db.execute("ALTER TABLE nodes RENAME COLUMN bundle_name TO role")
-
-        agent_columns = await self._table_columns("agents")
-        if "bundle_name" in agent_columns and "role" not in agent_columns:
-            await self._db.execute("ALTER TABLE agents RENAME COLUMN bundle_name TO role")
-
-    async def _table_columns(self, table_name: str) -> set[str]:
-        rows = await self._db.fetch_all(f"PRAGMA table_info({table_name})")
-        return {str(row["name"]) for row in rows}
+    async def list_all_edges(self) -> list[Edge]:
+        """Return all edges in the graph."""
+        rows = await self._db.fetch_all(
+            "SELECT from_id, to_id, edge_type FROM edges ORDER BY id ASC"
+        )
+        return [
+            Edge(from_id=row["from_id"], to_id=row["to_id"], edge_type=row["edge_type"])
+            for row in rows
+        ]
 
 
 class AgentStore:
@@ -235,7 +227,6 @@ class AgentStore:
             CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
-        await self._migrate_role_column()
 
     async def upsert_agent(self, agent: Agent) -> None:
         row = agent.to_row()
@@ -285,12 +276,6 @@ class AgentStore:
     async def delete_agent(self, agent_id: str) -> bool:
         deleted = await self._db.delete("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
         return deleted > 0
-
-    async def _migrate_role_column(self) -> None:
-        rows = await self._db.fetch_all("PRAGMA table_info(agents)")
-        columns = {str(row["name"]) for row in rows}
-        if "bundle_name" in columns and "role" not in columns:
-            await self._db.execute("ALTER TABLE agents RENAME COLUMN bundle_name TO role")
 
 
 __all__ = ["Edge", "NodeStore", "AgentStore"]

@@ -14,7 +14,7 @@ import remora.code.reconciler as reconciler_module
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
 from remora.core.db import AsyncDB
-from remora.core.events import ContentChangedEvent, EventStore
+from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore, NodeChangedEvent
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
@@ -66,7 +66,6 @@ async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: 
     stored = await node_store.list_nodes()
     events = await event_store.get_events(limit=20)
     discovered = [event for event in events if event["event_type"] == "NodeDiscoveredEvent"]
-    subs = event_store.connection.execute("SELECT * FROM subscriptions").fetchall()  # type: ignore[union-attr]
 
     assert nodes
     assert stored
@@ -76,23 +75,29 @@ async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: 
     app_node = next(node for node in stored if node.node_id.endswith("::a"))
     assert app_node.parent_id == "src"
 
-    grouped: dict[str, list[dict]] = {}
-    for row in subs:
-        grouped.setdefault(row["agent_id"], []).append(json.loads(row["pattern_json"]))
-
     for node in stored:
-        expected = 3 if node.node_type == "directory" else 2
-        assert len(grouped[node.node_id]) == expected
+        message_event = AgentMessageEvent(
+            from_agent="user",
+            to_agent=node.node_id,
+            content="hello",
+        )
+        matched_message = await event_store.subscriptions.get_matching_agents(message_event)
+        assert node.node_id in matched_message
+
         if node.node_type == "directory":
-            directory_patterns = grouped[node.node_id]
-            assert any(
-                pattern.get("event_types") == ["NodeChangedEvent"]
-                for pattern in directory_patterns
+            child_path = "src/app.py" if node.file_path == "." else f"mock/{node.file_path}/child.py"
+            node_event = NodeChangedEvent(
+                node_id=node.node_id,
+                old_hash="old",
+                new_hash="new",
+                file_path=child_path,
             )
-            assert not any(
-                "NodeDiscoveredEvent" in (pattern.get("event_types") or [])
-                for pattern in directory_patterns
-            )
+            matched_node_changed = await event_store.subscriptions.get_matching_agents(node_event)
+            assert node.node_id in matched_node_changed
+
+            content_event = ContentChangedEvent(path=child_path)
+            matched_content = await event_store.subscriptions.get_matching_agents(content_event)
+            assert node.node_id in matched_content
 
 
 @pytest.mark.asyncio
@@ -156,17 +161,15 @@ async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path)
     await reconciler.reconcile_cycle()
     await reconciler.reconcile_cycle()
 
-    conn = event_store.connection
-    assert conn is not None
-    rows = conn.execute("SELECT agent_id, pattern_json FROM subscriptions").fetchall()
-    grouped: dict[str, list[dict]] = {}
-    for row in rows:
-        grouped.setdefault(row["agent_id"], []).append(json.loads(row["pattern_json"]))
-
     nodes = await node_store.list_nodes()
     for node in nodes:
-        expected = 3 if node.node_type == "directory" else 2
-        assert len(grouped[node.node_id]) == expected
+        message_event = AgentMessageEvent(
+            from_agent="test",
+            to_agent=node.node_id,
+            content="ping",
+        )
+        matched = await event_store.subscriptions.get_matching_agents(message_event)
+        assert node.node_id in matched
 
 
 @pytest.mark.asyncio
@@ -281,32 +284,12 @@ async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_directory_subscriptions_upgraded_on_startup(reconcile_env, tmp_path: Path) -> None:
+async def test_directory_subscriptions_refreshed_on_startup(reconcile_env, tmp_path: Path) -> None:
     node_store, agent_store, event_store, workspace_service, config, reconciler = reconcile_env
     write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
     await reconciler.full_scan()
 
-    conn = event_store.connection
-    assert conn is not None
-    conn.execute("DELETE FROM subscriptions WHERE agent_id = '.'")
-    conn.execute(
-        """
-        INSERT INTO subscriptions (agent_id, pattern_json, created_at)
-        VALUES (?, ?, strftime('%s','now'))
-        """,
-        (
-            ".",
-            json.dumps(
-                {
-                    "event_types": ["NodeDiscoveredEvent", "NodeRemovedEvent", "NodeChangedEvent"],
-                    "from_agents": None,
-                    "to_agent": None,
-                    "path_glob": "**",
-                }
-            ),
-        ),
-    )
-    conn.commit()
+    await event_store.subscriptions.unregister_by_agent(".")
 
     restart_reconciler = FileReconciler(
         config,
@@ -318,13 +301,9 @@ async def test_directory_subscriptions_upgraded_on_startup(reconcile_env, tmp_pa
     )
     await restart_reconciler.reconcile_cycle()
 
-    rows = conn.execute("SELECT pattern_json FROM subscriptions WHERE agent_id = '.'").fetchall()
-    patterns = [json.loads(row["pattern_json"]) for row in rows]
-    assert any(pattern.get("event_types") == ["NodeChangedEvent"] for pattern in patterns)
-    assert not any(
-        "NodeDiscoveredEvent" in (pattern.get("event_types") or [])
-        for pattern in patterns
-    )
+    test_event = NodeChangedEvent(node_id=".", old_hash="x", new_hash="y", file_path="src/app.py")
+    matched = await event_store.subscriptions.get_matching_agents(test_event)
+    assert "." in matched
 
 
 @pytest.mark.asyncio

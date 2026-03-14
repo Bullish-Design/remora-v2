@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
@@ -33,14 +32,6 @@ class EventStore:
     @property
     def subscriptions(self):  # noqa: ANN201
         return self._dispatcher.subscriptions
-
-    @property
-    def connection(self):  # noqa: ANN201
-        return self._db.connection
-
-    @property
-    def lock(self) -> asyncio.Lock:
-        return self._db.lock
 
     async def create_tables(self) -> None:
         """Create event storage tables and indexes."""
