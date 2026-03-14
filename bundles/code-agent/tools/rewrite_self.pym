@@ -8,5 +8,8 @@ async def apply_rewrite(new_source: str) -> bool: ...
 
 
 success = await apply_rewrite(new_source)
-message = f"Rewrite applied: {success}"
+if success:
+    message = "Rewrite applied successfully."
+else:
+    message = "Rewrite failed: the source could not be applied."
 message
