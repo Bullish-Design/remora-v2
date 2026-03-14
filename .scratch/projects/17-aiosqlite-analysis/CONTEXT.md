@@ -1,11 +1,19 @@
 # Context
 
 ## Status
-Project 17 is a lightweight investigation into whether the Remora runtime should be rewritten to lean on `aiosqlite` instead of the current `AsyncDB` helper.
+Project 17 is complete. The `AIOSQLITE_REFACTORING_GUIDE.md` has been fully implemented across phases A-G, and the codebase now uses `aiosqlite` directly with no `AsyncDB` wrapper or compatibility shims.
 
 ## Focus
-- Map where `AsyncDB` is used (graph/event/agent/subscription services) and consider how `aiosqlite` would integrate.
-- Evaluate architectural cleanliness, concurrency handling, and dependency implications when pursuing an `aiosqlite` refactor.
+- Final implementation highlights:
+  - LSP `didChange` now updates in-memory `DocumentStore` only (no disk writes).
+  - Added `aiosqlite` dependency and replaced `core/db.py` with `open_database()`.
+  - Migrated graph/events/subscriptions stores to native `aiosqlite.Connection` calls.
+  - Runtime startup/shutdown now opens and closes DB asynchronously.
+  - Entire test suite migrated to `open_database()` and async DB closure.
+- Verification:
+  - `devenv shell -- pytest --tb=short -q` => `208 passed, 4 skipped`
+  - `rg -n "AsyncDB|from_path|\\.connection|\\.lock" src tests` => no hits
+  - `src/remora/core/db.py` now 22 lines and contains only connection factory logic.
 
 ## Next step
-Document the analysis (pros/cons/opportunities) in `AIOSQLITE_ANALYSIS.md`, then decide whether to proceed with a refactor.
+No pending tasks in this project.
