@@ -12,8 +12,14 @@ from remora.core.events import ContentChangedEvent
 from remora.core.node import Node
 
 
-def create_lsp_server(node_store, event_store) -> LanguageServer:  # noqa: ANN001
+def create_lsp_server(
+    node_store,
+    event_store,
+    workspace_service=None,
+    db=None,
+) -> LanguageServer:  # noqa: ANN001
     """Create an LSP server that projects Remora state into editor surfaces."""
+    del workspace_service, db
     server = LanguageServer("remora", "2.0.0")
 
     @server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)

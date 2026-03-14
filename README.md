@@ -9,7 +9,7 @@ Key capabilities in this refactor:
 - Event-driven runner with bundle-in-workspace tooling and proposal approval flow
 - Web graph surface with SSE streaming
 - Typer CLI (`remora start`, `remora discover`)
-- Optional LSP adapter for code lens / hover / save/open event forwarding
+- Optional LSP adapter for code lens / hover / save/open event forwarding (start with `remora start --lsp`)
 
 Configuration highlights in `remora.yaml`:
 - `discovery_paths`: directories/files to scan

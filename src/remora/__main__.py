@@ -19,6 +19,7 @@ from remora.core.config import load_config
 from remora.core.db import AsyncDB
 from remora.core.events import Event
 from remora.core.services import RuntimeServices
+from remora.lsp import create_lsp_server
 from remora.web.server import create_app
 
 app = typer.Typer(
@@ -49,6 +50,10 @@ LOG_EVENTS_ARG = typer.Option(
     "--log-events/--no-log-events",
     help="Emit one runtime log line for each persisted event.",
 )
+LSP_ARG = typer.Option(
+    "--lsp",
+    help="Start the optional LSP server on stdin/stdout after runtime services are ready.",
+)
 
 
 @app.command("start")
@@ -60,6 +65,7 @@ def start_command(
     run_seconds: Annotated[float, RUN_SECONDS_ARG] = 0.0,
     log_level: Annotated[str, LOG_LEVEL_ARG] = "INFO",
     log_events: Annotated[bool, LOG_EVENTS_ARG] = False,
+    lsp: Annotated[bool, LSP_ARG] = False,
 ) -> None:
     """Start Remora components and run until interrupted."""
     _configure_logging(log_level)
@@ -71,8 +77,9 @@ def start_command(
                 port=port,
                 no_web=no_web,
                 run_seconds=run_seconds,
-                log_events=log_events,
-            )
+            log_events=log_events,
+            lsp=lsp,
+        )
         )
     except KeyboardInterrupt:
         pass
@@ -98,6 +105,7 @@ async def _start(
     no_web: bool,
     run_seconds: float = 0.0,
     log_events: bool = False,
+    lsp: bool = False,
 ) -> None:
     logger = logging.getLogger(__name__)
     project_root = project_root.resolve()
@@ -148,6 +156,8 @@ async def _start(
     )
     tasks: list[asyncio.Task] = [runner_task, reconciler_task]
     web_server: uvicorn.Server | None = None
+    lsp_server = None
+    lsp_task: asyncio.Task | None = None
 
     if not no_web:
         web_app = create_app(
@@ -169,6 +179,20 @@ async def _start(
     else:
         logger.info("Web server disabled (--no-web)")
 
+    if lsp:
+        lsp_server = create_lsp_server(
+            services.node_store,
+            services.event_store,
+            services.workspace_service,
+            services.db,
+        )
+        logger.info("Starting LSP server on stdin/stdout")
+        lsp_task = asyncio.create_task(
+            asyncio.to_thread(lsp_server.start_io),
+            name="remora-lsp",
+        )
+        tasks.append(lsp_task)
+
     try:
         if run_seconds > 0:
             await asyncio.sleep(run_seconds)
@@ -181,6 +205,15 @@ async def _start(
         for task in tasks:
             if not task.done():
                 task.cancel()
+        if lsp_server is not None:
+            try:
+                await asyncio.to_thread(lsp_server.shutdown)
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("LSP shutdown failed: %s", exc)
+            try:
+                await asyncio.to_thread(lsp_server.exit)
+            except Exception:
+                pass
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
