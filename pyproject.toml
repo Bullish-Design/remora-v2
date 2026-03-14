@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 license = { text = "Cooperative Source" }
 authors = [{ name = "Bullish Design" }]
 dependencies = [
+  "aiosqlite>=0.20",
   "pydantic>=2.0",
   "pydantic-settings>=2.0",
   "pyyaml>=6.0",
