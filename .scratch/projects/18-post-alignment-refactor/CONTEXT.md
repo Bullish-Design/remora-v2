@@ -1,12 +1,23 @@
 # Context
 
 ## Status
-Project 18 captures the post-alignment refactor execution plan. The alignment review uncovered critical/high/medium/low priority issues (see section 8 of `REFACTORED_CODE_REVIEW.md`), and the goal here is to orchestrate a step-by-step refactor to resolve each recommendation in one coherent sweep.
+Project 18 is now complete. All `C1/H1-H5/M1-M5/L1-L5` items from section 8 of `16-alignment-refactor-review/REFACTORED_CODE_REVIEW.md` have been implemented and verified.
 
 ## Focus
-- Deliver a detailed, actionable plan tying each issue in section 8 to concrete code changes.
-- Maintain traceability to sections C1/H1–H5/M1–M5/L1–L5.
-- Ensure the plan is ordered by priority and that each step references the affected modules.
+- Completion commits:
+  - `68a5ab6` critical (`C1`)
+  - `3d1889b` high (`H1-H5`)
+  - `e24805d` medium (`M1-M5`)
+  - `0b7e2f1` low (`L1-L5`)
+- Final validation: `devenv shell -- uv run pytest tests/ -q` => `207 passed, 4 skipped`.
+- Main follow-up changes in this finishing pass:
+  - LSP `didChange` handler and diagnostics-safe publish path
+  - Deterministic web graph layout with configurable `SIGMA_ITERATIONS`
+  - `/api/chat` node existence validation and test coverage
+  - Event bus concurrent handler dispatch
+  - Reconciler stop task lifecycle tracking and shutdown draining
+  - Bundle provisioning fingerprint dedupe in workspace KV
+  - Discovery language registry singleton/injection support and tests
 
 ## Next Step
-Populate the standard project templates (PLAN, PROGRESS, ASSUMPTIONS, DECISIONS, ISSUES) and then flesh out a granular plan in `PLAN.md` describing how to address every recommendation in section 8 of the refactor review.
+No pending implementation tasks remain for this project.
