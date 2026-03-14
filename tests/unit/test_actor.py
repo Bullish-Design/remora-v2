@@ -23,7 +23,7 @@ from remora.core.events import (
     ContentChangedEvent,
     EventStore,
 )
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.types import NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
@@ -110,9 +110,7 @@ async def test_recording_outbox_no_persistence() -> None:
 async def actor_env(tmp_path: Path):
     db = await open_database(tmp_path / "actor.db")
     node_store = NodeStore(db)
-    agent_store = AgentStore(db)
     await node_store.create_tables()
-    await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
@@ -127,7 +125,6 @@ async def actor_env(tmp_path: Path):
     yield {
         "db": db,
         "node_store": node_store,
-        "agent_store": agent_store,
         "event_store": event_store,
         "config": config,
         "workspace_service": workspace_service,
@@ -143,7 +140,6 @@ def _make_actor(env: dict, node_id: str = "src/app.py::a") -> Actor:
         node_id=node_id,
         event_store=env["event_store"],
         node_store=env["node_store"],
-        agent_store=env["agent_store"],
         workspace_service=env["workspace_service"],
         config=env["config"],
         semaphore=env["semaphore"],
@@ -497,11 +493,8 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(actor_env,
     assert "connection refused" in error_event["payload"]["error"]
 
     updated_node = await env["node_store"].get_node(node.node_id)
-    updated_agent = await env["agent_store"].get_agent(node.node_id)
     assert updated_node is not None
-    assert updated_agent is not None
     assert updated_node.status == NodeStatus.ERROR
-    assert updated_agent.status == NodeStatus.ERROR
 
 
 @pytest.mark.asyncio
@@ -547,7 +540,6 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
         node_id=node_a.node_id,
         event_store=env["event_store"],
         node_store=env["node_store"],
-        agent_store=env["agent_store"],
         workspace_service=env["workspace_service"],
         config=env["config"],
         semaphore=shared_semaphore,
@@ -556,7 +548,6 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
         node_id=node_b.node_id,
         event_store=env["event_store"],
         node_store=env["node_store"],
-        agent_store=env["agent_store"],
         workspace_service=env["workspace_service"],
         config=env["config"],
         semaphore=shared_semaphore,

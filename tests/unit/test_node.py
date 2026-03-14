@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from remora.core.node import Agent, DiscoveredElement, Node
+from remora.core.node import Node
 from tests.factories import make_node
 
 
@@ -38,16 +38,6 @@ def test_node_roundtrip() -> None:
     row = node.to_row()
     restored = Node.from_row(row)
     assert restored.model_dump() == node.model_dump()
-
-
-def test_node_element_and_agent_projection() -> None:
-    node = make_auth_node()
-    element = node.to_element()
-    agent = node.to_agent()
-    assert isinstance(element, DiscoveredElement)
-    assert isinstance(agent, Agent)
-    assert element.element_id == node.node_id
-    assert agent.agent_id == node.node_id
 
 
 def test_node_rejects_invalid_status() -> None:

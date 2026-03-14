@@ -14,7 +14,7 @@ from remora.core.events import (
     EventStore,
     SubscriptionPattern,
 )
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
@@ -23,17 +23,15 @@ from remora.core.workspace import CairnWorkspaceService
 async def runner_env(tmp_path: Path):
     db = await open_database(tmp_path / "runner.db")
     node_store = NodeStore(db)
-    agent_store = AgentStore(db)
     await node_store.create_tables()
-    await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(workspace_root=".remora-runner-test", trigger_cooldown_ms=1000, max_trigger_depth=2)
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
-    runner = ActorPool(event_store, node_store, agent_store, workspace_service, config)
+    runner = ActorPool(event_store, node_store, workspace_service, config)
 
-    yield runner, node_store, agent_store, event_store, workspace_service
+    yield runner, node_store, event_store, workspace_service
 
     await runner.stop_and_wait()
     await workspace_service.close()
@@ -42,7 +40,7 @@ async def runner_env(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_runner_creates_actor_on_route(runner_env) -> None:
-    runner, _ns, _as, _es, _ws = runner_env
+    runner, _ns, _es, _ws = runner_env
     assert len(runner.actors) == 0
     actor = runner.get_or_create_actor("agent-a")
     assert isinstance(actor, Actor)
@@ -52,7 +50,7 @@ async def test_runner_creates_actor_on_route(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_reuses_existing_actor(runner_env) -> None:
-    runner, _ns, _as, _es, _ws = runner_env
+    runner, _ns, _es, _ws = runner_env
     actor1 = runner.get_or_create_actor("agent-a")
     actor2 = runner.get_or_create_actor("agent-a")
     assert actor1 is actor2
@@ -60,7 +58,7 @@ async def test_runner_reuses_existing_actor(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_routes_dispatch_to_actor_inbox(runner_env) -> None:
-    runner, _ns, _as, event_store, _ws = runner_env
+    runner, _ns, event_store, _ws = runner_env
     actor = runner.get_or_create_actor("agent-x")
     await actor.stop()
     await event_store.subscriptions.register("agent-x", SubscriptionPattern(to_agent="x"))
@@ -74,7 +72,7 @@ async def test_runner_routes_dispatch_to_actor_inbox(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_evicts_idle_actors(runner_env) -> None:
-    runner, _ns, _as, _es, _ws = runner_env
+    runner, _ns, _es, _ws = runner_env
     actor = runner.get_or_create_actor("idle-agent")
     actor._last_active = 0.0
     await runner._evict_idle(max_idle_seconds=1.0)
@@ -84,7 +82,7 @@ async def test_runner_evicts_idle_actors(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_does_not_evict_busy_actors(runner_env) -> None:
-    runner, _ns, _as, _es, _ws = runner_env
+    runner, _ns, _es, _ws = runner_env
     actor = runner.get_or_create_actor("busy-agent")
     actor._last_active = 0.0
     await actor.inbox.put(AgentMessageEvent(from_agent="a", to_agent="b", content="x"))
@@ -94,7 +92,7 @@ async def test_runner_does_not_evict_busy_actors(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_stop_and_wait(runner_env) -> None:
-    runner, _ns, _as, _es, _ws = runner_env
+    runner, _ns, _es, _ws = runner_env
     runner.get_or_create_actor("a")
     runner.get_or_create_actor("b")
     assert len(runner.actors) == 2
@@ -104,7 +102,7 @@ async def test_runner_stop_and_wait(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_build_prompt_via_actor(runner_env) -> None:
-    runner, node_store, _as, _event_store, workspace_service = runner_env
+    runner, node_store, _event_store, workspace_service = runner_env
     node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)

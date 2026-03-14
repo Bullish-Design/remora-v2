@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import pytest
-
 from pydantic import ValidationError
 
 from remora.core.config import Config
-from remora.core.node import DiscoveredElement, Node
+from remora.core.node import Node
 
 
 def test_new_core_symbols_exist() -> None:
     assert Node is not None
-    assert DiscoveredElement is not None
 
 
 def test_node_uses_role_field() -> None:
@@ -27,7 +25,6 @@ def test_node_uses_role_field() -> None:
         role="code-agent",
     )
     assert node.role == "code-agent"
-    assert node.to_agent().role == "code-agent"
 
 
 def test_config_workspace_root_works() -> None:

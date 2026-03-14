@@ -13,7 +13,7 @@ from remora.core.actor import Actor, Outbox, Trigger
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
@@ -185,9 +185,7 @@ async def _setup_llm_runtime(
 
     db = await open_database(tmp_path / "llm-turn.db")
     node_store = NodeStore(db)
-    agent_store = AgentStore(db)
     await node_store.create_tables()
-    await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
@@ -207,7 +205,6 @@ async def _setup_llm_runtime(
     reconciler = FileReconciler(
         config,
         node_store,
-        agent_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
@@ -219,7 +216,6 @@ async def _setup_llm_runtime(
         node_id=node.node_id,
         event_store=event_store,
         node_store=node_store,
-        agent_store=agent_store,
         workspace_service=workspace_service,
         config=config,
         semaphore=asyncio.Semaphore(1),
@@ -242,9 +238,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
 
     db = await open_database(tmp_path / "llm-turn.db")
     node_store = NodeStore(db)
-    agent_store = AgentStore(db)
     await node_store.create_tables()
-    await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
@@ -265,7 +259,6 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
         reconciler = FileReconciler(
             config,
             node_store,
-            agent_store,
             event_store,
             workspace_service,
             project_root=tmp_path,
@@ -277,7 +270,6 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
             node_id=node.node_id,
             event_store=event_store,
             node_store=node_store,
-            agent_store=agent_store,
             workspace_service=workspace_service,
             config=config,
             semaphore=asyncio.Semaphore(1),

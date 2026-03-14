@@ -19,7 +19,7 @@ from remora.core.events import (
     EventBus,
     EventStore,
 )
-from remora.core.graph import AgentStore, NodeStore
+from remora.core.graph import NodeStore
 from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
@@ -75,9 +75,7 @@ async def _setup_runtime(tmp_path: Path):
     db = await open_database(tmp_path / "e2e.db")
     event_bus = EventBus()
     node_store = NodeStore(db)
-    agent_store = AgentStore(db)
     await node_store.create_tables()
-    await agent_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus)
     await event_store.create_tables()
 
@@ -93,20 +91,18 @@ async def _setup_runtime(tmp_path: Path):
     reconciler = FileReconciler(
         config,
         node_store,
-        agent_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
     )
     code_nodes = await reconciler.full_scan()
-    runner = ActorPool(event_store, node_store, agent_store, workspace_service, config)
+    runner = ActorPool(event_store, node_store, workspace_service, config)
 
     return {
         "source_path": source_path,
         "db": db,
         "event_bus": event_bus,
         "node_store": node_store,
-        "agent_store": agent_store,
         "event_store": event_store,
         "workspace_service": workspace_service,
         "runner": runner,
