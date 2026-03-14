@@ -47,6 +47,7 @@ class FileReconciler:
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
         self._file_state: dict[str, tuple[int, set[str]]] = {}
+        self._file_locks: dict[str, asyncio.Lock] = {}
         self._running = False
         # Re-register directory subscriptions once after startup so older
         # subscription shapes are migrated without requiring a DB reset.
@@ -317,6 +318,16 @@ class FileReconciler:
         *,
         sync_existing_bundles: bool = False,
     ) -> None:
+        async with self._file_lock(file_path):
+            await self._do_reconcile_file(file_path, mtime_ns, sync_existing_bundles=sync_existing_bundles)
+
+    async def _do_reconcile_file(
+        self,
+        file_path: str,
+        mtime_ns: int,
+        *,
+        sync_existing_bundles: bool = False,
+    ) -> None:
         discovered = discover(
             [Path(file_path)],
             language_map=self._config.language_map,
@@ -390,6 +401,13 @@ class FileReconciler:
             await self._remove_node(node_id)
 
         self._file_state[file_path] = (mtime_ns, new_ids)
+
+    def _file_lock(self, file_path: str) -> asyncio.Lock:
+        lock = self._file_locks.get(file_path)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._file_locks[file_path] = lock
+        return lock
 
     async def _remove_node(self, node_id: str) -> None:
         node = await self._node_store.get_node(node_id)

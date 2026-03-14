@@ -61,14 +61,6 @@ class NodeStore:
             );
             CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
             CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
-            CREATE TABLE IF NOT EXISTS agents (
-                agent_id TEXT PRIMARY KEY,
-                element_id TEXT,
-                status TEXT DEFAULT 'idle',
-                role TEXT,
-                FOREIGN KEY (element_id) REFERENCES nodes(node_id) ON DELETE SET NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
 

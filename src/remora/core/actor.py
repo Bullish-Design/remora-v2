@@ -18,7 +18,7 @@ from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEv
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.externals import TurnContext
-from remora.core.grail import discover_tools
+from remora.core.grail import GrailTool, discover_tools
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.node import Node
@@ -223,53 +223,23 @@ class Actor:
 
         async with self._semaphore:
             try:
-                node = await self._node_store.get_node(node_id)
-                if node is None:
-                    logger.warning("Trigger for unknown node: %s", node_id)
+                start_result = await self._start_agent_turn(node_id, trigger, outbox)
+                if start_result is None:
                     return
+                node, workspace, bundle_config = start_result
 
-                if await self._agent_store.get_agent(node_id) is None:
-                    await self._agent_store.upsert_agent(node.to_agent())
-                if not await self._agent_store.transition_status(node_id, NodeStatus.RUNNING):
-                    logger.warning("Failed to transition node %s into running state", node_id)
-                    return
-                await self._node_store.transition_status(node_id, NodeStatus.RUNNING)
-                await outbox.emit(
-                    AgentStartEvent(
-                        agent_id=node_id,
-                        node_name=node.name,
-                        correlation_id=trigger.correlation_id,
-                    )
+                system_prompt, model_name, max_turns = self._build_system_prompt(
+                    bundle_config,
+                    trigger,
                 )
 
-                workspace = await self._workspace_service.get_agent_workspace(node_id)
-                bundle_config = await self._read_bundle_config(workspace)
-                system_prompt = bundle_config.get(
-                    "system_prompt",
-                    "You are an autonomous code agent.",
+                _, tools = await self._prepare_turn_context(
+                    node_id,
+                    workspace,
+                    trigger,
+                    outbox,
                 )
-                prompt_extension = bundle_config.get("system_prompt_extension", "")
-                if prompt_extension:
-                    system_prompt = f"{system_prompt}\n\n{prompt_extension}"
-                mode = self._turn_mode(trigger.event)
-                prompts = bundle_config.get("prompts") or {}
-                mode_prompt = prompts.get(mode, "") if hasattr(prompts, "get") else ""
-                if mode_prompt:
-                    system_prompt = f"{system_prompt}\n\n{mode_prompt}"
-                model_name = bundle_config.get("model", self._config.model_default)
-                max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
 
-                context = TurnContext(
-                    node_id=node_id,
-                    workspace=workspace,
-                    correlation_id=trigger.correlation_id,
-                    node_store=self._node_store,
-                    agent_store=self._agent_store,
-                    event_store=self._event_store,
-                    outbox=outbox,
-                )
-                capabilities = context.to_capabilities_dict()
-                tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))
                 logger.info(
                     "Agent turn start node=%s corr=%s model=%s tools=%d max_turns=%d trigger=%s",
                     node_id,
@@ -285,46 +255,18 @@ class Actor:
                     Message(role="user", content=self._build_prompt(node, trigger)),
                 ]
 
-                kernel = create_kernel(
-                    model_name=model_name,
-                    base_url=self._config.model_base_url,
-                    api_key=self._config.model_api_key,
-                    timeout=self._config.timeout_s,
-                    tools=tools,
+                result = await self._run_kernel(
+                    node_id,
+                    trigger,
+                    system_prompt,
+                    messages,
+                    model_name,
+                    tools,
+                    max_turns,
                 )
-                try:
-                    tool_schemas = [tool.schema for tool in tools]
-                    logger.info(
-                        (
-                            "Model request node=%s corr=%s base_url=%s model=%s "
-                            "tools=%s system=%s user=%s"
-                        ),
-                        node_id,
-                        trigger.correlation_id,
-                        self._config.model_base_url,
-                        model_name,
-                        [schema.name for schema in tool_schemas],
-                        system_prompt,
-                        messages[1].content or "",
-                    )
-                    result = await kernel.run(messages, tool_schemas, max_turns=max_turns)
-                finally:
-                    await kernel.close()
 
                 response_text = extract_response_text(result)
-                logger.info(
-                    "Agent turn complete node=%s corr=%s response=%s",
-                    node_id,
-                    trigger.correlation_id,
-                    response_text,
-                )
-                await outbox.emit(
-                    AgentCompleteEvent(
-                        agent_id=node_id,
-                        result_summary=response_text[:200],
-                        correlation_id=trigger.correlation_id,
-                    )
-                )
+                await self._complete_agent_turn(node_id, response_text, outbox, trigger)
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
                 logger.exception("Agent turn failed for %s", node_id)
                 await self._agent_store.transition_status(node_id, NodeStatus.ERROR)
@@ -337,20 +279,137 @@ class Actor:
                     )
                 )
             finally:
-                try:
-                    current_agent = await self._agent_store.get_agent(node_id)
-                    if current_agent is not None and current_agent.status == NodeStatus.RUNNING:
-                        await self._agent_store.transition_status(node_id, NodeStatus.IDLE)
-                    current_node = await self._node_store.get_node(node_id)
-                    if current_node is not None and current_node.status == NodeStatus.RUNNING:
-                        await self._node_store.transition_status(node_id, NodeStatus.IDLE)
-                except Exception:  # noqa: BLE001 - best effort cleanup
-                    logger.exception("Failed to reset node status for %s", node_id)
-                remaining = self._depths.get(depth_key, 1) - 1
-                if remaining <= 0:
-                    self._depths.pop(depth_key, None)
-                else:
-                    self._depths[depth_key] = remaining
+                await self._reset_agent_state(node_id, depth_key)
+
+    async def _start_agent_turn(
+        self, node_id: str, trigger: Trigger, outbox: Outbox
+    ) -> tuple[Node, AgentWorkspace, dict[str, Any]] | None:
+        node = await self._node_store.get_node(node_id)
+        if node is None:
+            logger.warning("Trigger for unknown node: %s", node_id)
+            return None
+
+        if await self._agent_store.get_agent(node_id) is None:
+            await self._agent_store.upsert_agent(node.to_agent())
+        if not await self._agent_store.transition_status(node_id, NodeStatus.RUNNING):
+            logger.warning("Failed to transition node %s into running state", node_id)
+            return None
+
+        await self._node_store.transition_status(node_id, NodeStatus.RUNNING)
+        await outbox.emit(
+            AgentStartEvent(
+                agent_id=node_id,
+                node_name=node.name,
+                correlation_id=trigger.correlation_id,
+            )
+        )
+
+        workspace = await self._workspace_service.get_agent_workspace(node_id)
+        bundle_config = await self._read_bundle_config(workspace)
+        return node, workspace, bundle_config
+
+    def _build_system_prompt(self, bundle_config: dict[str, Any], trigger: Trigger) -> tuple[str, str, int]:
+        system_prompt = bundle_config.get(
+            "system_prompt",
+            "You are an autonomous code agent.",
+        )
+        prompt_extension = bundle_config.get("system_prompt_extension", "")
+        if prompt_extension:
+            system_prompt = f"{system_prompt}\n\n{prompt_extension}"
+        mode = self._turn_mode(trigger.event)
+        prompts = bundle_config.get("prompts") or {}
+        mode_prompt = prompts.get(mode, "") if hasattr(prompts, "get") else ""
+        if mode_prompt:
+            system_prompt = f"{system_prompt}\n\n{mode_prompt}"
+        model_name = bundle_config.get("model", self._config.model_default)
+        max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
+        return system_prompt, model_name, max_turns
+
+    async def _prepare_turn_context(
+        self, node_id: str, workspace: AgentWorkspace, trigger: Trigger, outbox: Outbox
+    ) -> tuple[TurnContext, list[GrailTool]]:
+        context = TurnContext(
+            node_id=node_id,
+            workspace=workspace,
+            correlation_id=trigger.correlation_id,
+            node_store=self._node_store,
+            agent_store=self._agent_store,
+            event_store=self._event_store,
+            outbox=outbox,
+        )
+        capabilities = context.to_capabilities_dict()
+        tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))
+        return context, tools
+
+    async def _run_kernel(
+        self,
+        node_id: str,
+        trigger: Trigger,
+        system_prompt: str,
+        messages: list[Message],
+        model_name: str,
+        tools: list[GrailTool],
+        max_turns: int,
+    ) -> Any:
+        kernel = create_kernel(
+            model_name=model_name,
+            base_url=self._config.model_base_url,
+            api_key=self._config.model_api_key,
+            timeout=self._config.timeout_s,
+            tools=tools,
+        )
+        try:
+            tool_schemas = [tool.schema for tool in tools]
+            logger.info(
+                (
+                    "Model request node=%s corr=%s base_url=%s model=%s "
+                    "tools=%s system=%s user=%s"
+                ),
+                node_id,
+                trigger.correlation_id,
+                self._config.model_base_url,
+                model_name,
+                [schema.name for schema in tool_schemas],
+                system_prompt,
+                messages[1].content or "",
+            )
+            return await kernel.run(messages, tool_schemas, max_turns=max_turns)
+        finally:
+            await kernel.close()
+
+    async def _complete_agent_turn(
+        self, node_id: str, response_text: str, outbox: Outbox, trigger: Trigger
+    ) -> None:
+        logger.info(
+            "Agent turn complete node=%s corr=%s response=%s",
+            node_id,
+            trigger.correlation_id,
+            response_text,
+        )
+        await outbox.emit(
+            AgentCompleteEvent(
+                agent_id=node_id,
+                result_summary=response_text[:200],
+                correlation_id=trigger.correlation_id,
+            )
+        )
+
+    async def _reset_agent_state(self, node_id: str, depth_key: str | None) -> None:
+        try:
+            current_agent = await self._agent_store.get_agent(node_id)
+            if current_agent is not None and current_agent.status == NodeStatus.RUNNING:
+                await self._agent_store.transition_status(node_id, NodeStatus.IDLE)
+            current_node = await self._node_store.get_node(node_id)
+            if current_node is not None and current_node.status == NodeStatus.RUNNING:
+                await self._node_store.transition_status(node_id, NodeStatus.IDLE)
+        except Exception:  # noqa: BLE001 - best effort cleanup
+            logger.exception("Failed to reset node status for %s", node_id)
+        if depth_key is not None:
+            remaining = self._depths.get(depth_key, 1) - 1
+            if remaining <= 0:
+                self._depths.pop(depth_key, None)
+            else:
+                self._depths[depth_key] = remaining
 
     @staticmethod
     def _build_prompt(node: Node, trigger: Trigger) -> str:

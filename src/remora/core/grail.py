@@ -7,6 +7,7 @@ import json
 import logging
 import tempfile
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +26,6 @@ _TYPE_MAP = {
     "bool": "boolean",
 }
 
-_SCRIPT_CACHE: dict[str, grail.GrailScript] = {}
-
-
 def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
     """Build JSON Schema parameters from Grail input declarations."""
     properties: dict[str, Any] = {}
@@ -45,19 +43,18 @@ def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
     return schema
 
 
+@lru_cache(maxsize=256)
+def _cached_script(content_hash: str, normalized_name: str, source: str) -> grail.GrailScript:
+    with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
+        script_path = Path(temp_dir) / normalized_name
+        script_path.write_text(source, encoding="utf-8")
+        return grail.load(script_path)
+
+
 def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
     content_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
-    cached = _SCRIPT_CACHE.get(content_hash)
-    if cached is not None:
-        return cached
-
     filename = f"{name}.pym" if not name.endswith(".pym") else name
-    with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
-        script_path = Path(temp_dir) / filename
-        script_path.write_text(source, encoding="utf-8")
-        script = grail.load(script_path)
-    _SCRIPT_CACHE[content_hash] = script
-    return script
+    return _cached_script(content_hash, filename, source)
 
 
 class GrailTool:
@@ -68,13 +65,12 @@ class GrailTool:
         script: grail.GrailScript,
         *,
         capabilities: dict[str, Any] | None = None,
-        externals: dict[str, Any] | None = None,
         name_override: str | None = None,
         agent_id: str = "?",
         source_file: str | None = None,
     ):
         self._script = script
-        self._capabilities = capabilities if capabilities is not None else (externals or {})
+        self._capabilities = capabilities if capabilities is not None else {}
         self._agent_id = agent_id
         self._source_file = source_file or f"{script.name}.pym"
         self._schema = ToolSchema(
@@ -141,10 +137,9 @@ class GrailTool:
 async def discover_tools(
     workspace: AgentWorkspace,
     capabilities: dict[str, Any] | None = None,
-    externals: dict[str, Any] | None = None,
 ) -> list[GrailTool]:
     """Discover .pym tools under _bundle/tools in an agent workspace."""
-    resolved_capabilities = capabilities if capabilities is not None else (externals or {})
+    resolved_capabilities = capabilities or {}
     agent_id = str(getattr(workspace, "_agent_id", "?"))
     try:
         tool_files = await workspace.list_dir("_bundle/tools")

@@ -154,8 +154,8 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
         lambda **kwargs: MockKernel(kwargs.get("tools", [])),
     )
     class FakeRewriteTool:
-        def __init__(self, externals):
-            self._externals = externals
+        def __init__(self, capabilities):
+            self._capabilities = capabilities
 
         @property
         def schema(self) -> ToolSchema:
@@ -170,7 +170,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
             )
 
         async def execute(self, arguments, context):  # noqa: ANN001, ANN201
-            applied = await self._externals["apply_rewrite"](arguments["new_source"])
+            applied = await self._capabilities["apply_rewrite"](arguments["new_source"])
             return ToolResult(
                 call_id=getattr(context, "id", ""),
                 name="rewrite_self",
@@ -178,8 +178,8 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
                 is_error=False,
             )
 
-    async def fake_discover_tools(_workspace, externals):  # noqa: ANN001, ANN202
-        return [FakeRewriteTool(externals)]
+    async def fake_discover_tools(_workspace, capabilities):  # noqa: ANN001, ANN202
+        return [FakeRewriteTool(capabilities)]
 
     monkeypatch.setattr("remora.core.actor.discover_tools", fake_discover_tools)
     actor = runtime["runner"].get_or_create_actor(node.node_id)

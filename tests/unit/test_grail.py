@@ -62,7 +62,7 @@ def test_build_parameters(tmp_path: Path) -> None:
 
 def test_grail_tool_schema(tmp_path: Path) -> None:
     script = _load_script(tmp_path)
-    tool = GrailTool(script=script, externals={"echo": lambda _: "ok"})
+    tool = GrailTool(script=script, capabilities={"echo": lambda _: "ok"})
     assert tool.schema.name == "demo"
     assert tool.schema.parameters["properties"]["name"]["type"] == "string"
 
@@ -83,7 +83,7 @@ async def test_grail_tool_execute(tmp_path: Path) -> None:
     async def echo(text: str) -> str:
         return f"echo:{text}"
 
-    tool = GrailTool(script=ScriptStub(), externals={"echo": echo, "unused": echo})
+    tool = GrailTool(script=ScriptStub(), capabilities={"echo": echo, "unused": echo})
     result = await tool.execute(
         {"name": "remora", "count": 2},
         ToolCall(id="call-1", name="demo", arguments={"name": "remora"}),
@@ -110,7 +110,7 @@ async def test_grail_tool_error_handling(tmp_path: Path) -> None:
     async def fail(_: str) -> str:
         raise RuntimeError("boom")
 
-    tool = GrailTool(script=ScriptStub(), externals={"echo": fail})
+    tool = GrailTool(script=ScriptStub(), capabilities={"echo": fail})
     result = await tool.execute({"name": "x"}, ToolCall(id="call-2", name="demo", arguments={}))
     assert result.is_error is True
     assert "boom" in result.output
@@ -128,7 +128,7 @@ async def test_discover_tools_from_workspace() -> None:
     async def echo(text: str) -> str:
         return text
 
-    tools = await discover_tools(workspace, externals={"echo": echo})
+    tools = await discover_tools(workspace, capabilities={"echo": echo})
     assert len(tools) == 1
     assert tools[0].schema.name == "demo"
 
@@ -136,7 +136,7 @@ async def test_discover_tools_from_workspace() -> None:
 @pytest.mark.asyncio
 async def test_discover_tools_empty() -> None:
     workspace = _WorkspaceStub({}, missing_tools_dir=True)
-    tools = await discover_tools(workspace, externals={})
+    tools = await discover_tools(workspace, capabilities={})
     assert tools == []
 
 
@@ -151,7 +151,7 @@ async def test_discover_tools_logs_load_failure(caplog) -> None:
     workspace = _WorkspaceStub({"_bundle/tools/bad.pym": "def broken(:\n"})
 
     with caplog.at_level(logging.INFO, logger="remora.core.grail"):
-        tools = await discover_tools(workspace, externals={})
+        tools = await discover_tools(workspace, capabilities={})
 
     assert tools == []
     messages = [record.getMessage() for record in caplog.records]
@@ -174,7 +174,7 @@ async def test_grail_tool_execute_logs_start_and_failure(tmp_path: Path, caplog)
     async def fail(_: str) -> str:
         raise RuntimeError("boom")
 
-    tool = GrailTool(script=ScriptStub(), externals={"echo": fail}, agent_id="node-x")
+    tool = GrailTool(script=ScriptStub(), capabilities={"echo": fail}, agent_id="node-x")
     with caplog.at_level(logging.INFO, logger="remora.core.grail"):
         result = await tool.execute({"name": "x"}, ToolCall(id="call-3", name="demo", arguments={}))
 
@@ -201,7 +201,7 @@ async def test_grail_tool_execute_logs_full_output_not_truncated(caplog) -> None
             del inputs, externals
             return long_output
 
-    tool = GrailTool(script=ScriptStub(), externals={}, agent_id="node-x")
+    tool = GrailTool(script=ScriptStub(), capabilities={}, agent_id="node-x")
     with caplog.at_level(logging.INFO, logger="remora.core.grail"):
         result = await tool.execute({}, ToolCall(id="call-9", name="demo", arguments={}))
 
@@ -227,7 +227,7 @@ async def test_grail_tool_logging_preserves_newlines_in_output(caplog) -> None:
             del inputs, externals
             return "line1\nline2"
 
-    tool = GrailTool(script=ScriptStub(), externals={}, agent_id="node-x")
+    tool = GrailTool(script=ScriptStub(), capabilities={}, agent_id="node-x")
     with caplog.at_level(logging.INFO, logger="remora.core.grail"):
         await tool.execute({}, ToolCall(id="call-10", name="demo", arguments={}))
 
