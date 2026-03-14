@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "name": "key",
+      "type": "str",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "value",
+      "type": "str",
+      "required": true,
+      "default": null
+    }
+  ]
+}

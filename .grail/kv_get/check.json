@@ -1,12 +1,12 @@
 {
-  "file": "/run/user/1000/remora-grail-l242xbp_/echo_text.pym",
+  "file": "bundles/system/tools/kv_get.pym",
   "valid": true,
   "errors": [],
   "warnings": [],
   "info": {
-    "externals_count": 0,
+    "externals_count": 1,
     "inputs_count": 1,
-    "lines_of_code": 6,
+    "lines_of_code": 12,
     "monty_features_used": []
   }
 }

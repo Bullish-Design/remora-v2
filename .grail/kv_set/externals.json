@@ -1,0 +1,22 @@
+{
+  "externals": [
+    {
+      "name": "kv_set",
+      "async": true,
+      "parameters": [
+        {
+          "name": "key",
+          "type": "str",
+          "default": null
+        },
+        {
+          "name": "value",
+          "type": "str",
+          "default": null
+        }
+      ],
+      "return_type": "bool",
+      "docstring": null
+    }
+  ]
+}
