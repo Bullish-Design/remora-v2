@@ -448,7 +448,4 @@ def _event_content(event: Event) -> str:
     return ""
 
 
-__all__ = ["Outbox", "RecordingOutbox", "Trigger", "Actor", "AgentActor"]
-
-
-AgentActor = Actor
+__all__ = ["Outbox", "RecordingOutbox", "Trigger", "Actor"]

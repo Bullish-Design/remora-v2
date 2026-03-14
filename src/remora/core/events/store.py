@@ -64,10 +64,6 @@ class EventStore:
         )
         await self._dispatcher.subscriptions.create_tables()
 
-    async def initialize(self) -> None:
-        """Backward-compatible alias for create_tables."""
-        await self.create_tables()
-
     async def append(self, event: Event) -> int:
         """Append an event and fan-out to bus and matching subscription triggers."""
         envelope = event.to_envelope()

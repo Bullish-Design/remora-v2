@@ -271,10 +271,6 @@ class TurnContext:
             "my_correlation_id": self.my_correlation_id,
         }
 
-    def to_externals_dict(self) -> dict[str, Any]:
-        """Backward-compatible alias for to_capabilities_dict."""
-        return self.to_capabilities_dict()
-
 
 def _resolve_broadcast_targets(
     source_id: str,
@@ -304,8 +300,4 @@ def _resolve_broadcast_targets(
         ]
     return [node_id for node_id in all_ids if pattern in node_id]
 
-
-AgentContext = TurnContext
-
-
-__all__ = ["TurnContext", "AgentContext"]
+__all__ = ["TurnContext"]

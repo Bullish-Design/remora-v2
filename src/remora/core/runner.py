@@ -112,7 +112,4 @@ class ActorPool:
         return dict(self._actors)
 
 
-AgentRunner = ActorPool
-
-
-__all__ = ["ActorPool", "AgentRunner"]
+__all__ = ["ActorPool"]

@@ -63,7 +63,7 @@ class Agent(BaseModel):
 
 
 class Node(BaseModel):
-    """Combined view for migration and backwards compatibility."""
+    """Unified node model joining discovered element data with agent state."""
 
     model_config = ConfigDict(frozen=False)
 
@@ -135,8 +135,4 @@ class Node(BaseModel):
         return self.role
 
 
-CodeElement = DiscoveredElement
-CodeNode = Node
-
-
-__all__ = ["DiscoveredElement", "Agent", "Node", "CodeElement", "CodeNode"]
+__all__ = ["DiscoveredElement", "Agent", "Node"]

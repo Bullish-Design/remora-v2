@@ -70,10 +70,6 @@ class SubscriptionRegistry:
             """
         )
 
-    async def initialize(self) -> None:
-        """Backward-compatible alias for create_tables."""
-        await self.create_tables()
-
     async def register(self, agent_id: str, pattern: SubscriptionPattern) -> int:
         """Register a subscription and return its primary-key ID."""
         sub_id = await self._db.insert(
