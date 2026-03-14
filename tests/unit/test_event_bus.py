@@ -80,3 +80,22 @@ async def test_bus_stream_filtered() -> None:
         received = await asyncio.wait_for(anext(events), timeout=1.0)
     assert isinstance(received, AgentStartEvent)
     assert received.agent_id == "allowed"
+
+
+@pytest.mark.asyncio
+async def test_failing_handler_does_not_crash_bus() -> None:
+    bus = EventBus()
+    calls: list[Event] = []
+
+    async def bad_handler(_event: Event) -> None:
+        raise ValueError("boom")
+
+    async def good_handler(event: Event) -> None:
+        calls.append(event)
+
+    bus.subscribe_all(good_handler)
+    bus.subscribe_all(bad_handler)
+
+    event = AgentStartEvent(agent_id="test")
+    await bus.emit(event)
+    assert len(calls) == 1

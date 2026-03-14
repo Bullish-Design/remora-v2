@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 from remora.core.events.types import Event, EventHandler
+
+logger = logging.getLogger(__name__)
 
 
 class EventBus:
@@ -33,7 +36,15 @@ class EventBus:
             if asyncio.iscoroutine(result):
                 tasks.append(asyncio.create_task(result))
         if tasks:
-            await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.exception(
+                        "Event handler failed for %s: %s",
+                        event.event_type,
+                        result,
+                        exc_info=result,
+                    )
 
     def subscribe(self, event_type: type[Event], handler: EventHandler) -> None:
         """Register a handler for a specific event type."""
