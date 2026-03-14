@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import sys
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -67,3 +68,30 @@ def test_configure_logging_keeps_existing_root_handlers() -> None:
             if handler not in original_handlers:
                 root_logger.removeHandler(handler)
                 handler.close()
+
+
+def test_configure_logging_lsp_mode_uses_stderr() -> None:
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    original_level = root_logger.level
+
+    try:
+        for handler in list(root_logger.handlers):
+            root_logger.removeHandler(handler)
+            handler.close()
+
+        _configure_logging("INFO", lsp_mode=True)
+        stream_handlers = [
+            handler
+            for handler in root_logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+        assert any(handler.stream is sys.stderr for handler in stream_handlers)
+    finally:
+        root_logger.setLevel(original_level)
+        for handler in list(root_logger.handlers):
+            root_logger.removeHandler(handler)
+            handler.close()
+        for handler in original_handlers:
+            root_logger.addHandler(handler)

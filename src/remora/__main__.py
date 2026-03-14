@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -68,7 +69,7 @@ def start_command(
     lsp: Annotated[bool, LSP_ARG] = False,
 ) -> None:
     """Start Remora components and run until interrupted."""
-    _configure_logging(log_level)
+    _configure_logging(log_level, lsp_mode=lsp)
     try:
         asyncio.run(
             _start(
@@ -77,9 +78,9 @@ def start_command(
                 port=port,
                 no_web=no_web,
                 run_seconds=run_seconds,
-            log_events=log_events,
-            lsp=lsp,
-        )
+                log_events=log_events,
+                lsp=lsp,
+            )
         )
     except KeyboardInterrupt:
         pass
@@ -243,7 +244,7 @@ def main() -> None:
     app(prog_name="remora")
 
 
-def _configure_logging(level_name: str) -> None:
+def _configure_logging(level_name: str, *, lsp_mode: bool = False) -> None:
     level = getattr(logging, level_name.upper(), None)
     if not isinstance(level, int):
         raise typer.BadParameter(f"Invalid log level: {level_name}")
@@ -252,7 +253,8 @@ def _configure_logging(level_name: str) -> None:
     if root_logger.handlers:
         return
 
-    stream_handler = logging.StreamHandler()
+    stream = sys.stderr if lsp_mode else sys.stdout
+    stream_handler = logging.StreamHandler(stream)
     stream_handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     )
