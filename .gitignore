@@ -220,3 +220,5 @@ __marimo__/
 
 # Remora runtime data
 .remora/
+# Grail compiled tool cache
+.grail/

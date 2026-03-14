@@ -4,9 +4,9 @@ new_source: str = Input("new_source")
 
 
 @external
-async def propose_rewrite(new_source: str) -> str: ...
+async def apply_rewrite(new_source: str) -> bool: ...
 
 
-proposal_id = await propose_rewrite(new_source)
-message = f"Rewrite proposal created: {proposal_id}"
+success = await apply_rewrite(new_source)
+message = f"Rewrite applied: {success}"
 message

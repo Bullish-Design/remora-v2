@@ -26,21 +26,21 @@ def make_auth_node() -> Node:
     )
 
 
-def test_codenode_creation() -> None:
+def test_node_creation() -> None:
     node = make_auth_node()
     assert node.node_id == "src/auth.py::AuthService.validate_token"
     assert node.node_type == "method"
     assert node.parent_id == "src/auth.py::AuthService"
 
 
-def test_codenode_roundtrip() -> None:
+def test_node_roundtrip() -> None:
     node = make_auth_node()
     row = node.to_row()
     restored = Node.from_row(row)
     assert restored.model_dump() == node.model_dump()
 
 
-def test_codenode_element_and_agent_projection() -> None:
+def test_node_element_and_agent_projection() -> None:
     node = make_auth_node()
     element = node.to_element()
     agent = node.to_agent()
@@ -50,7 +50,7 @@ def test_codenode_element_and_agent_projection() -> None:
     assert agent.agent_id == node.node_id
 
 
-def test_codenode_rejects_invalid_status() -> None:
+def test_node_rejects_invalid_status() -> None:
     with pytest.raises(ValidationError):
         Node(
             node_id="src/a.py::a",

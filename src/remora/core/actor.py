@@ -217,7 +217,7 @@ class Actor:
         return True
 
     async def _execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
-        """Execute one agent turn. Reuses logic from the old ActorPool._execute_turn."""
+        """Execute one agent turn."""
         node_id = trigger.node_id
         depth_key = trigger.correlation_id
 

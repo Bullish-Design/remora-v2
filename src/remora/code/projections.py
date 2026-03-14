@@ -1,4 +1,4 @@
-"""Projection from discovered CST nodes into persisted CodeNodes."""
+"""Projection from discovered CST nodes into persisted Nodes."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ async def project_nodes(
     *,
     sync_existing_bundles: bool = False,
 ) -> list[Node]:
-    """Project CSTNodes into CodeNodes and provision bundles for new nodes."""
+    """Project CSTNodes into Nodes and provision bundles for new nodes."""
     results: list[Node] = []
     bundle_root = Path(config.bundle_root)
 
