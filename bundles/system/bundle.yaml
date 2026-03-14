@@ -1,3 +1,4 @@
+# This file is readable and writable by the node at runtime.
 name: system
 system_prompt: |
   You are the base runtime persona for all Remora nodes.

@@ -261,6 +261,60 @@ async def test_read_bundle_config_literal_model_overrides_env(actor_env, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_read_bundle_config_malformed_yaml_returns_empty(actor_env) -> None:
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::bad")
+    await workspace.write("_bundle/bundle.yaml", "system_prompt: [oops\n")
+
+    bundle_config = await Actor._read_bundle_config(workspace)
+    assert bundle_config == {}
+
+
+@pytest.mark.asyncio
+async def test_actor_reload_reads_updated_bundle_config_each_turn(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::dynamic-config")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: first\nmodel: model-a\nmax_turns: 1\n")
+
+    seen_models: list[str] = []
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    def capture_kernel(**kwargs):  # noqa: ANN003, ANN202
+        seen_models.append(kwargs["model_name"])
+        return MockKernel()
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", capture_kernel)
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    outbox = Outbox(actor_id=node.node_id, event_store=env["event_store"], correlation_id="corr-a")
+    trigger_a = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-a",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
+    )
+    await actor._execute_turn(trigger_a, outbox)
+
+    await ws.write("_bundle/bundle.yaml", "system_prompt: second\nmodel: model-b\nmax_turns: 1\n")
+    trigger_b = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-b",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello again"),
+    )
+    await actor._execute_turn(trigger_b, outbox)
+
+    assert seen_models == ["model-a", "model-b"]
+
+
+@pytest.mark.asyncio
 async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, caplog) -> None:
     env = actor_env
     node = make_node("src/app.py::logged")

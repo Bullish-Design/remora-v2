@@ -7,4 +7,15 @@
 - [x] Wrote holistic REFINED_CONCEPT_OVERVIEW.md with appendix of simplification ideas
 - [x] User review and feedback on REFINED_CONCEPT_OVERVIEW.md (user annotated appendix items)
 - [x] Created detailed REFACTORING_GUIDE.md with 12 incremental PRs + 3 investigation items
-- [ ] Begin implementation: PR1 (HumanChatEvent → AgentMessageEvent)
+- [x] PR1: HumanChatEvent → AgentMessageEvent
+- [x] PR2: Remove AgentTextResponse
+- [x] PR3: Add turn modes (chat/reactive)
+- [x] PR4: Add bundle mode prompts
+- [x] PR5: Remove stable workspace fallback
+- [x] PR6: Merge companion tools into system and remove companion bundle
+- [x] PR7: Make bundle configuration purely additive on top of system base
+- [x] PR8: Remove manual log preview helpers
+- [x] PR9: Expose workspace KV operations to agents and system tools
+- [x] PR10: Add event envelope helper and envelope-backed persistence shape
+- [x] PR11: Rename core concepts (Node/Actor/TurnContext/ActorPool/role/workspace_root/capabilities)
+- [x] PR12: Harden bundle.yaml runtime loading and document runtime mutability

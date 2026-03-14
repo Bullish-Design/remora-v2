@@ -399,7 +399,42 @@ class Actor:
             text = await workspace.read("_bundle/bundle.yaml")
         except (FileNotFoundError, FsdFileNotFoundError):
             return {}
-        return _expand_env_vars(yaml.safe_load(text) or {})
+        try:
+            loaded = yaml.safe_load(text) or {}
+        except yaml.YAMLError:
+            logger.warning("Ignoring malformed _bundle/bundle.yaml")
+            return {}
+        if not isinstance(loaded, dict):
+            return {}
+
+        expanded = _expand_env_vars(loaded)
+        if not isinstance(expanded, dict):
+            return {}
+
+        validated: dict[str, Any] = {}
+        for key in ("system_prompt", "system_prompt_extension", "model"):
+            value = expanded.get(key)
+            if isinstance(value, str) and value.strip():
+                validated[key] = value
+
+        max_turns = expanded.get("max_turns")
+        if max_turns is not None:
+            try:
+                validated["max_turns"] = max(1, int(max_turns))
+            except (TypeError, ValueError):
+                pass
+
+        prompts = expanded.get("prompts")
+        if isinstance(prompts, dict):
+            prompt_values: dict[str, str] = {}
+            for mode in ("chat", "reactive"):
+                value = prompts.get(mode)
+                if isinstance(value, str) and value.strip():
+                    prompt_values[mode] = value
+            if prompt_values:
+                validated["prompts"] = prompt_values
+
+        return validated
 
     @staticmethod
     def _turn_mode(event: Event | None) -> str:
