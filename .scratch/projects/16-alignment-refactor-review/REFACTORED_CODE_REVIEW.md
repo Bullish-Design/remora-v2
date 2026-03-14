@@ -499,7 +499,7 @@ Module-level `dict[str, GrailScript]` never cleared.
 
 **M1. `EventBus.emit()` sequential execution** (carried from #7)
 Each handler is awaited one at a time. A slow handler blocks all subsequent handlers.
-**Recommendation**: Consider `asyncio.gather()` for independent handlers, or document the sequential guarantee as intentional.
+**Recommendation**: Consider `asyncio.gather()` for independent handlers.
 
 **M2. Missing `textDocument/didChange` LSP handler** (carried from #8)
 Required for any cursor-tracking or live editing feature.
