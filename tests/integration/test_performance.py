@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from remora.code.discovery import discover
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, SubscriptionPattern, SubscriptionRegistry
 from remora.core.graph import NodeStore
 from tests.factories import make_node
@@ -42,7 +42,7 @@ async def test_perf_discovery_100_nodes(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "perf-nodes.db")
+    db = await open_database(tmp_path / "perf-nodes.db")
     node_store = NodeStore(db)
     await node_store.create_tables()
 
@@ -52,12 +52,12 @@ async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
     elapsed = time.perf_counter() - started
 
     assert elapsed < 1.0
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio
 async def test_perf_subscription_matching(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "perf-subs.db")
+    db = await open_database(tmp_path / "perf-subs.db")
     registry = SubscriptionRegistry(db)
     await registry.create_tables()
 
@@ -75,4 +75,4 @@ async def test_perf_subscription_matching(tmp_path: Path) -> None:
 
     assert "agent-42" in matched
     assert elapsed < 1.0
-    db.close()
+    await db.close()

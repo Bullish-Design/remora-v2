@@ -14,7 +14,7 @@ from tests.factories import make_node
 
 from remora.core.actor import Actor, Outbox, RecordingOutbox, Trigger
 from remora.core.config import Config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
     AgentErrorEvent,
@@ -30,12 +30,12 @@ from remora.core.workspace import CairnWorkspaceService
 
 @pytest_asyncio.fixture
 async def outbox_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "outbox.db")
+    db = await open_database(tmp_path / "outbox.db")
     event_store = EventStore(db=db)
     await event_store.create_tables()
     outbox = Outbox(actor_id="agent-a", event_store=event_store, correlation_id="corr-1")
     yield outbox, event_store, db
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio
@@ -108,7 +108,7 @@ async def test_recording_outbox_no_persistence() -> None:
 
 @pytest_asyncio.fixture
 async def actor_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "actor.db")
+    db = await open_database(tmp_path / "actor.db")
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
     await node_store.create_tables()
@@ -135,7 +135,7 @@ async def actor_env(tmp_path: Path):
     }
 
     await workspace_service.close()
-    db.close()
+    await db.close()
 
 
 def _make_actor(env: dict, node_id: str = "src/app.py::a") -> Actor:

@@ -8,14 +8,14 @@ from tests.factories import make_cst, write_bundle_templates
 
 from remora.code.projections import project_nodes
 from remora.core.config import Config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
 
 @pytest_asyncio.fixture
 async def projection_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "phase5.db")
+    db = await open_database(tmp_path / "phase5.db")
     node_store = NodeStore(db)
     await node_store.create_tables()
 
@@ -33,7 +33,7 @@ async def projection_env(tmp_path: Path):
     yield node_store, workspace_service, config
 
     await workspace_service.close()
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,7 @@ async def test_project_unchanged_node_can_sync_existing_bundle_tools(
 
 @pytest.mark.asyncio
 async def test_project_bundle_overlays(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "bundle-map.db")
+    db = await open_database(tmp_path / "bundle-map.db")
     node_store = NodeStore(db)
     await node_store.create_tables()
 
@@ -138,4 +138,4 @@ async def test_project_bundle_overlays(tmp_path: Path) -> None:
     assert "special-agent" in bundle_text
 
     await workspace_service.close()
-    db.close()
+    await db.close()

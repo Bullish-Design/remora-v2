@@ -13,7 +13,7 @@ from tests.factories import write_bundle_templates, write_file
 import remora.code.reconciler as reconciler_module
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore, NodeChangedEvent
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
@@ -21,7 +21,7 @@ from remora.core.workspace import CairnWorkspaceService
 
 @pytest_asyncio.fixture
 async def reconcile_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "reconcile.db")
+    db = await open_database(tmp_path / "reconcile.db")
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
     await node_store.create_tables()
@@ -54,7 +54,7 @@ async def reconcile_env(tmp_path: Path):
     yield node_store, agent_store, event_store, workspace_service, config, reconciler
 
     await workspace_service.close()
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio

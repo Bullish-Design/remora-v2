@@ -8,7 +8,7 @@ import pytest_asyncio
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import EventStore
 from remora.core.graph import NodeStore
 from remora.lsp.server import (
@@ -23,13 +23,13 @@ from tests.factories import make_node
 
 @pytest_asyncio.fixture
 async def lsp_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "lsp.db")
+    db = await open_database(tmp_path / "lsp.db")
     node_store = NodeStore(db)
     await node_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
     yield node_store, event_store
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@ from tests.factories import make_node
 
 from remora.core.actor import Actor
 from remora.core.config import Config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     EventStore,
@@ -21,7 +21,7 @@ from remora.core.workspace import CairnWorkspaceService
 
 @pytest_asyncio.fixture
 async def runner_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "runner.db")
+    db = await open_database(tmp_path / "runner.db")
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
     await node_store.create_tables()
@@ -37,7 +37,7 @@ async def runner_env(tmp_path: Path):
 
     await runner.stop_and_wait()
     await workspace_service.close()
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio

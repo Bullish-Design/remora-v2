@@ -4,56 +4,63 @@ from pathlib import Path
 
 import pytest
 
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 
 
 @pytest.mark.asyncio
 async def test_asyncdb_execute_and_fetch(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "db1.sqlite")
-    await db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+    db = await open_database(tmp_path / "db1.sqlite")
+    await db.executescript("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
     await db.execute("INSERT INTO t(name) VALUES (?)", ("a",))
-    row = await db.fetch_one("SELECT name FROM t WHERE id = 1")
+    await db.commit()
+    cursor = await db.execute("SELECT name FROM t WHERE id = 1")
+    row = await cursor.fetchone()
     assert row is not None
     assert row["name"] == "a"
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio
 async def test_asyncdb_fetch_all(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "db2.sqlite")
-    await db.execute_script(
+    db = await open_database(tmp_path / "db2.sqlite")
+    await db.executescript(
         """
         CREATE TABLE t (id INTEGER PRIMARY KEY, value INTEGER);
         INSERT INTO t(value) VALUES (1);
         INSERT INTO t(value) VALUES (2);
         """
     )
-    rows = await db.fetch_all("SELECT value FROM t ORDER BY value ASC")
+    await db.commit()
+    cursor = await db.execute("SELECT value FROM t ORDER BY value ASC")
+    rows = await cursor.fetchall()
     assert [row["value"] for row in rows] == [1, 2]
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio
 async def test_asyncdb_insert_and_delete(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "db3.sqlite")
-    await db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
-    row_id = await db.insert("INSERT INTO t(name) VALUES (?)", ("x",))
+    db = await open_database(tmp_path / "db3.sqlite")
+    await db.executescript("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+    insert_cursor = await db.execute("INSERT INTO t(name) VALUES (?)", ("x",))
+    await db.commit()
+    row_id = int(insert_cursor.lastrowid)
     assert row_id == 1
-    deleted = await db.delete("DELETE FROM t WHERE id = ?", (1,))
-    assert deleted == 1
-    db.close()
+    delete_cursor = await db.execute("DELETE FROM t WHERE id = ?", (1,))
+    await db.commit()
+    assert delete_cursor.rowcount == 1
+    await db.close()
 
 
 @pytest.mark.asyncio
 async def test_asyncdb_execute_many(tmp_path: Path) -> None:
-    db = AsyncDB.from_path(tmp_path / "db4.sqlite")
-    await db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
-    await db.execute_many(
-        [
-            ("INSERT INTO t(name) VALUES (?)", ("a",)),
-            ("INSERT INTO t(name) VALUES (?)", ("b",)),
-        ]
+    db = await open_database(tmp_path / "db4.sqlite")
+    await db.executescript("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+    await db.executemany(
+        "INSERT INTO t(name) VALUES (?)",
+        [("a",), ("b",)],
     )
-    rows = await db.fetch_all("SELECT name FROM t ORDER BY id ASC")
+    await db.commit()
+    cursor = await db.execute("SELECT name FROM t ORDER BY id ASC")
+    rows = await cursor.fetchall()
     assert [row["name"] for row in rows] == ["a", "b"]
-    db.close()
+    await db.close()

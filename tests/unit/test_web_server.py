@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 
 from remora.core.events import AgentMessageEvent, EventBus, EventStore
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.graph import NodeStore
 from remora.web.server import create_app
 from tests.factories import make_node
@@ -17,7 +17,7 @@ from tests.factories import make_node
 
 @pytest_asyncio.fixture
 async def web_env(tmp_path: Path):
-    db = AsyncDB.from_path(tmp_path / "web.db")
+    db = await open_database(tmp_path / "web.db")
     event_bus = EventBus()
     node_store = NodeStore(db)
     await node_store.create_tables()
@@ -47,7 +47,7 @@ async def web_env(tmp_path: Path):
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client, node_store, event_store, source_path
 
-    db.close()
+    await db.close()
 
 
 @pytest.mark.asyncio

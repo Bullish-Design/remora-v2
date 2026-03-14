@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 
 import pytest
+import pytest_asyncio
 
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 
 
 def _remove_closed_root_stream_handlers() -> None:
@@ -26,9 +27,9 @@ def cleanup_closed_root_stream_handlers():
     _remove_closed_root_stream_handlers()
 
 
-@pytest.fixture
-def db(tmp_path):
-    """Shared AsyncDB fixture configured with WAL mode."""
-    database = AsyncDB.from_path(tmp_path / "test.db")
+@pytest_asyncio.fixture
+async def db(tmp_path):
+    """Shared SQLite fixture configured with WAL mode."""
+    database = await open_database(tmp_path / "test.db")
     yield database
-    database.close()
+    await database.close()

@@ -4,13 +4,14 @@ import asyncio
 import os
 from pathlib import Path
 
+import aiosqlite
 import pytest
 from tests.factories import write_file
 
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Actor, Outbox, Trigger
 from remora.core.config import Config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.workspace import CairnWorkspaceService
@@ -176,13 +177,13 @@ async def _setup_llm_runtime(
     model_api_key: str,
     timeout_s: float,
     bundle_writer,
-) -> tuple[Actor, object, EventStore, CairnWorkspaceService, AsyncDB, Path]:
+) -> tuple[Actor, object, EventStore, CairnWorkspaceService, aiosqlite.Connection, Path]:
     source_path = tmp_path / "src" / "app.py"
     write_file(source_path, "def alpha():\n    return 1\n")
     bundles_root = tmp_path / "bundles"
     bundle_writer(bundles_root, model_name)
 
-    db = AsyncDB.from_path(tmp_path / "llm-turn.db")
+    db = await open_database(tmp_path / "llm-turn.db")
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
     await node_store.create_tables()
@@ -239,7 +240,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
     bundles_root = tmp_path / "bundles"
     _write_llm_test_bundles(bundles_root, model_name)
 
-    db = AsyncDB.from_path(tmp_path / "llm-turn.db")
+    db = await open_database(tmp_path / "llm-turn.db")
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
     await node_store.create_tables()
@@ -310,7 +311,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
         )
     finally:
         await workspace_service.close()
-        db.close()
+        await db.close()
 
 
 @pytest.mark.asyncio
@@ -366,7 +367,7 @@ async def test_real_llm_turn_kv_roundtrip_and_message(tmp_path: Path) -> None:
         if workspace_service is not None:
             await workspace_service.close()
         if db is not None:
-            db.close()
+            await db.close()
 
 
 @pytest.mark.asyncio
@@ -437,7 +438,7 @@ async def test_real_llm_turn_reload_uses_runtime_bundle_mutation(tmp_path: Path)
         if workspace_service is not None:
             await workspace_service.close()
         if db is not None:
-            db.close()
+            await db.close()
 
 
 @pytest.mark.asyncio
@@ -480,4 +481,4 @@ async def test_real_llm_reactive_trigger_uses_reactive_mode_prompt(tmp_path: Pat
         if workspace_service is not None:
             await workspace_service.close()
         if db is not None:
-            db.close()
+            await db.close()

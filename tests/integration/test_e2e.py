@@ -12,7 +12,7 @@ from tests.factories import write_file
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Outbox, Trigger
 from remora.core.config import Config
-from remora.core.db import AsyncDB
+from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
@@ -72,7 +72,7 @@ async def _setup_runtime(tmp_path: Path):
     bundles_root = tmp_path / "bundles"
     _write_bundles(bundles_root)
 
-    db = AsyncDB.from_path(tmp_path / "e2e.db")
+    db = await open_database(tmp_path / "e2e.db")
     event_bus = EventBus()
     node_store = NodeStore(db)
     agent_store = AgentStore(db)
@@ -206,7 +206,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
 
     await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
-    runtime["db"].close()
+    await runtime["db"].close()
 
 
 @pytest.mark.asyncio
@@ -226,7 +226,7 @@ async def test_e2e_agent_message_chain(tmp_path: Path) -> None:
 
     await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
-    runtime["db"].close()
+    await runtime["db"].close()
 
 
 @pytest.mark.asyncio
@@ -244,7 +244,7 @@ async def test_e2e_file_change_triggers(tmp_path: Path) -> None:
 
     await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
-    runtime["db"].close()
+    await runtime["db"].close()
 
 
 @pytest.mark.asyncio
@@ -330,4 +330,4 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
 
     await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
-    runtime["db"].close()
+    await runtime["db"].close()
