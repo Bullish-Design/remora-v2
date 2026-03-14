@@ -20,7 +20,7 @@ from remora.core.events import (
     EventStore,
 )
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.runner import AgentRunner
+from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -84,7 +84,7 @@ async def _setup_runtime(tmp_path: Path):
     config = Config(
         discovery_paths=("src",),
         discovery_languages=("python",),
-        swarm_root=".remora-e2e",
+        workspace_root=".remora-e2e",
         bundle_root=str(bundles_root),
         model_default="mock",
     )
@@ -99,7 +99,7 @@ async def _setup_runtime(tmp_path: Path):
         project_root=tmp_path,
     )
     code_nodes = await reconciler.full_scan()
-    runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
+    runner = ActorPool(event_store, node_store, agent_store, workspace_service, config)
 
     return {
         "source_path": source_path,

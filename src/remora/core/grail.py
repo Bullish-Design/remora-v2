@@ -67,13 +67,14 @@ class GrailTool:
         self,
         script: grail.GrailScript,
         *,
-        externals: dict[str, Any],
+        capabilities: dict[str, Any] | None = None,
+        externals: dict[str, Any] | None = None,
         name_override: str | None = None,
         agent_id: str = "?",
         source_file: str | None = None,
     ):
         self._script = script
-        self._externals = externals
+        self._capabilities = capabilities if capabilities is not None else (externals or {})
         self._agent_id = agent_id
         self._source_file = source_file or f"{script.name}.pym"
         self._schema = ToolSchema(
@@ -98,12 +99,12 @@ class GrailTool:
             arguments,
         )
         try:
-            used_externals = {
+            used_capabilities = {
                 name: fn
-                for name, fn in self._externals.items()
+                for name, fn in self._capabilities.items()
                 if name in self._script.externals
             }
-            result = await self._script.run(inputs=arguments, externals=used_externals)
+            result = await self._script.run(inputs=arguments, externals=used_capabilities)
             output = result if isinstance(result, str) else json.dumps(result)
             logger.info(
                 "Tool complete agent=%s tool=%s call_id=%s duration_ms=%.1f output=%s",
@@ -139,9 +140,11 @@ class GrailTool:
 
 async def discover_tools(
     workspace: AgentWorkspace,
-    externals: dict[str, Any],
+    capabilities: dict[str, Any] | None = None,
+    externals: dict[str, Any] | None = None,
 ) -> list[GrailTool]:
     """Discover .pym tools under _bundle/tools in an agent workspace."""
+    resolved_capabilities = capabilities if capabilities is not None else (externals or {})
     agent_id = str(getattr(workspace, "_agent_id", "?"))
     try:
         tool_files = await workspace.list_dir("_bundle/tools")
@@ -159,7 +162,7 @@ async def discover_tools(
             tools.append(
                 GrailTool(
                     script=script,
-                    externals=externals,
+                    capabilities=resolved_capabilities,
                     agent_id=agent_id,
                     source_file=filename,
                 )

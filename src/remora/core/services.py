@@ -10,7 +10,7 @@ from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.runner import AgentRunner
+from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -38,7 +38,7 @@ class RuntimeServices:
         self.language_registry = LanguageRegistry()
 
         self.reconciler: FileReconciler | None = None
-        self.runner: AgentRunner | None = None
+        self.runner: ActorPool | None = None
 
     async def initialize(self) -> None:
         """Create tables and initialize services."""
@@ -58,7 +58,7 @@ class RuntimeServices:
         )
         await self.reconciler.start(self.event_bus)
 
-        self.runner = AgentRunner(
+        self.runner = ActorPool(
             self.event_store,
             self.node_store,
             self.agent_store,

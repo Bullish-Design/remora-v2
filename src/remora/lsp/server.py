@@ -9,7 +9,7 @@ from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
 from remora.core.events import ContentChangedEvent
-from remora.core.node import CodeNode
+from remora.core.node import Node
 
 
 def create_lsp_server(node_store, event_store) -> LanguageServer:  # noqa: ANN001
@@ -52,8 +52,8 @@ def create_lsp_server(node_store, event_store) -> LanguageServer:  # noqa: ANN00
     return server
 
 
-def _node_to_lens(node: CodeNode) -> lsp.CodeLens:
-    """Map a CodeNode to a CodeLens entry showing runtime status."""
+def _node_to_lens(node: Node) -> lsp.CodeLens:
+    """Map a Node to a CodeLens entry showing runtime status."""
     status = node.status.value if hasattr(node.status, "value") else str(node.status)
     return lsp.CodeLens(
         range=lsp.Range(
@@ -69,8 +69,8 @@ def _node_to_lens(node: CodeNode) -> lsp.CodeLens:
     )
 
 
-def _node_to_hover(node: CodeNode) -> lsp.Hover:
-    """Map a CodeNode to markdown hover details."""
+def _node_to_hover(node: Node) -> lsp.Hover:
+    """Map a Node to markdown hover details."""
     node_type = node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
     status = node.status.value if hasattr(node.status, "value") else str(node.status)
     value = (
@@ -88,7 +88,7 @@ def _node_to_hover(node: CodeNode) -> lsp.Hover:
     )
 
 
-def _find_node_at_line(nodes: list[CodeNode], line: int) -> CodeNode | None:
+def _find_node_at_line(nodes: list[Node], line: int) -> Node | None:
     """Find the narrowest node whose range contains the provided 1-based line."""
     containing = [node for node in nodes if node.start_line <= line <= node.end_line]
     if not containing:

@@ -16,12 +16,12 @@ from remora.core.events import (
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.node import CodeNode
+from remora.core.node import Node
 from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import AgentWorkspace
 
 
-class AgentContext:
+class TurnContext:
     """Per-turn context providing externals API for an agent's tools."""
 
     def __init__(
@@ -242,7 +242,7 @@ class AgentContext:
     async def my_correlation_id(self) -> str | None:
         return self.correlation_id
 
-    def to_externals_dict(self) -> dict[str, Any]:
+    def to_capabilities_dict(self) -> dict[str, Any]:
         return {
             "read_file": self.read_file,
             "write_file": self.write_file,
@@ -271,11 +271,15 @@ class AgentContext:
             "my_correlation_id": self.my_correlation_id,
         }
 
+    def to_externals_dict(self) -> dict[str, Any]:
+        """Backward-compatible alias for to_capabilities_dict."""
+        return self.to_capabilities_dict()
+
 
 def _resolve_broadcast_targets(
     source_id: str,
     pattern: str,
-    nodes: list[CodeNode],
+    nodes: list[Node],
 ) -> list[str]:
     all_ids = [node.node_id for node in nodes if node.node_id != source_id]
     if pattern in {"*", "all"}:
@@ -301,4 +305,7 @@ def _resolve_broadcast_targets(
     return [node_id for node_id in all_ids if pattern in node_id]
 
 
-__all__ = ["AgentContext"]
+AgentContext = TurnContext
+
+
+__all__ = ["TurnContext", "AgentContext"]

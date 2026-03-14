@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from remora.code.discovery import CSTNode
-from remora.core.node import CodeNode
+from remora.core.node import Node
 from remora.core.types import NodeStatus, NodeType
 
 
@@ -17,7 +17,7 @@ def make_node(
     status: str | NodeStatus = NodeStatus.IDLE,
     source_code: str | None = None,
     **overrides,
-) -> CodeNode:
+) -> Node:
     name = node_id.split("::", maxsplit=1)[-1]
     data = {
         "node_id": node_id,
@@ -32,7 +32,7 @@ def make_node(
         "status": status,
     }
     data.update(overrides)
-    return CodeNode(**data)
+    return Node(**data)
 
 
 def make_cst(
@@ -64,14 +64,14 @@ def write_file(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def write_bundle_templates(root: Path, bundle_name: str = "code-agent") -> None:
+def write_bundle_templates(root: Path, role: str = "code-agent") -> None:
     system = root / "system"
-    bundle = root / bundle_name
+    bundle = root / role
     (system / "tools").mkdir(parents=True, exist_ok=True)
     (bundle / "tools").mkdir(parents=True, exist_ok=True)
     (system / "bundle.yaml").write_text("name: system\nmax_turns: 4\n", encoding="utf-8")
     (bundle / "bundle.yaml").write_text(
-        f"name: {bundle_name}\nmax_turns: 8\n",
+        f"name: {role}\nmax_turns: 8\n",
         encoding="utf-8",
     )
     (system / "tools" / "send_message.pym").write_text("result = 'ok'\nresult\n", encoding="utf-8")

@@ -52,7 +52,7 @@ class Config(BaseSettings):
     max_turns: int = 8
 
     # Agent execution
-    swarm_root: str = ".remora"
+    workspace_root: str = ".remora"
     max_concurrency: int = 4
     max_trigger_depth: int = 5
     trigger_cooldown_ms: int = 1000
@@ -99,9 +99,12 @@ class Config(BaseSettings):
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_bundle_mapping(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "bundle_mapping" in data and "bundle_overlays" not in data:
+        if isinstance(data, dict):
             copied = dict(data)
-            copied["bundle_overlays"] = copied.pop("bundle_mapping")
+            if "bundle_mapping" in copied and "bundle_overlays" not in copied:
+                copied["bundle_overlays"] = copied.pop("bundle_mapping")
+            if "swarm_root" in copied and "workspace_root" not in copied:
+                copied["workspace_root"] = copied.pop("swarm_root")
             return copied
         return data
 
@@ -109,6 +112,11 @@ class Config(BaseSettings):
     def bundle_mapping(self) -> dict[str, str]:
         """Backward-compatible alias for bundle_overlays."""
         return self.bundle_overlays
+
+    @property
+    def swarm_root(self) -> str:
+        """Backward-compatible alias for workspace_root."""
+        return self.workspace_root
 
 
 def _expand_string(value: str) -> str:

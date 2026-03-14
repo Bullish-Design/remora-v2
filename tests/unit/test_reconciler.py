@@ -37,7 +37,7 @@ async def reconcile_env(tmp_path: Path):
         discovery_languages=("python",),
         language_map={".py": "python"},
         query_paths=(),
-        swarm_root=".remora-reconcile",
+        workspace_root=".remora-reconcile",
         bundle_root=str(bundles_root),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)

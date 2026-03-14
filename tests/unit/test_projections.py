@@ -20,10 +20,10 @@ async def projection_env(tmp_path: Path):
     await node_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
-    write_bundle_templates(bundles_root, bundle_name="code-agent")
+    write_bundle_templates(bundles_root, role="code-agent")
 
     config = Config(
-        swarm_root=".remora-phase5",
+        workspace_root=".remora-phase5",
         bundle_root=str(bundles_root),
         bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
     )
@@ -117,9 +117,9 @@ async def test_project_bundle_overlays(tmp_path: Path) -> None:
     await node_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
-    write_bundle_templates(bundles_root, bundle_name="special-agent")
+    write_bundle_templates(bundles_root, role="special-agent")
     config = Config(
-        swarm_root=".remora-phase5",
+        workspace_root=".remora-phase5",
         bundle_root=str(bundles_root),
         bundle_overlays={"function": "special-agent"},
     )
@@ -134,7 +134,7 @@ async def test_project_bundle_overlays(tmp_path: Path) -> None:
     bundle_text = await workspace.read("_bundle/bundle.yaml")
 
     assert stored is not None
-    assert stored.bundle_name == "special-agent"
+    assert stored.role == "special-agent"
     assert "special-agent" in bundle_text
 
     await workspace_service.close()

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 
-from remora.core.actor import AgentActor
+from remora.core.actor import Actor
 from remora.core.config import Config
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
@@ -16,10 +16,10 @@ from remora.core.workspace import CairnWorkspaceService
 logger = logging.getLogger(__name__)
 
 
-class AgentRunner:
+class ActorPool:
     """Actor registry and lifecycle manager for agent execution.
 
-    Creates AgentActor instances lazily on first trigger and routes
+    Creates Actor instances lazily on first trigger and routes
     events from the dispatcher to per-agent inboxes.
     """
 
@@ -40,7 +40,7 @@ class AgentRunner:
         self._config = config
         self._running = False
         self._semaphore = asyncio.Semaphore(config.max_concurrency)
-        self._actors: dict[str, AgentActor] = {}
+        self._actors: dict[str, Actor] = {}
 
         # Set ourselves as the dispatcher's router
         self._dispatcher.router = self._route_to_actor
@@ -50,10 +50,10 @@ class AgentRunner:
         actor = self.get_or_create_actor(agent_id)
         actor.inbox.put_nowait(event)
 
-    def get_or_create_actor(self, node_id: str) -> AgentActor:
+    def get_or_create_actor(self, node_id: str) -> Actor:
         """Get an existing actor or create a new one for the given node."""
         if node_id not in self._actors:
-            actor = AgentActor(
+            actor = Actor(
                 node_id=node_id,
                 event_store=self._event_store,
                 node_store=self._node_store,
@@ -107,9 +107,12 @@ class AgentRunner:
             logger.debug("Evicted idle actor: %s", node_id)
 
     @property
-    def actors(self) -> dict[str, AgentActor]:
+    def actors(self) -> dict[str, Actor]:
         """Read-only access to actor registry (for observability)."""
         return dict(self._actors)
 
 
-__all__ = ["AgentRunner"]
+AgentRunner = ActorPool
+
+
+__all__ = ["ActorPool", "AgentRunner"]

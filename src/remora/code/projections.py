@@ -8,7 +8,7 @@ from pathlib import Path
 from remora.code.discovery import CSTNode
 from remora.core.config import Config
 from remora.core.graph import NodeStore
-from remora.core.node import CodeNode
+from remora.core.node import Node
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -19,9 +19,9 @@ async def project_nodes(
     config: Config,
     *,
     sync_existing_bundles: bool = False,
-) -> list[CodeNode]:
+) -> list[Node]:
     """Project CSTNodes into CodeNodes and provision bundles for new nodes."""
-    results: list[CodeNode] = []
+    results: list[Node] = []
     bundle_root = Path(config.bundle_root)
 
     for cst in cst_nodes:
@@ -31,17 +31,17 @@ async def project_nodes(
             if sync_existing_bundles:
                 # System tools/config are always included; role bundle overlays them.
                 template_dirs = [bundle_root / "system"]
-                existing_bundle = existing.bundle_name
+                existing_bundle = existing.role
                 mapped_bundle = config.bundle_overlays.get(cst.node_type)
-                bundle_name = mapped_bundle or existing_bundle
-                if bundle_name:
-                    template_dirs.append(bundle_root / bundle_name)
+                role = mapped_bundle or existing_bundle
+                if role:
+                    template_dirs.append(bundle_root / role)
                 await workspace_service.provision_bundle(cst.node_id, template_dirs)
             results.append(existing)
             continue
 
         mapped_bundle = config.bundle_overlays.get(cst.node_type)
-        code_node = CodeNode(
+        code_node = Node(
             node_id=cst.node_id,
             node_type=cst.node_type,
             name=cst.name,
@@ -55,10 +55,10 @@ async def project_nodes(
             source_hash=source_hash,
             parent_id=cst.parent_id,
             status=existing.status if existing else "idle",
-            bundle_name=(
+            role=(
                 mapped_bundle
                 if mapped_bundle is not None
-                else (existing.bundle_name if existing else None)
+                else (existing.role if existing else None)
             ),
         )
 

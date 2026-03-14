@@ -1,4 +1,4 @@
-"""Actor model primitives: Outbox and AgentActor."""
+"""Actor model primitives: Outbox and Actor."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ from remora.core.config import Config, _expand_env_vars
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
-from remora.core.externals import AgentContext
+from remora.core.externals import TurnContext
 from remora.core.grail import discover_tools
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
-from remora.core.node import CodeNode
+from remora.core.node import Node
 from remora.core.types import NodeStatus
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
@@ -116,7 +116,7 @@ class Trigger:
     event: Event | None = None
 
 
-class AgentActor:
+class Actor:
     """Per-agent actor with inbox, outbox, and sequential processing loop.
 
     Each actor processes one inbox message at a time. Cooldown and depth
@@ -217,7 +217,7 @@ class AgentActor:
         return True
 
     async def _execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
-        """Execute one agent turn. Reuses logic from the old AgentRunner._execute_turn."""
+        """Execute one agent turn. Reuses logic from the old ActorPool._execute_turn."""
         node_id = trigger.node_id
         depth_key = trigger.correlation_id
 
@@ -259,7 +259,7 @@ class AgentActor:
                 model_name = bundle_config.get("model", self._config.model_default)
                 max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
 
-                context = AgentContext(
+                context = TurnContext(
                     node_id=node_id,
                     workspace=workspace,
                     correlation_id=trigger.correlation_id,
@@ -268,8 +268,8 @@ class AgentActor:
                     event_store=self._event_store,
                     outbox=outbox,
                 )
-                externals = context.to_externals_dict()
-                tools = await self._resolve_maybe_awaitable(discover_tools(workspace, externals))
+                capabilities = context.to_capabilities_dict()
+                tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))
                 logger.info(
                     "Agent turn start node=%s corr=%s model=%s tools=%d max_turns=%d trigger=%s",
                     node_id,
@@ -353,7 +353,7 @@ class AgentActor:
                     self._depths[depth_key] = remaining
 
     @staticmethod
-    def _build_prompt(node: CodeNode, trigger: Trigger) -> str:
+    def _build_prompt(node: Node, trigger: Trigger) -> str:
         """Build the turn prompt from node identity and trigger details."""
         node_type = (
             node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
@@ -413,4 +413,7 @@ def _event_content(event: Event) -> str:
     return ""
 
 
-__all__ = ["Outbox", "RecordingOutbox", "Trigger", "AgentActor"]
+__all__ = ["Outbox", "RecordingOutbox", "Trigger", "Actor", "AgentActor"]
+
+
+AgentActor = Actor

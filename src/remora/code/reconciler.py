@@ -21,7 +21,7 @@ from remora.core.events import (
     SubscriptionPattern,
 )
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.node import CodeNode
+from remora.core.node import Node
 from remora.core.types import NodeType
 from remora.core.workspace import CairnWorkspaceService
 
@@ -55,7 +55,7 @@ class FileReconciler:
         # pick up updated tool scripts.
         self._bundles_bootstrapped = False
 
-    async def full_scan(self) -> list[CodeNode]:
+    async def full_scan(self) -> list[Node]:
         """Perform a full startup scan and return current graph nodes."""
         await self.reconcile_cycle()
         return await self._node_store.list_nodes()
@@ -214,7 +214,7 @@ class FileReconciler:
             refresh_subscriptions = not self._subscriptions_bootstrapped
             refresh_bundle = sync_existing_bundles
 
-            directory_node = CodeNode(
+            directory_node = Node(
                 node_id=dir_id,
                 node_type=NodeType.DIRECTORY,
                 name=name,
@@ -226,10 +226,10 @@ class FileReconciler:
                 source_hash=source_hash,
                 parent_id=parent_id,
                 status=existing.status if existing is not None else "idle",
-                bundle_name=(
+                role=(
                     mapped_bundle
                     if mapped_bundle is not None
-                    else (existing.bundle_name if existing is not None else None)
+                    else (existing.role if existing is not None else None)
                 ),
             )
 
@@ -237,7 +237,7 @@ class FileReconciler:
                 await self._node_store.upsert_node(directory_node)
                 await self._register_subscriptions(directory_node)
                 await self._ensure_agent(directory_node)
-                await self._provision_bundle(directory_node.node_id, directory_node.bundle_name)
+                await self._provision_bundle(directory_node.node_id, directory_node.role)
                 await self._event_store.append(
                     NodeDiscoveredEvent(
                         node_id=directory_node.node_id,
@@ -253,7 +253,7 @@ class FileReconciler:
                 or existing.file_path != directory_node.file_path
                 or existing.name != directory_node.name
                 or existing.full_name != directory_node.full_name
-                or existing.bundle_name != directory_node.bundle_name
+                or existing.role != directory_node.role
             )
             hash_changed = existing.source_hash != source_hash
             if metadata_changed or hash_changed:
@@ -263,7 +263,7 @@ class FileReconciler:
                 await self._register_subscriptions(directory_node)
                 await self._ensure_agent(directory_node)
             if refresh_bundle:
-                await self._provision_bundle(directory_node.node_id, directory_node.bundle_name)
+                await self._provision_bundle(directory_node.node_id, directory_node.role)
 
             if hash_changed:
                 await self._register_subscriptions(directory_node)
@@ -279,12 +279,12 @@ class FileReconciler:
 
         self._subscriptions_bootstrapped = True
 
-    async def _provision_bundle(self, node_id: str, bundle_name: str | None) -> None:
+    async def _provision_bundle(self, node_id: str, role: str | None) -> None:
         bundle_root = Path(self._config.bundle_root)
         # System tools/config are always included; role bundle overlays them.
         template_dirs = [bundle_root / "system"]
-        if bundle_name:
-            template_dirs.append(bundle_root / bundle_name)
+        if role:
+            template_dirs.append(bundle_root / role)
         await self._workspace_service.provision_bundle(node_id, template_dirs)
 
     def _relative_file_path(self, file_path: str) -> str:
@@ -409,7 +409,7 @@ class FileReconciler:
             )
         )
 
-    async def _register_subscriptions(self, node: CodeNode) -> None:
+    async def _register_subscriptions(self, node: Node) -> None:
         await self._event_store.subscriptions.unregister_by_agent(node.node_id)
         await self._event_store.subscriptions.register(
             node.node_id,
@@ -442,7 +442,7 @@ class FileReconciler:
             ),
         )
 
-    async def _ensure_agent(self, node: CodeNode) -> None:
+    async def _ensure_agent(self, node: Node) -> None:
         if await self._agent_store.get_agent(node.node_id) is None:
             await self._agent_store.upsert_agent(node.to_agent())
 

@@ -10,7 +10,7 @@ from remora.core.actor import Outbox, RecordingOutbox
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
-from remora.core.externals import AgentContext
+from remora.core.externals import TurnContext
 from remora.core.graph import AgentStore, NodeStore
 from remora.core.types import NodeType
 from remora.core.workspace import CairnWorkspaceService
@@ -26,7 +26,7 @@ async def context_env(tmp_path: Path):
     event_store = EventStore(db=db)
     await event_store.create_tables()
 
-    config = Config(swarm_root=".remora-phase5")
+    config = Config(workspace_root=".remora-phase5")
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 
@@ -44,10 +44,10 @@ async def _context(
     event_store: EventStore,
     correlation_id: str = "corr-1",
     outbox=None,
-) -> AgentContext:
+) -> TurnContext:
     if outbox is None:
         outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
-    return AgentContext(
+    return TurnContext(
         node_id=node_id,
         workspace=workspace,
         correlation_id=correlation_id,
@@ -66,7 +66,7 @@ async def test_externals_workspace_ops(context_env) -> None:
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     assert await externals["write_file"]("notes/a.txt", "hello")
     assert await externals["read_file"]("notes/a.txt") == "hello"
@@ -85,7 +85,7 @@ async def test_externals_kv_ops(context_env) -> None:
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     assert await externals["kv_set"]("state/name", "alpha")
     assert await externals["kv_get"]("state/name") == "alpha"
@@ -107,7 +107,7 @@ async def test_externals_graph_ops(context_env) -> None:
 
     ws = await workspace_service.get_agent_workspace(a.node_id)
     context = await _context(a.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     got = await externals["graph_get_node"](a.node_id)
     listed = await externals["graph_query_nodes"]("function", None)
@@ -127,7 +127,7 @@ async def test_externals_graph_query_nodes_rejects_invalid_enums(context_env) ->
 
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     with pytest.raises(ValueError, match="Invalid node_type"):
         await externals["graph_query_nodes"]("NodeType.DIRECTORY", None)
@@ -144,7 +144,7 @@ async def test_externals_event_ops(context_env) -> None:
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     sub_id = await externals["event_subscribe"](["AgentMessageEvent"], None, None)
     assert isinstance(sub_id, int)
@@ -174,7 +174,7 @@ async def test_externals_communication(context_env) -> None:
 
     ws = await workspace_service.get_agent_workspace(sender.node_id)
     context = await _context(sender.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     assert await externals["send_message"](target_a.node_id, "direct")
     summary = await externals["broadcast"]("*", "all")
@@ -197,7 +197,7 @@ async def test_externals_broadcast_siblings_and_file_patterns(context_env) -> No
 
     ws = await workspace_service.get_agent_workspace(sender.node_id)
     context = await _context(sender.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     summary1 = await externals["broadcast"]("siblings", "same-file")
     summary2 = await externals["broadcast"]("file:src/other.py", "other-file")
@@ -229,7 +229,7 @@ async def test_externals_code_ops(context_env) -> None:
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     assert await externals["apply_rewrite"]("def alpha():\n    return 2\n")
 
@@ -270,7 +270,7 @@ async def test_apply_rewrite_duplicate_source_blocks(context_env) -> None:
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     applied = await externals["apply_rewrite"]("def helper():\n    return 2\n")
     assert applied
@@ -286,7 +286,7 @@ async def test_externals_identity(context_env) -> None:
     await agent_store.upsert_agent(node.to_agent())
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, agent_store, event_store, "corr-x")
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
     assert await externals["my_node_id"]() == node.node_id
     assert await externals["my_correlation_id"]() == "corr-x"
 
@@ -303,7 +303,7 @@ async def test_externals_graph_get_children(context_env) -> None:
     await agent_store.upsert_agent(parent.to_agent())
     ws = await workspace_service.get_agent_workspace(parent.node_id)
     context = await _context(parent.node_id, ws, node_store, agent_store, event_store)
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     children = await externals["graph_get_children"]()
     child_ids = [node["node_id"] for node in children]
@@ -320,7 +320,7 @@ async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
 
     outbox = RecordingOutbox(actor_id=node.node_id)
     outbox.correlation_id = "corr-outbox"
-    context = AgentContext(
+    context = TurnContext(
         node_id=node.node_id,
         workspace=ws,
         correlation_id="corr-outbox",
@@ -329,7 +329,7 @@ async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
         event_store=event_store,
         outbox=outbox,
     )
-    externals = context.to_externals_dict()
+    externals = context.to_capabilities_dict()
 
     await externals["event_emit"]("CustomEvent", {"key": "val"})
     await externals["send_message"]("target-node", "hello")

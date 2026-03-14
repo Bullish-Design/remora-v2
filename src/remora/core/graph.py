@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from remora.core.db import AsyncDB
-from remora.core.node import Agent, CodeNode
+from remora.core.node import Agent, Node
 from remora.core.types import NodeStatus, NodeType, validate_status_transition
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class Edge:
 
 
 class NodeStore:
-    """SQLite-backed storage for the CodeNode graph."""
+    """SQLite-backed storage for the Node graph."""
 
     def __init__(self, db: AsyncDB):
         self._db = db
@@ -50,7 +50,7 @@ class NodeStore:
                 source_hash TEXT NOT NULL,
                 parent_id TEXT,
                 status TEXT DEFAULT 'idle',
-                bundle_name TEXT
+                role TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type);
             CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);
@@ -69,14 +69,15 @@ class NodeStore:
                 agent_id TEXT PRIMARY KEY,
                 element_id TEXT,
                 status TEXT DEFAULT 'idle',
-                bundle_name TEXT,
+                role TEXT,
                 FOREIGN KEY (element_id) REFERENCES nodes(node_id) ON DELETE SET NULL
             );
             CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
+        await self._migrate_role_columns()
 
-    async def upsert_node(self, node: CodeNode) -> None:
+    async def upsert_node(self, node: Node) -> None:
         """Insert or replace a node by node_id."""
         row = node.to_row()
         columns = ", ".join(row.keys())
@@ -86,17 +87,17 @@ class NodeStore:
             tuple(row.values()),
         )
 
-    async def get_node(self, node_id: str) -> CodeNode | None:
+    async def get_node(self, node_id: str) -> Node | None:
         """Fetch a single node by ID."""
         row = await self._db.fetch_one("SELECT * FROM nodes WHERE node_id = ?", (node_id,))
-        return None if row is None else CodeNode.from_row(row)
+        return None if row is None else Node.from_row(row)
 
     async def list_nodes(
         self,
         node_type: str | NodeType | None = None,
         status: str | NodeStatus | None = None,
         file_path: str | None = None,
-    ) -> list[CodeNode]:
+    ) -> list[Node]:
         """List nodes with optional filtering fields."""
         conditions: list[str] = []
         params: list[Any] = []
@@ -113,15 +114,15 @@ class NodeStore:
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
         sql = f"SELECT * FROM nodes{where_clause} ORDER BY node_id ASC"
         rows = await self._db.fetch_all(sql, tuple(params))
-        return [CodeNode.from_row(row) for row in rows]
+        return [Node.from_row(row) for row in rows]
 
-    async def get_children(self, parent_id: str) -> list[CodeNode]:
+    async def get_children(self, parent_id: str) -> list[Node]:
         """Get all nodes whose parent_id matches."""
         rows = await self._db.fetch_all(
             "SELECT * FROM nodes WHERE parent_id = ? ORDER BY node_id ASC",
             (parent_id,),
         )
-        return [CodeNode.from_row(row) for row in rows]
+        return [Node.from_row(row) for row in rows]
 
     async def delete_node(self, node_id: str) -> bool:
         """Delete a node and all edges connected to it."""
@@ -201,6 +202,19 @@ class NodeStore:
             (node_id, node_id),
         )
 
+    async def _migrate_role_columns(self) -> None:
+        node_columns = await self._table_columns("nodes")
+        if "bundle_name" in node_columns and "role" not in node_columns:
+            await self._db.execute("ALTER TABLE nodes RENAME COLUMN bundle_name TO role")
+
+        agent_columns = await self._table_columns("agents")
+        if "bundle_name" in agent_columns and "role" not in agent_columns:
+            await self._db.execute("ALTER TABLE agents RENAME COLUMN bundle_name TO role")
+
+    async def _table_columns(self, table_name: str) -> set[str]:
+        rows = await self._db.fetch_all(f"PRAGMA table_info({table_name})")
+        return {str(row["name"]) for row in rows}
+
 
 class AgentStore:
     """SQLite persistence for agent state, separate from code elements."""
@@ -215,12 +229,13 @@ class AgentStore:
                 agent_id TEXT PRIMARY KEY,
                 element_id TEXT,
                 status TEXT DEFAULT 'idle',
-                bundle_name TEXT,
+                role TEXT,
                 FOREIGN KEY (element_id) REFERENCES nodes(node_id) ON DELETE SET NULL
             );
             CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
             """
         )
+        await self._migrate_role_column()
 
     async def upsert_agent(self, agent: Agent) -> None:
         row = agent.to_row()
@@ -270,6 +285,12 @@ class AgentStore:
     async def delete_agent(self, agent_id: str) -> bool:
         deleted = await self._db.delete("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
         return deleted > 0
+
+    async def _migrate_role_column(self) -> None:
+        rows = await self._db.fetch_all("PRAGMA table_info(agents)")
+        columns = {str(row["name"]) for row in rows}
+        if "bundle_name" in columns and "role" not in columns:
+            await self._db.execute("ALTER TABLE agents RENAME COLUMN bundle_name TO role")
 
 
 __all__ = ["Edge", "NodeStore", "AgentStore"]

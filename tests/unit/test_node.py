@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from remora.core.node import Agent, CodeElement, CodeNode
+from remora.core.node import Agent, DiscoveredElement, Node
 from tests.factories import make_node
 
 
-def make_auth_node() -> CodeNode:
+def make_auth_node() -> Node:
     return make_node(
         node_id="src/auth.py::AuthService.validate_token",
         node_type="method",
@@ -22,7 +22,7 @@ def make_auth_node() -> CodeNode:
         source_hash="abc123",
         parent_id="src/auth.py::AuthService",
         status="idle",
-        bundle_name="code-agent",
+        role="code-agent",
     )
 
 
@@ -36,7 +36,7 @@ def test_codenode_creation() -> None:
 def test_codenode_roundtrip() -> None:
     node = make_auth_node()
     row = node.to_row()
-    restored = CodeNode.from_row(row)
+    restored = Node.from_row(row)
     assert restored.model_dump() == node.model_dump()
 
 
@@ -44,7 +44,7 @@ def test_codenode_element_and_agent_projection() -> None:
     node = make_auth_node()
     element = node.to_element()
     agent = node.to_agent()
-    assert isinstance(element, CodeElement)
+    assert isinstance(element, DiscoveredElement)
     assert isinstance(agent, Agent)
     assert element.element_id == node.node_id
     assert agent.agent_id == node.node_id
@@ -52,7 +52,7 @@ def test_codenode_element_and_agent_projection() -> None:
 
 def test_codenode_rejects_invalid_status() -> None:
     with pytest.raises(ValidationError):
-        CodeNode(
+        Node(
             node_id="src/a.py::a",
             node_type="function",
             name="a",

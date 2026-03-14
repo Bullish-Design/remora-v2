@@ -12,7 +12,7 @@ import pytest_asyncio
 from structured_agents import Message
 from tests.factories import make_node
 
-from remora.core.actor import AgentActor, Outbox, RecordingOutbox, Trigger
+from remora.core.actor import Actor, Outbox, RecordingOutbox, Trigger
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import (
@@ -116,7 +116,7 @@ async def actor_env(tmp_path: Path):
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        swarm_root=".remora-actor-test",
+        workspace_root=".remora-actor-test",
         trigger_cooldown_ms=1000,
         max_trigger_depth=2,
     )
@@ -138,8 +138,8 @@ async def actor_env(tmp_path: Path):
     db.close()
 
 
-def _make_actor(env: dict, node_id: str = "src/app.py::a") -> AgentActor:
-    return AgentActor(
+def _make_actor(env: dict, node_id: str = "src/app.py::a") -> Actor:
+    return Actor(
         node_id=node_id,
         event_store=env["event_store"],
         node_store=env["node_store"],
@@ -233,7 +233,7 @@ async def test_read_bundle_config_expands_model_from_env_default(actor_env, monk
         'model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"\n',
     )
 
-    bundle_config = await AgentActor._read_bundle_config(workspace)
+    bundle_config = await Actor._read_bundle_config(workspace)
     assert bundle_config["model"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
 
 
@@ -246,7 +246,7 @@ async def test_read_bundle_config_allows_env_override_for_placeholder(
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::g")
     await workspace.write("_bundle/bundle.yaml", 'model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"\n')
 
-    bundle_config = await AgentActor._read_bundle_config(workspace)
+    bundle_config = await Actor._read_bundle_config(workspace)
     assert bundle_config["model"] == "my-org/custom-model"
 
 
@@ -256,7 +256,7 @@ async def test_read_bundle_config_literal_model_overrides_env(actor_env, monkeyp
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::h")
     await workspace.write("_bundle/bundle.yaml", "model: pinned/model\n")
 
-    bundle_config = await AgentActor._read_bundle_config(workspace)
+    bundle_config = await Actor._read_bundle_config(workspace)
     assert bundle_config["model"] == "pinned/model"
 
 
@@ -489,7 +489,7 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
     monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
 
     shared_semaphore = asyncio.Semaphore(1)
-    actor_a = AgentActor(
+    actor_a = Actor(
         node_id=node_a.node_id,
         event_store=env["event_store"],
         node_store=env["node_store"],
@@ -498,7 +498,7 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
         config=env["config"],
         semaphore=shared_semaphore,
     )
-    actor_b = AgentActor(
+    actor_b = Actor(
         node_id=node_b.node_id,
         event_store=env["event_store"],
         node_store=env["node_store"],

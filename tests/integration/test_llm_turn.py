@@ -8,7 +8,7 @@ import pytest
 from tests.factories import write_file
 
 from remora.code.reconciler import FileReconciler
-from remora.core.actor import AgentActor, Outbox, Trigger
+from remora.core.actor import Actor, Outbox, Trigger
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import AgentMessageEvent, EventStore
@@ -84,7 +84,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
         discovery_paths=("src",),
         discovery_languages=("python",),
         bundle_root=str(bundles_root),
-        swarm_root=".remora-llm-int",
+        workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,
         model_api_key=model_api_key,
@@ -106,7 +106,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
         nodes = await reconciler.full_scan()
         node = next(candidate for candidate in nodes if candidate.node_type != "directory")
 
-        actor = AgentActor(
+        actor = Actor(
             node_id=node.node_id,
             event_store=event_store,
             node_store=node_store,

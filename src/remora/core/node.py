@@ -5,12 +5,12 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from remora.core.types import NodeStatus, NodeType
 
 
-class CodeElement(BaseModel):
+class DiscoveredElement(BaseModel):
     """An immutable code structure discovered from source."""
 
     model_config = ConfigDict(frozen=True)
@@ -37,7 +37,16 @@ class Agent(BaseModel):
     agent_id: str
     element_id: str | None = None
     status: NodeStatus = NodeStatus.IDLE
-    bundle_name: str | None = None
+    role: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_bundle_name(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "bundle_name" in data and "role" not in data:
+            copied = dict(data)
+            copied["role"] = copied.pop("bundle_name")
+            return copied
+        return data
 
     def to_row(self) -> dict[str, Any]:
         data = self.model_dump()
@@ -48,8 +57,12 @@ class Agent(BaseModel):
     def from_row(cls, row: sqlite3.Row | dict[str, Any]) -> "Agent":
         return cls(**dict(row))
 
+    @property
+    def bundle_name(self) -> str | None:
+        return self.role
 
-class CodeNode(BaseModel):
+
+class Node(BaseModel):
     """Combined view for migration and backwards compatibility."""
 
     model_config = ConfigDict(frozen=False)
@@ -67,10 +80,19 @@ class CodeNode(BaseModel):
     source_hash: str
     parent_id: str | None = None
     status: NodeStatus = NodeStatus.IDLE
-    bundle_name: str | None = None
+    role: str | None = None
 
-    def to_element(self) -> CodeElement:
-        return CodeElement(
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_bundle_name(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "bundle_name" in data and "role" not in data:
+            copied = dict(data)
+            copied["role"] = copied.pop("bundle_name")
+            return copied
+        return data
+
+    def to_element(self) -> DiscoveredElement:
+        return DiscoveredElement(
             element_id=self.node_id,
             element_type=self.node_type,
             name=self.name,
@@ -90,7 +112,7 @@ class CodeNode(BaseModel):
             agent_id=self.node_id,
             element_id=self.node_id,
             status=self.status,
-            bundle_name=self.bundle_name,
+            role=self.role,
         )
 
     def to_row(self) -> dict[str, Any]:
@@ -103,10 +125,18 @@ class CodeNode(BaseModel):
         return data
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row | dict[str, Any]) -> "CodeNode":
+    def from_row(cls, row: sqlite3.Row | dict[str, Any]) -> "Node":
         """Hydrate a model from a sqlite row representation."""
         data = dict(row)
         return cls(**data)
 
+    @property
+    def bundle_name(self) -> str | None:
+        return self.role
 
-__all__ = ["CodeElement", "Agent", "CodeNode"]
+
+CodeElement = DiscoveredElement
+CodeNode = Node
+
+
+__all__ = ["DiscoveredElement", "Agent", "Node", "CodeElement", "CodeNode"]

@@ -103,7 +103,7 @@ async def test_workspace_kv_ops(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_initialize(tmp_path: Path) -> None:
-    config = Config(swarm_root=".remora-test")
+    config = Config(workspace_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
     assert (tmp_path / ".remora-test").exists()
@@ -113,7 +113,7 @@ async def test_service_initialize(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_get_workspace(tmp_path: Path) -> None:
-    config = Config(swarm_root=".remora-test")
+    config = Config(workspace_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
     workspace = await service.get_agent_workspace("src/app.py::a")
@@ -123,7 +123,7 @@ async def test_service_get_workspace(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_workspace_caching(tmp_path: Path) -> None:
-    config = Config(swarm_root=".remora-test")
+    config = Config(workspace_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
     first = await service.get_agent_workspace("src/app.py::a")
@@ -134,7 +134,7 @@ async def test_service_workspace_caching(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_provision_bundle(tmp_path: Path) -> None:
-    config = Config(swarm_root=".remora-test")
+    config = Config(workspace_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
 
@@ -156,7 +156,7 @@ async def test_service_provision_bundle(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_provision_layering(tmp_path: Path) -> None:
-    config = Config(swarm_root=".remora-test")
+    config = Config(workspace_root=".remora-test")
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
 

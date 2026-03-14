@@ -103,7 +103,7 @@ async def _start(
     project_root = project_root.resolve()
     config = load_config(config_path)
 
-    db_path = project_root / config.swarm_root / "remora.db"
+    db_path = project_root / config.workspace_root / "remora.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = db_path.parent / "remora.log"
     _configure_file_logging(log_path)

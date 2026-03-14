@@ -103,7 +103,7 @@ class CairnWorkspaceService:
     def __init__(self, config: Config, project_root: Path):
         self._config = config
         self._project_root = project_root.resolve()
-        self._swarm_root = self._project_root / config.swarm_root
+        self._workspace_root = self._project_root / config.workspace_root
         self._manager = cairn_wm.WorkspaceManager()
         self._agent_workspaces: dict[str, AgentWorkspace] = {}
         self._raw_agent_workspaces: dict[str, Any] = {}
@@ -111,8 +111,8 @@ class CairnWorkspaceService:
 
     async def initialize(self) -> None:
         """Initialize workspace root directories."""
-        self._swarm_root.mkdir(parents=True, exist_ok=True)
-        agents_root = self._swarm_root / "agents"
+        self._workspace_root.mkdir(parents=True, exist_ok=True)
+        agents_root = self._workspace_root / "agents"
         agents_root.mkdir(parents=True, exist_ok=True)
 
     async def get_agent_workspace(self, node_id: str) -> AgentWorkspace:
@@ -122,7 +122,7 @@ class CairnWorkspaceService:
             if cached is not None:
                 return cached
 
-            workspace_path = self._swarm_root / "agents" / self._safe_id(node_id)
+            workspace_path = self._workspace_root / "agents" / self._safe_id(node_id)
             raw_workspace = await cairn_wm.open_workspace(str(workspace_path))
             self._manager.track_workspace(raw_workspace)
 

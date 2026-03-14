@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from tests.factories import make_node
 
-from remora.core.actor import AgentActor
+from remora.core.actor import Actor
 from remora.core.config import Config
 from remora.core.db import AsyncDB
 from remora.core.events import (
@@ -15,7 +15,7 @@ from remora.core.events import (
     SubscriptionPattern,
 )
 from remora.core.graph import AgentStore, NodeStore
-from remora.core.runner import AgentRunner
+from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -28,10 +28,10 @@ async def runner_env(tmp_path: Path):
     await agent_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
-    config = Config(swarm_root=".remora-runner-test", trigger_cooldown_ms=1000, max_trigger_depth=2)
+    config = Config(workspace_root=".remora-runner-test", trigger_cooldown_ms=1000, max_trigger_depth=2)
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
-    runner = AgentRunner(event_store, node_store, agent_store, workspace_service, config)
+    runner = ActorPool(event_store, node_store, agent_store, workspace_service, config)
 
     yield runner, node_store, agent_store, event_store, workspace_service
 
@@ -45,7 +45,7 @@ async def test_runner_creates_actor_on_route(runner_env) -> None:
     runner, _ns, _as, _es, _ws = runner_env
     assert len(runner.actors) == 0
     actor = runner.get_or_create_actor("agent-a")
-    assert isinstance(actor, AgentActor)
+    assert isinstance(actor, Actor)
     assert actor.is_running
     assert "agent-a" in runner.actors
 
