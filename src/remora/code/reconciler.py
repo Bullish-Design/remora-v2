@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 from pathlib import Path
 
 from remora.code.discovery import discover
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk_source_files
 from remora.code.projections import project_nodes
-from remora.core.config import Config
+from remora.core.config import Config, VirtualAgentConfig
 from remora.core.events import (
     ContentChangedEvent,
     EventBus,
@@ -62,6 +63,7 @@ class FileReconciler:
 
     async def reconcile_cycle(self) -> None:
         """Run one reconciliation cycle over changed/new/deleted files."""
+        await self._sync_virtual_agents()
         current_mtimes = self._collect_file_mtimes()
         sync_existing_bundles = not self._bundles_bootstrapped
         await self._materialize_directories(
@@ -329,7 +331,11 @@ class FileReconciler:
         sync_existing_bundles: bool = False,
     ) -> None:
         async with self._file_lock(file_path):
-            await self._do_reconcile_file(file_path, mtime_ns, sync_existing_bundles=sync_existing_bundles)
+            await self._do_reconcile_file(
+                file_path,
+                mtime_ns,
+                sync_existing_bundles=sync_existing_bundles,
+            )
 
     async def _do_reconcile_file(
         self,
@@ -434,12 +440,22 @@ class FileReconciler:
             )
         )
 
-    async def _register_subscriptions(self, node: Node) -> None:
+    async def _register_subscriptions(
+        self,
+        node: Node,
+        *,
+        virtual_subscriptions: tuple[SubscriptionPattern, ...] = (),
+    ) -> None:
         await self._event_store.subscriptions.unregister_by_agent(node.node_id)
         await self._event_store.subscriptions.register(
             node.node_id,
             SubscriptionPattern(to_agent=node.node_id),
         )
+
+        if node.node_type == NodeType.VIRTUAL:
+            for pattern in virtual_subscriptions:
+                await self._event_store.subscriptions.register(node.node_id, pattern)
+            return
 
         if node.node_type == NodeType.DIRECTORY:
             subtree_glob = "**" if node.file_path == "." else f"**/{node.file_path}/**"
@@ -466,6 +482,108 @@ class FileReconciler:
                 path_glob=node.file_path,
             ),
         )
+
+    async def _sync_virtual_agents(self) -> None:
+        """Materialize declarative virtual agents into nodes + subscriptions."""
+        specs = sorted(self._config.virtual_agents, key=lambda item: item.id)
+        existing = await self._node_store.list_nodes(node_type=NodeType.VIRTUAL)
+        existing_by_id = {node.node_id: node for node in existing}
+        desired_ids = {item.id for item in specs}
+
+        stale_ids = sorted(set(existing_by_id) - desired_ids)
+        for node_id in stale_ids:
+            await self._remove_node(node_id)
+
+        for spec in specs:
+            existing_node = existing_by_id.get(spec.id)
+            source_hash = self._virtual_agent_hash(spec)
+            virtual_node = Node(
+                node_id=spec.id,
+                node_type=NodeType.VIRTUAL,
+                name=spec.id,
+                full_name=spec.id,
+                file_path="",
+                start_line=0,
+                end_line=0,
+                start_byte=0,
+                end_byte=0,
+                source_code="",
+                source_hash=source_hash,
+                parent_id=None,
+                status=existing_node.status if existing_node is not None else "idle",
+                role=spec.role,
+            )
+            patterns = self._virtual_patterns(spec)
+
+            if existing_node is None:
+                await self._node_store.upsert_node(virtual_node)
+                await self._register_subscriptions(
+                    virtual_node,
+                    virtual_subscriptions=patterns,
+                )
+                await self._provision_bundle(virtual_node.node_id, virtual_node.role)
+                await self._event_store.append(
+                    NodeDiscoveredEvent(
+                        node_id=virtual_node.node_id,
+                        node_type=virtual_node.node_type,
+                        file_path=virtual_node.file_path,
+                        name=virtual_node.name,
+                    )
+                )
+                continue
+
+            metadata_changed = (
+                existing_node.name != virtual_node.name
+                or existing_node.full_name != virtual_node.full_name
+                or existing_node.file_path != virtual_node.file_path
+                or existing_node.parent_id != virtual_node.parent_id
+                or existing_node.role != virtual_node.role
+            )
+            hash_changed = existing_node.source_hash != virtual_node.source_hash
+            if metadata_changed or hash_changed:
+                await self._node_store.upsert_node(virtual_node)
+            await self._register_subscriptions(
+                virtual_node,
+                virtual_subscriptions=patterns,
+            )
+            await self._provision_bundle(virtual_node.node_id, virtual_node.role)
+            if hash_changed:
+                await self._event_store.append(
+                    NodeChangedEvent(
+                        node_id=virtual_node.node_id,
+                        old_hash=existing_node.source_hash,
+                        new_hash=virtual_node.source_hash,
+                    )
+                )
+
+    @staticmethod
+    def _virtual_patterns(spec: VirtualAgentConfig) -> tuple[SubscriptionPattern, ...]:
+        return tuple(
+            SubscriptionPattern(
+                event_types=list(item.event_types) if item.event_types else None,
+                from_agents=list(item.from_agents) if item.from_agents else None,
+                to_agent=item.to_agent,
+                path_glob=item.path_glob,
+            )
+            for item in spec.subscriptions
+        )
+
+    @staticmethod
+    def _virtual_agent_hash(spec: VirtualAgentConfig) -> str:
+        payload = {
+            "role": spec.role,
+            "subscriptions": [
+                {
+                    "event_types": list(item.event_types) if item.event_types else None,
+                    "from_agents": list(item.from_agents) if item.from_agents else None,
+                    "to_agent": item.to_agent,
+                    "path_glob": item.path_glob,
+                }
+                for item in spec.subscriptions
+            ],
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     async def _on_content_changed(self, event: ContentChangedEvent) -> None:
         """Immediately reconcile a file reported changed by upstream systems."""

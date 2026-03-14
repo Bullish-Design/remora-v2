@@ -14,6 +14,18 @@ bundle_overlays:
   class: "code-agent"
   method: "code-agent"
   file: "code-agent"
+  directory: "directory-agent"
+
+# Optional declarative virtual agents.
+# virtual_agents:
+#   - id: "test-agent"
+#     role: "test-agent"
+#     subscriptions:
+#       - event_types: ["NodeChangedEvent", "NodeDiscoveredEvent"]
+#         path_glob: "tests/**"
+#       - event_types: ["NodeChangedEvent"]
+#         path_glob: "src/**"
+
 model_base_url: "http://localhost:8000/v1"
 model_default: "Qwen/Qwen3-4B"
 model_api_key: "${OPENAI_API_KEY:-}"

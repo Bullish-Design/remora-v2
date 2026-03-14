@@ -8,10 +8,35 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
+
+
+class VirtualSubscriptionConfig(BaseModel):
+    """Declarative subscription pattern for a virtual agent."""
+
+    event_types: tuple[str, ...] | None = None
+    from_agents: tuple[str, ...] | None = None
+    to_agent: str | None = None
+    path_glob: str | None = None
+
+
+class VirtualAgentConfig(BaseModel):
+    """Declarative virtual agent definition."""
+
+    id: str
+    role: str
+    subscriptions: tuple[VirtualSubscriptionConfig, ...] = ()
+
+    @field_validator("id", "role")
+    @classmethod
+    def _validate_non_empty(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("virtual agent id/role must be non-empty")
+        return cleaned
 
 
 class Config(BaseSettings):
@@ -65,6 +90,7 @@ class Config(BaseSettings):
         "node_modules",
         ".remora",
     )
+    virtual_agents: tuple[VirtualAgentConfig, ...] = ()
 
     @field_validator("language_map")
     @classmethod
@@ -95,6 +121,18 @@ class Config(BaseSettings):
             return value
         cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
         return cleaned
+
+    @field_validator("virtual_agents")
+    @classmethod
+    def _validate_virtual_agents(
+        cls, value: tuple[VirtualAgentConfig, ...]
+    ) -> tuple[VirtualAgentConfig, ...]:
+        seen: set[str] = set()
+        for item in value:
+            if item.id in seen:
+                raise ValueError(f"Duplicate virtual agent id: {item.id}")
+            seen.add(item.id)
+        return value
 
 
 def _expand_string(value: str) -> str:
@@ -145,4 +183,9 @@ def load_config(path: Path | None = None) -> Config:
     return Config(**_expand_env_vars(data))
 
 
-__all__ = ["Config", "load_config"]
+__all__ = [
+    "VirtualSubscriptionConfig",
+    "VirtualAgentConfig",
+    "Config",
+    "load_config",
+]

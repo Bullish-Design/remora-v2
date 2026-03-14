@@ -22,7 +22,7 @@ from remora.core.grail import GrailTool, discover_tools
 from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.node import Node
-from remora.core.types import NodeStatus
+from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -302,7 +302,11 @@ class Actor:
         bundle_config = await self._read_bundle_config(workspace)
         return node, workspace, bundle_config
 
-    def _build_system_prompt(self, bundle_config: dict[str, Any], trigger: Trigger) -> tuple[str, str, int]:
+    def _build_system_prompt(
+        self,
+        bundle_config: dict[str, Any],
+        trigger: Trigger,
+    ) -> tuple[str, str, int]:
         system_prompt = bundle_config.get(
             "system_prompt",
             "You are an autonomous code agent.",
@@ -411,7 +415,16 @@ class Actor:
             f"# Node: {node.full_name}",
             f"Type: {node_type} | File: {node.file_path}",
         ]
-        if node.source_code:
+        if node.node_type == NodeType.VIRTUAL:
+            parts.extend(
+                [
+                    "",
+                    "## Role",
+                    f"You are a {node.role or 'virtual'} agent.",
+                    "Use your tools and incoming events to coordinate work.",
+                ]
+            )
+        elif node.source_code:
             parts.extend(
                 [
                     "",

@@ -12,7 +12,7 @@ from remora.code.reconciler import FileReconciler
 from remora.core.actor import Actor, Outbox, Trigger
 from remora.core.config import Config
 from remora.core.db import open_database
-from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore
+from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore, NodeChangedEvent
 from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
@@ -151,6 +151,55 @@ def _write_reactive_mode_bundles(root: Path, model_name: str) -> None:
         ),
     )
     write_file(code / "bundle.yaml", "name: code-agent\nmax_turns: 8\n")
+    write_file(
+        system / "tools" / "send_message.pym",
+        (
+            "from grail import Input, external\n\n"
+            'to_node_id: str = Input("to_node_id")\n'
+            'content: str = Input("content")\n\n'
+            "@external\n"
+            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "result = await send_message(to_node_id, content)\n"
+            "if result:\n"
+            '    message = f"Message sent to {to_node_id}"\n'
+            "else:\n"
+            '    message = f"Failed to send message to {to_node_id}"\n'
+            "message\n"
+        ),
+    )
+
+
+def _write_virtual_agent_bundles(root: Path, model_name: str) -> None:
+    system = root / "system"
+    test_agent = root / "test-agent"
+    code = root / "code-agent"
+    (system / "tools").mkdir(parents=True, exist_ok=True)
+    (test_agent / "tools").mkdir(parents=True, exist_ok=True)
+    (code / "tools").mkdir(parents=True, exist_ok=True)
+
+    write_file(
+        system / "bundle.yaml",
+        (
+            "name: system\n"
+            "system_prompt: Base system\n"
+            f"model: {model_name}\n"
+            "max_turns: 8\n"
+        ),
+    )
+    write_file(code / "bundle.yaml", "name: code-agent\nmax_turns: 8\n")
+    write_file(
+        test_agent / "bundle.yaml",
+        (
+            "name: test-agent\n"
+            "system_prompt: >-\n"
+            "  You are a virtual test agent.\n"
+            "  For every turn, call send_message exactly once with\n"
+            "  to_node_id='test-agent' and content='virtual-reactive-ok',\n"
+            "  then answer with one short sentence.\n"
+            f"model: {model_name}\n"
+            "max_turns: 8\n"
+        ),
+    )
     write_file(
         system / "tools" / "send_message.pym",
         (
@@ -431,6 +480,106 @@ async def test_real_llm_turn_reload_uses_runtime_bundle_mutation(tmp_path: Path)
             await workspace_service.close()
         if db is not None:
             await db.close()
+
+
+@pytest.mark.asyncio
+@_REQUIRES_REAL_LLM
+async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+    timeout_s = float(os.getenv("REMORA_TEST_TIMEOUT_S", "90"))
+
+    source_path = tmp_path / "src" / "app.py"
+    write_file(source_path, "def alpha():\n    return 1\n")
+    bundles_root = tmp_path / "bundles"
+    _write_virtual_agent_bundles(bundles_root, model_name)
+
+    db = await open_database(tmp_path / "llm-turn-virtual.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    config = Config(
+        discovery_paths=("src",),
+        discovery_languages=("python",),
+        bundle_root=str(bundles_root),
+        workspace_root=".remora-llm-int",
+        model_base_url=model_url,
+        model_default=model_name,
+        model_api_key=model_api_key,
+        timeout_s=timeout_s,
+        max_turns=8,
+        virtual_agents=(
+            {
+                "id": "test-agent",
+                "role": "test-agent",
+                "subscriptions": (
+                    {
+                        "event_types": ["NodeChangedEvent"],
+                        "path_glob": "src/**",
+                    },
+                ),
+            },
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+
+    try:
+        reconciler = FileReconciler(
+            config,
+            node_store,
+            event_store,
+            workspace_service,
+            project_root=tmp_path,
+        )
+        await reconciler.full_scan()
+
+        virtual = await node_store.get_node("test-agent")
+        assert virtual is not None
+        actor = Actor(
+            node_id=virtual.node_id,
+            event_store=event_store,
+            node_store=node_store,
+            workspace_service=workspace_service,
+            config=config,
+            semaphore=asyncio.Semaphore(1),
+        )
+        correlation_id = "corr-virtual-reactive"
+        trigger_event = NodeChangedEvent(
+            node_id=str(source_path) + "::alpha",
+            old_hash="old",
+            new_hash="new",
+            file_path="src/app.py",
+            correlation_id=correlation_id,
+        )
+        outbox = Outbox(
+            actor_id=virtual.node_id,
+            event_store=event_store,
+            correlation_id=correlation_id,
+        )
+        trigger = Trigger(
+            node_id=virtual.node_id,
+            correlation_id=correlation_id,
+            event=trigger_event,
+        )
+        await actor._execute_turn(trigger, outbox)
+
+        events = await event_store.get_events(limit=60)
+        by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
+        assert any(entry["event_type"] == "AgentStartEvent" for entry in by_corr)
+        assert any(entry["event_type"] == "AgentCompleteEvent" for entry in by_corr)
+        assert not any(entry["event_type"] == "AgentErrorEvent" for entry in by_corr)
+        assert any(
+            entry["event_type"] == "AgentMessageEvent"
+            and entry["payload"].get("to_agent") == "test-agent"
+            and entry["payload"].get("content") == "virtual-reactive-ok"
+            for entry in by_corr
+        )
+    finally:
+        await workspace_service.close()
+        await db.close()
 
 
 @pytest.mark.asyncio

@@ -325,3 +325,73 @@ async def test_directory_bundles_refreshed_on_startup(reconcile_env, tmp_path: P
 
     refreshed = await root_workspace.read("_bundle/tools/send_message.pym")
     assert "fresh" in refreshed
+
+
+@pytest.mark.asyncio
+async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) -> None:
+    db = await open_database(tmp_path / "virtual.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+
+    bundles_root = tmp_path / "bundles"
+    write_bundle_templates(bundles_root)
+    write_bundle_templates(bundles_root, role="test-agent")
+
+    config = Config(
+        discovery_paths=("src",),
+        discovery_languages=("python",),
+        language_map={".py": "python"},
+        query_paths=(),
+        workspace_root=".remora-reconcile",
+        bundle_root=str(bundles_root),
+        virtual_agents=(
+            {
+                "id": "test-agent",
+                "role": "test-agent",
+                "subscriptions": (
+                    {
+                        "event_types": ["NodeChangedEvent"],
+                        "path_glob": "src/**",
+                    },
+                ),
+            },
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+
+    try:
+        write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
+        reconciler = FileReconciler(
+            config,
+            node_store,
+            event_store,
+            workspace_service,
+            project_root=tmp_path,
+        )
+        await reconciler.full_scan()
+
+        virtual = await node_store.get_node("test-agent")
+        assert virtual is not None
+        assert virtual.node_type == "virtual"
+        assert virtual.role == "test-agent"
+        assert virtual.file_path == ""
+        assert virtual.source_code == ""
+
+        matched = await event_store.subscriptions.get_matching_agents(
+            NodeChangedEvent(
+                node_id="src/app.py::a",
+                old_hash="old",
+                new_hash="new",
+                file_path="src/app.py",
+            )
+        )
+        assert "test-agent" in matched
+
+        ws = await workspace_service.get_agent_workspace("test-agent")
+        assert await ws.exists("_bundle/bundle.yaml")
+    finally:
+        await workspace_service.close()
+        await db.close()

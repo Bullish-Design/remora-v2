@@ -22,6 +22,7 @@ class NodeType(str, Enum):
     SECTION = "section"
     TABLE = "table"
     DIRECTORY = "directory"
+    VIRTUAL = "virtual"
 
 
 class ChangeType(str, Enum):

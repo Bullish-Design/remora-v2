@@ -44,6 +44,24 @@ def test_load_from_yaml(tmp_path: Path) -> None:
     assert config.query_paths == ("custom-queries/",)
 
 
+def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "remora.yaml"
+    yaml_path.write_text(
+        "virtual_agents:\n"
+        "  - id: test-agent\n"
+        "    role: test-agent\n"
+        "    subscriptions:\n"
+        "      - event_types: [NodeChangedEvent]\n"
+        "        path_glob: src/**\n",
+        encoding="utf-8",
+    )
+    config = load_config(yaml_path)
+    assert len(config.virtual_agents) == 1
+    assert config.virtual_agents[0].id == "test-agent"
+    assert config.virtual_agents[0].role == "test-agent"
+    assert config.virtual_agents[0].subscriptions[0].event_types == ("NodeChangedEvent",)
+
+
 def test_env_var_expansion(monkeypatch) -> None:
     monkeypatch.setenv("TEST_MODEL", "gpt-5")
     data = {

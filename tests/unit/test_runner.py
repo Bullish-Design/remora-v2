@@ -122,3 +122,37 @@ async def test_runner_build_prompt_via_actor(runner_env) -> None:
     assert node.full_name in prompt
     assert "hello" in prompt
     assert "Type: function | File: src/app.py" in prompt
+
+
+@pytest.mark.asyncio
+async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
+    runner, node_store, _event_store, workspace_service = runner_env
+    node = make_node(
+        "test-agent",
+        node_type="virtual",
+        file_path="",
+        source_code="",
+        role="test-agent",
+        name="test-agent",
+        full_name="test-agent",
+        start_line=0,
+        end_line=0,
+    )
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    from remora.core.actor import Trigger
+
+    actor = runner.get_or_create_actor(node.node_id)
+    prompt = actor._build_prompt(
+        node,
+        Trigger(
+            node_id=node.node_id,
+            correlation_id="c1",
+            event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
+        ),
+    )
+    assert "Type: virtual | File: " in prompt
+    assert "## Role" in prompt
+    assert "test-agent agent" in prompt
