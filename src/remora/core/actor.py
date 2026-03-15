@@ -348,31 +348,59 @@ class Actor:
         tools: list[GrailTool],
         max_turns: int,
     ) -> Any:
-        kernel = create_kernel(
-            model_name=model_name,
-            base_url=self._config.model_base_url,
-            api_key=self._config.model_api_key,
-            timeout=self._config.timeout_s,
-            tools=tools,
-        )
-        try:
-            tool_schemas = [tool.schema for tool in tools]
-            logger.info(
-                (
-                    "Model request node=%s corr=%s base_url=%s model=%s "
-                    "tools=%s system=%s user=%s"
-                ),
-                node_id,
-                trigger.correlation_id,
-                self._config.model_base_url,
-                model_name,
-                [schema.name for schema in tool_schemas],
-                system_prompt,
-                messages[1].content or "",
+        max_retries = 1
+        last_exc: Exception | None = None
+        tool_schemas = [tool.schema for tool in tools]
+
+        for attempt in range(max_retries + 1):
+            kernel = create_kernel(
+                model_name=model_name,
+                base_url=self._config.model_base_url,
+                api_key=self._config.model_api_key,
+                timeout=self._config.timeout_s,
+                tools=tools,
             )
-            return await kernel.run(messages, tool_schemas, max_turns=max_turns)
-        finally:
-            await kernel.close()
+            try:
+                if attempt == 0:
+                    logger.info(
+                        (
+                            "Model request node=%s corr=%s base_url=%s model=%s "
+                            "tools=%s system=%s user=%s"
+                        ),
+                        node_id,
+                        trigger.correlation_id,
+                        self._config.model_base_url,
+                        model_name,
+                        [schema.name for schema in tool_schemas],
+                        system_prompt,
+                        messages[1].content or "",
+                    )
+                else:
+                    logger.warning(
+                        "Retrying model request node=%s attempt=%d/%d",
+                        node_id,
+                        attempt + 1,
+                        max_retries + 1,
+                    )
+                return await kernel.run(messages, tool_schemas, max_turns=max_turns)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    backoff = 2.0**attempt
+                    logger.warning(
+                        "Model request failed node=%s attempt=%d, retrying in %.1fs: %s",
+                        node_id,
+                        attempt + 1,
+                        backoff,
+                        exc,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+                raise
+            finally:
+                await kernel.close()
+
+        raise RuntimeError(str(last_exc) if last_exc is not None else "kernel run failed")
 
     async def _complete_agent_turn(
         self, node_id: str, response_text: str, outbox: Outbox, trigger: Trigger

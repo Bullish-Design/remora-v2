@@ -498,6 +498,57 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(actor_env,
 
 
 @pytest.mark.asyncio
+async def test_actor_execute_turn_retries_kernel_once(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::kernel-retry")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    attempts = 0
+
+    class RetryKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            nonlocal attempts
+            del max_turns
+            attempts += 1
+            if attempts == 1:
+                raise ConnectionError("transient")
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: RetryKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.actor.asyncio.sleep", _no_sleep)
+
+    actor = _make_actor(env, node.node_id)
+    event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="hello",
+        correlation_id="corr-retry",
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-retry",
+    )
+    trigger = Trigger(node_id=node.node_id, correlation_id="corr-retry", event=event)
+    await actor._execute_turn(trigger, outbox)
+
+    assert attempts == 2
+    events = await env["event_store"].get_events(limit=10)
+    event_types = [event["event_type"] for event in events]
+    assert AgentCompleteEvent.__name__ in event_types
+    assert AgentErrorEvent.__name__ not in event_types
+
+
+@pytest.mark.asyncio
 async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypatch) -> None:
     env = actor_env
     node_a = make_node("src/app.py::sem-a")
