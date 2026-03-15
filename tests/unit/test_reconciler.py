@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -82,7 +81,9 @@ async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: 
         assert node.node_id in matched_message
 
         if node.node_type == "directory":
-            child_path = "src/app.py" if node.file_path == "." else f"mock/{node.file_path}/child.py"
+            child_path = (
+                "src/app.py" if node.file_path == "." else f"mock/{node.file_path}/child.py"
+            )
             node_event = NodeChangedEvent(
                 node_id=node.node_id,
                 old_hash="old",
@@ -259,6 +260,12 @@ async def test_directory_nodes_materialize_parent_chain(reconcile_env, tmp_path:
     assert fn_node is not None
     assert fn_node.parent_id == "src/pkg"
 
+    edges = await node_store.list_all_edges()
+    contains_edges = {(edge.from_id, edge.to_id, edge.edge_type) for edge in edges}
+    assert (".", "src", "contains") in contains_edges
+    assert ("src", "src/pkg", "contains") in contains_edges
+    assert ("src/pkg", fn_node.node_id, "contains") in contains_edges
+
 
 @pytest.mark.asyncio
 async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_path: Path) -> None:
@@ -266,11 +273,19 @@ async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_p
     source = tmp_path / "src" / "gone" / "leaf.py"
     write_file(source, "def leaf():\n    return 1\n")
     await reconciler.full_scan()
+    pre_edges = {
+        (edge.from_id, edge.to_id, edge.edge_type) for edge in await node_store.list_all_edges()
+    }
+    assert ("src", "src/gone", "contains") in pre_edges
 
     source.unlink()
     await reconciler.reconcile_cycle()
 
     assert await node_store.get_node("src/gone") is None
+    post_edges = {
+        (edge.from_id, edge.to_id, edge.edge_type) for edge in await node_store.list_all_edges()
+    }
+    assert ("src", "src/gone", "contains") not in post_edges
     events = await event_store.get_events(limit=50)
     removed_ids = [
         event["payload"]["node_id"]

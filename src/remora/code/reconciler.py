@@ -251,6 +251,12 @@ class FileReconciler:
 
             if existing is None:
                 await self._node_store.upsert_node(directory_node)
+                if directory_node.parent_id is not None:
+                    await self._node_store.add_edge(
+                        directory_node.parent_id,
+                        directory_node.node_id,
+                        "contains",
+                    )
                 await self._register_subscriptions(directory_node)
                 await self._provision_bundle(directory_node.node_id, directory_node.role)
                 await self._event_store.append(
@@ -273,6 +279,12 @@ class FileReconciler:
             hash_changed = existing.source_hash != source_hash
             if metadata_changed or hash_changed:
                 await self._node_store.upsert_node(directory_node)
+                if directory_node.parent_id is not None:
+                    await self._node_store.add_edge(
+                        directory_node.parent_id,
+                        directory_node.node_id,
+                        "contains",
+                    )
 
             if refresh_subscriptions:
                 await self._register_subscriptions(directory_node)
@@ -380,6 +392,8 @@ class FileReconciler:
             if node.parent_id is None:
                 node.parent_id = dir_node_id
                 await self._node_store.upsert_node(node)
+            if node.parent_id is not None:
+                await self._node_store.add_edge(node.parent_id, node.node_id, "contains")
 
         projected_by_id = {node.node_id: node for node in projected}
 
