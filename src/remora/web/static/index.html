@@ -95,6 +95,16 @@
     </section>
     <section>
       <h3>Chat</h3>
+      <div id="chat-messages" style="
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 8px;
+        margin-bottom: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f9f6f0;
+        display: none;
+      "></div>
       <textarea id="chat-input" rows="4" placeholder="Ask selected node..."></textarea>
       <button id="send-chat">Send</button>
     </section>
@@ -186,6 +196,32 @@
       box.textContent = `${text}\n${box.textContent}`.slice(0, 4000);
     }
 
+    function appendChatMessage(sender, content, role) {
+      const container = document.getElementById("chat-messages");
+      container.style.display = "block";
+      const msg = document.createElement("div");
+      msg.style.cssText = `
+        margin-bottom: 8px;
+        padding: 8px;
+        border-radius: 6px;
+        background: ${role === "agent" ? "#f1f5f9" : "#e0f2f1"};
+        color: #1f1a16;
+        font-size: 13px;
+        word-wrap: break-word;
+      `;
+      const senderLabel = document.createElement("div");
+      senderLabel.style.cssText = "font-weight: bold; margin-bottom: 4px; color: var(--accent); font-size: 11px;";
+      senderLabel.textContent = sender.split("::").pop();
+      msg.appendChild(senderLabel);
+
+      const text = document.createElement("div");
+      text.textContent = content;
+      msg.appendChild(text);
+
+      container.appendChild(msg);
+      container.scrollTop = container.scrollHeight;
+    }
+
     async function showNode(nodeId) {
       const response = await fetch(`/api/nodes/${encodeURIComponent(nodeId)}`);
       if (!response.ok) return;
@@ -212,13 +248,22 @@
       selectedNode = node.node_id;
     }
 
+    function selectNode(nodeId) {
+      selectedNode = nodeId;
+      const chat = document.getElementById("chat-messages");
+      chat.innerHTML = "";
+      chat.style.display = "none";
+      showNode(nodeId);
+    }
+
     renderer.on("clickNode", ({ node }) => {
-      showNode(node);
+      selectNode(node);
     });
 
     document.getElementById("send-chat").addEventListener("click", async () => {
       const message = document.getElementById("chat-input").value.trim();
       if (!selectedNode || !message) return;
+      appendChatMessage("You", message, "user");
       await fetch("/api/chat", {
         method: "POST",
         headers: {"content-type": "application/json"},
@@ -228,58 +273,69 @@
     });
 
     const evtSource = new EventSource('/sse');
-    evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
+    function ssePayload(event) {
       const data = JSON.parse(event.data);
-      if (!graph.hasNode(data.node_id)) {
-        const { x, y } = deterministicPosition(data.node_id);
-        graph.addNode(data.node_id, {
-          label: data.name || data.node_id.split("::").pop(),
+      return data.payload || data;
+    }
+    evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
+      const payload = ssePayload(event);
+      if (!graph.hasNode(payload.node_id)) {
+        const { x, y } = deterministicPosition(payload.node_id);
+        graph.addNode(payload.node_id, {
+          label: payload.name || payload.node_id.split("::").pop(),
           size: 8,
           x,
           y,
-          node_type: data.node_type || "function",
-          color: nodeColor(data.node_type || "function", "idle")
+          node_type: payload.node_type || "function",
+          color: nodeColor(payload.node_type || "function", "idle")
         });
       }
       renderer.refresh();
-      appendEventLine(`NodeDiscoveredEvent: ${data.node_id}`);
+      appendEventLine(`NodeDiscoveredEvent: ${payload.node_id}`);
     });
     evtSource.addEventListener("NodeRemovedEvent", (event) => {
-      const data = JSON.parse(event.data);
-      if (graph.hasNode(data.node_id)) {
-        graph.dropNode(data.node_id);
+      const payload = ssePayload(event);
+      if (graph.hasNode(payload.node_id)) {
+        graph.dropNode(payload.node_id);
         renderer.refresh();
       }
-      appendEventLine(`NodeRemovedEvent: ${data.node_id}`);
+      appendEventLine(`NodeRemovedEvent: ${payload.node_id}`);
     });
     evtSource.addEventListener("NodeChangedEvent", (event) => {
-      const data = JSON.parse(event.data);
-      appendEventLine(`NodeChangedEvent: ${data.node_id}`);
+      const payload = ssePayload(event);
+      appendEventLine(`NodeChangedEvent: ${payload.node_id}`);
     });
     evtSource.addEventListener("AgentStartEvent", (event) => {
-      const data = JSON.parse(event.data);
-      if (graph.hasNode(data.agent_id)) {
-        graph.setNodeAttribute(data.agent_id, "color", nodeColor("", "running"));
+      const payload = ssePayload(event);
+      if (graph.hasNode(payload.agent_id)) {
+        graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "running"));
         renderer.refresh();
       }
-      appendEventLine(`AgentStartEvent: ${data.agent_id}`);
+      appendEventLine(`AgentStartEvent: ${payload.agent_id}`);
     });
     evtSource.addEventListener("AgentCompleteEvent", (event) => {
-      const data = JSON.parse(event.data);
-      if (graph.hasNode(data.agent_id)) {
-        const nodeType = graph.getNodeAttribute(data.agent_id, "node_type");
-        graph.setNodeAttribute(data.agent_id, "color", nodeColor(nodeType, "idle"));
+      const payload = ssePayload(event);
+      if (graph.hasNode(payload.agent_id)) {
+        const nodeType = graph.getNodeAttribute(payload.agent_id, "node_type");
+        graph.setNodeAttribute(payload.agent_id, "color", nodeColor(nodeType, "idle"));
         renderer.refresh();
       }
-      appendEventLine(`AgentCompleteEvent: ${data.agent_id}`);
+      appendEventLine(`AgentCompleteEvent: ${payload.agent_id}`);
     });
     evtSource.addEventListener("AgentErrorEvent", (event) => {
-      const data = JSON.parse(event.data);
-      if (graph.hasNode(data.agent_id)) {
-        graph.setNodeAttribute(data.agent_id, "color", nodeColor("", "error"));
+      const payload = ssePayload(event);
+      if (graph.hasNode(payload.agent_id)) {
+        graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "error"));
         renderer.refresh();
       }
-      appendEventLine(`AgentErrorEvent: ${data.agent_id}`);
+      appendEventLine(`AgentErrorEvent: ${payload.agent_id}`);
+    });
+    evtSource.addEventListener("AgentMessageEvent", (event) => {
+      const payload = ssePayload(event);
+      if (payload.to_agent === "user") {
+        appendChatMessage(payload.from_agent || "agent", payload.content || "", "agent");
+      }
+      appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
     });
     evtSource.onmessage = (event) => {
       try {
