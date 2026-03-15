@@ -113,6 +113,36 @@
       font-size: 0.75rem;
       text-transform: uppercase;
     }
+    #timeline-container {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f9f6f0;
+      padding: 8px;
+      font-size: 0.78rem;
+    }
+    .timeline-event {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 4px 10px;
+      padding: 6px 8px;
+      border-left: 3px solid #6f645c;
+      margin-bottom: 6px;
+      background: #fffcf7;
+    }
+    .timeline-event .timeline-type {
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .timeline-event .timeline-meta {
+      color: var(--muted);
+    }
+    .timeline-event.type-AgentStartEvent { border-color: #2563eb; }
+    .timeline-event.type-AgentCompleteEvent { border-color: #15803d; }
+    .timeline-event.type-AgentErrorEvent { border-color: #b91c1c; }
+    .timeline-event.type-AgentMessageEvent { border-color: #ea580c; }
+    .timeline-event.type-ContentChangedEvent { border-color: #7c3aed; }
   </style>
 </head>
   <!-- Configure Sigma via the data attribute below. Increase `data-sigma-iterations` for slower, smoother layouts. -->
@@ -187,6 +217,10 @@
       <h3>Conversation</h3>
       <div id="conversation-panel">(select a node)</div>
     </section>
+    <section>
+      <h3>Timeline</h3>
+      <div id="timeline-container"></div>
+    </section>
   </aside>
   <script>
     const graph = new graphology.Graph();
@@ -207,6 +241,8 @@
     let selectedNode = null;
     const fileGroups = {};
     let fileIndex = 0;
+    const timelineEvents = [];
+    const MAX_TIMELINE_EVENTS = 200;
 
     const colorByType = {
       function: getComputedStyle(document.documentElement).getPropertyValue("--function").trim(),
@@ -389,6 +425,42 @@
       container.scrollTop = container.scrollHeight;
     }
 
+    function addTimelineEvent(eventType, payload) {
+      const timestamp = Number(payload?.timestamp) || (Date.now() / 1000);
+      const agent = payload?.agent_id || payload?.from_agent || payload?.to_agent || "?";
+      const summary = payload?.summary || payload?.content || payload?.node_id || "";
+      timelineEvents.push({
+        eventType: eventType || "Event",
+        timestamp,
+        agent,
+        summary: String(summary).slice(0, 240),
+      });
+      if (timelineEvents.length > MAX_TIMELINE_EVENTS) {
+        timelineEvents.shift();
+      }
+      renderTimeline();
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById("timeline-container");
+      if (!container) return;
+      container.innerHTML = timelineEvents
+        .slice()
+        .reverse()
+        .map((entry) => {
+          const time = new Date(entry.timestamp * 1000).toLocaleTimeString();
+          return (
+            `<div class=\"timeline-event type-${escapeHtml(entry.eventType)}\">` +
+            `<div class=\"timeline-meta\">${escapeHtml(time)}</div>` +
+            `<div class=\"timeline-type\">${escapeHtml(entry.eventType)}</div>` +
+            `<div class=\"timeline-meta\">${escapeHtml(entry.agent)}</div>` +
+            `<div>${escapeHtml(entry.summary)}</div>` +
+            `</div>`
+          );
+        })
+        .join("");
+    }
+
     function escapeHtml(value) {
       return String(value)
         .replaceAll("&", "&amp;")
@@ -530,6 +602,7 @@
         }
         renderer.refresh();
         appendEventLine(`NodeDiscoveredEvent: ${payload.node_id}`);
+        addTimelineEvent("NodeDiscoveredEvent", payload);
       });
       evtSource.addEventListener("NodeRemovedEvent", (event) => {
         const payload = ssePayload(event);
@@ -538,10 +611,12 @@
           renderer.refresh();
         }
         appendEventLine(`NodeRemovedEvent: ${payload.node_id}`);
+        addTimelineEvent("NodeRemovedEvent", payload);
       });
       evtSource.addEventListener("NodeChangedEvent", (event) => {
         const payload = ssePayload(event);
         appendEventLine(`NodeChangedEvent: ${payload.node_id}`);
+        addTimelineEvent("NodeChangedEvent", payload);
       });
       evtSource.addEventListener("AgentStartEvent", (event) => {
         const payload = ssePayload(event);
@@ -550,6 +625,7 @@
           renderer.refresh();
         }
         appendEventLine(`AgentStartEvent: ${payload.agent_id}`);
+        addTimelineEvent("AgentStartEvent", payload);
       });
       evtSource.addEventListener("AgentCompleteEvent", (event) => {
         const payload = ssePayload(event);
@@ -559,6 +635,7 @@
           renderer.refresh();
         }
         appendEventLine(`AgentCompleteEvent: ${payload.agent_id}`);
+        addTimelineEvent("AgentCompleteEvent", payload);
       });
       evtSource.addEventListener("AgentErrorEvent", (event) => {
         const payload = ssePayload(event);
@@ -567,6 +644,7 @@
           renderer.refresh();
         }
         appendEventLine(`AgentErrorEvent: ${payload.agent_id}`);
+        addTimelineEvent("AgentErrorEvent", payload);
       });
       evtSource.addEventListener("AgentMessageEvent", (event) => {
         const payload = ssePayload(event);
@@ -574,6 +652,7 @@
           appendChatMessage(payload.from_agent || "agent", payload.content || "", "agent");
         }
         appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
+        addTimelineEvent("AgentMessageEvent", payload);
       });
       evtSource.addEventListener("CursorFocusEvent", (event) => {
         const payload = ssePayload(event);
@@ -618,13 +697,16 @@
             }
           }, 500);
         }
+        addTimelineEvent("CursorFocusEvent", payload);
       });
       evtSource.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
           appendEventLine(`${payload.event_type || "Event"}: ${payload.correlation_id || ""}`);
+          addTimelineEvent(payload.event_type || "Event", payload.payload || payload);
         } catch {
           appendEventLine(event.data);
+          addTimelineEvent("Event", { content: event.data });
         }
       };
     }
