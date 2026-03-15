@@ -97,14 +97,12 @@ def create_app(
                 rows = await event_store.get_events(limit=replay_limit)
                 for row in reversed(rows):
                     event_name = row.get("event_type", "Event")
-                    payload = row.get("payload", {})
-                    replay_payload: dict[str, Any] = {
+                    replay_payload = {
                         "event_type": event_name,
                         "timestamp": row.get("timestamp"),
                         "correlation_id": row.get("correlation_id"),
+                        "payload": row.get("payload", {}),
                     }
-                    if isinstance(payload, dict):
-                        replay_payload.update(payload)
                     payload_text = json.dumps(replay_payload, separators=(",", ":"))
                     yield f"event: {event_name}\ndata: {payload_text}\n\n"
             if once:
@@ -113,7 +111,7 @@ def create_app(
                 async for event in stream:
                     if await request.is_disconnected():
                         break
-                    payload = json.dumps(event.model_dump(), separators=(",", ":"))
+                    payload = json.dumps(event.to_envelope(), separators=(",", ":"))
                     yield f"event: {event.event_type}\ndata: {payload}\n\n"
 
         headers = {

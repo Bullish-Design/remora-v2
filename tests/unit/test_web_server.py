@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 
@@ -188,7 +190,49 @@ async def test_sse_receives_events(web_env) -> None:
 
     payload = json.loads(data_line.removeprefix("data: ").strip())
     assert payload["event_type"] == "AgentMessageEvent"
-    assert payload["content"] == "from-sse-test"
+    assert payload["payload"]["content"] == "from-sse-test"
+    assert set(payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
+
+
+@pytest.mark.asyncio
+async def test_sse_replay_and_live_payload_shapes_match(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    async def read_one_data_line(response: httpx.Response) -> str:
+        async for line in response.aiter_lines():
+            if line.startswith("data: "):
+                return line
+        raise AssertionError("SSE stream closed before data line was received")
+
+    await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="replay-shape")
+    )
+
+    async with _client.stream("GET", "/sse?once=1&replay=1") as replay_response:
+        replay_line = await asyncio.wait_for(read_one_data_line(replay_response), timeout=2.0)
+
+    class FakeEventBus:
+        @asynccontextmanager
+        async def stream(self) -> AsyncIterator[AsyncIterator[AgentMessageEvent]]:
+            async def iterate() -> AsyncIterator[AgentMessageEvent]:
+                yield AgentMessageEvent(
+                    from_agent="user",
+                    to_agent="src/app.py::a",
+                    content="live-shape",
+                )
+
+            yield iterate()
+
+    app = create_app(event_store, node_store, FakeEventBus())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        async with client.stream("GET", "/sse") as live_response:
+            live_line = await asyncio.wait_for(read_one_data_line(live_response), timeout=2.0)
+
+    replay_payload = json.loads(replay_line.removeprefix("data: ").strip())
+    live_payload = json.loads(live_line.removeprefix("data: ").strip())
+    assert set(replay_payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
+    assert set(live_payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
 
 
 @pytest.mark.asyncio
