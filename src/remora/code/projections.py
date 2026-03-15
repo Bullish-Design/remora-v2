@@ -32,7 +32,7 @@ async def project_nodes(
                 # System tools/config are always included; role bundle overlays them.
                 template_dirs = [bundle_root / "system"]
                 existing_bundle = existing.role
-                mapped_bundle = config.bundle_overlays.get(cst.node_type)
+                mapped_bundle = config.resolve_bundle(cst.node_type, cst.name)
                 role = mapped_bundle or existing_bundle
                 if role:
                     template_dirs.append(bundle_root / role)
@@ -40,7 +40,7 @@ async def project_nodes(
             results.append(existing)
             continue
 
-        mapped_bundle = config.bundle_overlays.get(cst.node_type)
+        mapped_bundle = config.resolve_bundle(cst.node_type, cst.name)
         node = Node(
             node_id=cst.node_id,
             node_type=cst.node_type,

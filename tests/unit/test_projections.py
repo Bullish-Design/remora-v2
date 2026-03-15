@@ -139,3 +139,42 @@ async def test_project_bundle_overlays(tmp_path: Path) -> None:
 
     await workspace_service.close()
     await db.close()
+
+
+@pytest.mark.asyncio
+async def test_project_bundle_rules_override_overlays(tmp_path: Path) -> None:
+    db = await open_database(tmp_path / "bundle-rules.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+
+    bundles_root = tmp_path / "bundles"
+    write_bundle_templates(bundles_root, role="code-agent")
+    write_bundle_templates(bundles_root, role="test-agent")
+    config = Config(
+        workspace_root=".remora-phase5",
+        bundle_root=str(bundles_root),
+        bundle_overlays={"function": "code-agent"},
+        bundle_rules=(
+            {
+                "node_type": "function",
+                "name_pattern": "test_*",
+                "bundle": "test-agent",
+            },
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+
+    cst = make_cst(file_path="src/a.py", name="test_mapped")
+    await project_nodes([cst], node_store, workspace_service, config)
+
+    stored = await node_store.get_node(cst.node_id)
+    workspace = await workspace_service.get_agent_workspace(cst.node_id)
+    bundle_text = await workspace.read("_bundle/bundle.yaml")
+
+    assert stored is not None
+    assert stored.role == "test-agent"
+    assert "test-agent" in bundle_text
+
+    await workspace_service.close()
+    await db.close()

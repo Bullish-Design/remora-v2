@@ -97,3 +97,18 @@ def test_invalid_language_map_rejected() -> None:
 def test_empty_discovery_paths_rejected() -> None:
     with pytest.raises(ValidationError):
         Config(discovery_paths=())
+
+
+def test_bundle_rules_override_type_overlays() -> None:
+    config = Config(
+        bundle_overlays={"function": "code-agent"},
+        bundle_rules=(
+            {
+                "node_type": "function",
+                "name_pattern": "test_*",
+                "bundle": "test-agent",
+            },
+        ),
+    )
+    assert config.resolve_bundle("function", "test_alpha") == "test-agent"
+    assert config.resolve_bundle("function", "alpha") == "code-agent"

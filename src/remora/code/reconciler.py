@@ -226,7 +226,7 @@ class FileReconciler:
             children = sorted(children_by_dir.get(dir_id, []))
             source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
             existing = existing_by_id.get(dir_id)
-            mapped_bundle = self._config.bundle_overlays.get(NodeType.DIRECTORY.value)
+            mapped_bundle = self._config.resolve_bundle(NodeType.DIRECTORY.value, name)
             refresh_subscriptions = not self._subscriptions_bootstrapped
             refresh_bundle = sync_existing_bundles
 

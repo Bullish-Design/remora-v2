@@ -21,3 +21,6 @@
 - Decision 007: Kernel observer translation uses event class-name dispatch (string-based) instead of hard importing structured event classes.
   - Rationale: keeps coupling loose and avoids version-fragile runtime dependencies while preserving structured telemetry.
 
+- Decision 008: Centralized bundle selection in `Config.resolve_bundle()` and reused it in both projection and reconciler paths.
+  - Rationale: avoids duplicated rule logic and guarantees consistent role assignment semantics.
+

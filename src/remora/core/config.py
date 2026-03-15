@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,22 @@ class VirtualAgentConfig(BaseModel):
         return cleaned
 
 
+class BundleOverlayRule(BaseModel):
+    """Bundle resolution rule matching node type and optional name glob."""
+
+    node_type: str
+    name_pattern: str | None = None
+    bundle: str
+
+    @field_validator("node_type", "bundle")
+    @classmethod
+    def _validate_required_values(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("bundle overlay rule values must be non-empty")
+        return cleaned
+
+
 class Config(BaseSettings):
     """Remora configuration loaded from remora.yaml and environment variables."""
 
@@ -69,6 +86,7 @@ class Config(BaseSettings):
             "directory": "directory-agent",
         }
     )
+    bundle_rules: tuple[BundleOverlayRule, ...] = ()
 
     # LLM
     model_base_url: str = "http://localhost:8000/v1"
@@ -136,6 +154,19 @@ class Config(BaseSettings):
             seen.add(item.id)
         return value
 
+    def resolve_bundle(self, node_type: str, node_name: str | None = None) -> str | None:
+        """Resolve bundle by priority: first matching rule, then type overlays."""
+        normalized_type = node_type.value if hasattr(node_type, "value") else str(node_type)
+        normalized_name = node_name or ""
+
+        for rule in self.bundle_rules:
+            if rule.node_type != normalized_type:
+                continue
+            if rule.name_pattern is None or fnmatch(normalized_name, rule.name_pattern):
+                return rule.bundle
+
+        return self.bundle_overlays.get(normalized_type)
+
 
 def _expand_string(value: str) -> str:
     """Expand ${VAR:-default} shell-style values."""
@@ -186,6 +217,7 @@ def load_config(path: Path | None = None) -> Config:
 
 
 __all__ = [
+    "BundleOverlayRule",
     "VirtualSubscriptionConfig",
     "VirtualAgentConfig",
     "Config",

@@ -6,5 +6,5 @@
 - [x] Proposal D implemented, tested, committed, pushed
 - [x] Proposal E implemented, tested, committed, pushed
 - [x] Proposal F implemented, tested, committed, pushed
-- [ ] Proposal G implemented, tested, committed, pushed
-- [ ] Final verification sweep complete
+- [x] Proposal G implemented, tested, committed, pushed
+- [x] Final verification sweep complete
