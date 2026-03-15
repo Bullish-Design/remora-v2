@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class NodeStatus(str, Enum):
+class NodeStatus(StrEnum):
     """Valid states for a code node / agent."""
 
     IDLE = "idle"
     RUNNING = "running"
+    AWAITING_INPUT = "awaiting_input"
     ERROR = "error"
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     """Types of discovered code elements."""
 
     FUNCTION = "function"
@@ -25,7 +26,7 @@ class NodeType(str, Enum):
     VIRTUAL = "virtual"
 
 
-class ChangeType(str, Enum):
+class ChangeType(StrEnum):
     """Types of content changes."""
 
     MODIFIED = "modified"
@@ -36,7 +37,12 @@ class ChangeType(str, Enum):
 
 STATUS_TRANSITIONS: dict[NodeStatus, set[NodeStatus]] = {
     NodeStatus.IDLE: {NodeStatus.RUNNING},
-    NodeStatus.RUNNING: {NodeStatus.IDLE, NodeStatus.ERROR},
+    NodeStatus.RUNNING: {
+        NodeStatus.IDLE,
+        NodeStatus.ERROR,
+        NodeStatus.AWAITING_INPUT,
+    },
+    NodeStatus.AWAITING_INPUT: {NodeStatus.RUNNING, NodeStatus.IDLE},
     NodeStatus.ERROR: {NodeStatus.IDLE, NodeStatus.RUNNING},
 }
 

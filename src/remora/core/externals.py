@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import hashlib
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
     CustomEvent,
+    HumanInputRequestEvent,
     SubscriptionPattern,
 )
 from remora.core.events.store import EventStore
@@ -32,6 +35,7 @@ class TurnContext:
         node_store: NodeStore,
         event_store: EventStore,
         outbox: Any,
+        human_input_timeout_s: float = 300.0,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace
@@ -39,6 +43,7 @@ class TurnContext:
         self._node_store = node_store
         self._event_store = event_store
         self._outbox = outbox
+        self._human_input_timeout_s = human_input_timeout_s
 
     async def _emit(self, event: Event) -> int:
         """Emit an event through the outbox."""
@@ -204,6 +209,33 @@ class TurnContext:
             )
         return f"Broadcast sent to {len(target_ids)} agents"
 
+    async def request_human_input(
+        self,
+        question: str,
+        options: list[str] | None = None,
+    ) -> str:
+        request_id = str(uuid.uuid4())
+        future = self._event_store.create_response_future(request_id)
+
+        await self._node_store.transition_status(self.node_id, NodeStatus.AWAITING_INPUT)
+        await self._emit(
+            HumanInputRequestEvent(
+                agent_id=self.node_id,
+                request_id=request_id,
+                question=question,
+                options=tuple(options or ()),
+                correlation_id=self.correlation_id,
+            )
+        )
+
+        try:
+            return await asyncio.wait_for(future, timeout=self._human_input_timeout_s)
+        except TimeoutError:
+            self._event_store.discard_response_future(request_id)
+            raise
+        finally:
+            await self._node_store.transition_status(self.node_id, NodeStatus.RUNNING)
+
     async def apply_rewrite(self, new_source: str) -> bool:
         node = await self._node_store.get_node(self.node_id)
         if node is None:
@@ -270,6 +302,7 @@ class TurnContext:
             "event_get_history": self.event_get_history,
             "send_message": self.send_message,
             "broadcast": self.broadcast,
+            "request_human_input": self.request_human_input,
             "apply_rewrite": self.apply_rewrite,
             "get_node_source": self.get_node_source,
             "my_node_id": self.my_node_id,

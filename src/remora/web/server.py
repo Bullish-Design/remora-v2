@@ -15,7 +15,11 @@ from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
-from remora.core.events import AgentMessageEvent, CursorFocusEvent
+from remora.core.events import (
+    AgentMessageEvent,
+    CursorFocusEvent,
+    HumanInputResponseEvent,
+)
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
@@ -109,6 +113,27 @@ def create_app(
             AgentMessageEvent(from_agent="user", to_agent=node_id, content=message)
         )
         return JSONResponse({"status": "sent"})
+
+    async def api_respond(request: Request) -> JSONResponse:
+        data = await request.json()
+        request_id = str(data.get("request_id", "")).strip()
+        response_text = str(data.get("response", "")).strip()
+        if not request_id or not response_text:
+            return JSONResponse({"error": "request_id and response required"}, status_code=400)
+
+        node_id = request.path_params["node_id"]
+        resolved = event_store.resolve_response(request_id, response_text)
+        if not resolved:
+            return JSONResponse({"error": "no pending request"}, status_code=404)
+
+        await event_store.append(
+            HumanInputResponseEvent(
+                agent_id=node_id,
+                request_id=request_id,
+                response=response_text,
+            )
+        )
+        return JSONResponse({"status": "ok"})
 
     async def api_events(request: Request) -> JSONResponse:
         raw_limit = request.query_params.get("limit", "50")
@@ -260,6 +285,7 @@ def create_app(
         Route("/api/nodes/{node_id:path}/conversation", endpoint=api_conversation),
         Route("/api/nodes/{node_id:path}", endpoint=api_node),
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
+        Route("/api/nodes/{node_id:path}/respond", endpoint=api_respond, methods=["POST"]),
         Route("/api/events", endpoint=api_events),
         Route("/api/health", endpoint=api_health),
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),

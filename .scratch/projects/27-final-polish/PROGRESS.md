@@ -1,7 +1,7 @@
 # Progress
 
 - [x] Proposal A implemented, tested, committed, pushed
-- [ ] Proposal B implemented, tested, committed, pushed
+- [x] Proposal B implemented, tested, committed, pushed
 - [ ] Proposal C implemented, tested, committed, pushed
 - [ ] Proposal D implemented, tested, committed, pushed
 - [ ] Proposal E implemented, tested, committed, pushed

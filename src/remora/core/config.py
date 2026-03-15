@@ -82,6 +82,7 @@ class Config(BaseSettings):
     max_concurrency: int = 4
     max_trigger_depth: int = 5
     trigger_cooldown_ms: int = 1000
+    human_input_timeout_s: float = 300.0
 
     # Workspace
     workspace_ignore_patterns: tuple[str, ...] = (

@@ -158,6 +158,23 @@ async def test_nodestore_transition_status_invalid(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_nodestore_transition_status_awaiting_input(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a", status="running"))
+
+    assert await store.transition_status("src/app.py::a", NodeStatus.AWAITING_INPUT)
+    paused = await store.get_node("src/app.py::a")
+    assert paused is not None
+    assert paused.status == NodeStatus.AWAITING_INPUT
+
+    assert await store.transition_status("src/app.py::a", NodeStatus.RUNNING)
+    resumed = await store.get_node("src/app.py::a")
+    assert resumed is not None
+    assert resumed.status == NodeStatus.RUNNING
+
+
+@pytest.mark.asyncio
 async def test_nodestore_get_children(db) -> None:
     store = NodeStore(db)
     await store.create_tables()

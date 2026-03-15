@@ -367,6 +367,7 @@ class Actor:
             node_store=self._node_store,
             event_store=self._event_store,
             outbox=outbox,
+            human_input_timeout_s=self._config.human_input_timeout_s,
         )
         capabilities = context.to_capabilities_dict()
         tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))

@@ -1,6 +1,6 @@
 # Context
 
-- Proposal A complete: event tag support added to Event model, subscription matching, virtual subscription config, event emission externals, and event persistence/replay payloads.
-- Added bundle tool support for tag subscriptions in `bundles/system/tools/subscribe.pym`.
-- Validated via unit tests: events/config/externals/web + virtual-agent subscription path.
-- Next action: Proposal B (human-in-the-loop futures and response endpoint), then test and commit.
+- Proposal A complete and pushed.
+- Proposal B complete: human-input event types, EventStore pending futures, `request_human_input` external with timeout and status transitions, `/api/nodes/{node_id}/respond` endpoint, and `ask_human` tool.
+- Added tests for request/response flow, timeout behavior, status transition, web response endpoint, and tool parsing.
+- Next action: Proposal C (workspace-native rewrite proposals, API endpoints, and replacement of direct rewrite flow).

@@ -160,6 +160,48 @@ async def test_api_chat_missing_node_returns_404(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_respond_requires_request_id_and_response(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.post(
+        "/api/nodes/src/app.py::a/respond",
+        json={"request_id": "", "response": ""},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_api_respond_returns_404_when_request_not_pending(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.post(
+        "/api/nodes/src/app.py::a/respond",
+        json={"request_id": "missing", "response": "yes"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_api_respond_resolves_pending_request_and_emits_event(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+    future = event_store.create_response_future("req-1")
+
+    response = await client.post(
+        "/api/nodes/src/app.py::a/respond",
+        json={"request_id": "req-1", "response": "approved"},
+    )
+    assert response.status_code == 200
+    assert future.done()
+    assert future.result() == "approved"
+
+    events = await event_store.get_events(limit=5)
+    assert any(
+        event["event_type"] == "HumanInputResponseEvent"
+        and event["payload"].get("request_id") == "req-1"
+        and event["payload"].get("response") == "approved"
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
 async def test_chat_rate_limit_allows_within_limit(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
     statuses = []

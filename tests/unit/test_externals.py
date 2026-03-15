@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,7 @@ async def _context(
     event_store: EventStore,
     correlation_id: str = "corr-1",
     outbox=None,
+    human_input_timeout_s: float = 300.0,
 ) -> TurnContext:
     if outbox is None:
         outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
@@ -52,6 +54,7 @@ async def _context(
         node_store=node_store,
         event_store=event_store,
         outbox=outbox,
+        human_input_timeout_s=human_input_timeout_s,
     )
 
 
@@ -180,6 +183,69 @@ async def test_externals_event_subscribe_supports_tag_filters(context_env) -> No
     )
     assert node.node_id not in await event_store.subscriptions.get_matching_agents(no_match_event)
     assert node.node_id in await event_store.subscriptions.get_matching_agents(yes_match_event)
+
+
+@pytest.mark.asyncio
+async def test_request_human_input_blocks_until_response(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::human")
+    await node_store.upsert_node(node)
+    await node_store.set_status(node.node_id, "running")
+
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store, "corr-human")
+    externals = context.to_capabilities_dict()
+
+    task = asyncio.create_task(externals["request_human_input"]("Proceed?", ["yes", "no"]))
+    await asyncio.sleep(0.01)
+
+    events = await event_store.get_events(limit=10)
+    request = next(event for event in events if event["event_type"] == "HumanInputRequestEvent")
+    request_id = request["payload"]["request_id"]
+    assert request["payload"]["question"] == "Proceed?"
+    assert request["payload"]["options"] == ["yes", "no"]
+
+    awaiting = await node_store.get_node(node.node_id)
+    assert awaiting is not None
+    assert awaiting.status == "awaiting_input"
+
+    assert event_store.resolve_response(request_id, "yes")
+    assert await task == "yes"
+
+    resumed = await node_store.get_node(node.node_id)
+    assert resumed is not None
+    assert resumed.status == "running"
+
+
+@pytest.mark.asyncio
+async def test_request_human_input_times_out_and_resets_status(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::human-timeout")
+    await node_store.upsert_node(node)
+    await node_store.set_status(node.node_id, "running")
+
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(
+        node.node_id,
+        ws,
+        node_store,
+        event_store,
+        "corr-human-timeout",
+        human_input_timeout_s=0.01,
+    )
+    externals = context.to_capabilities_dict()
+
+    with pytest.raises(TimeoutError):
+        await externals["request_human_input"]("Need approval?", None)
+
+    events = await event_store.get_events(limit=10)
+    request = next(event for event in events if event["event_type"] == "HumanInputRequestEvent")
+    request_id = request["payload"]["request_id"]
+    assert not event_store.resolve_response(request_id, "late")
+
+    resumed = await node_store.get_node(node.node_id)
+    assert resumed is not None
+    assert resumed.status == "running"
 
 
 @pytest.mark.asyncio

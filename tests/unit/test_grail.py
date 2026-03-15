@@ -265,3 +265,8 @@ def test_submit_review_script_parses() -> None:
 def test_suggest_tests_script_parses() -> None:
     script = grail.load(Path("bundles/test-agent/tools/suggest_tests.pym"))
     assert script.name == "suggest_tests"
+
+
+def test_ask_human_script_parses() -> None:
+    script = grail.load(Path("bundles/system/tools/ask_human.pym"))
+    assert script.name == "ask_human"

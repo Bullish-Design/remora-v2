@@ -100,6 +100,23 @@ class ContentChangedEvent(Event):
     new_hash: str | None = None
 
 
+class HumanInputRequestEvent(Event):
+    """Agent asks the human for input and waits for a response."""
+
+    agent_id: str
+    request_id: str
+    question: str
+    options: tuple[str, ...] = ()
+
+
+class HumanInputResponseEvent(Event):
+    """Human answered an agent's pending input request."""
+
+    agent_id: str
+    request_id: str
+    response: str
+
+
 class CustomEvent(Event):
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -137,6 +154,8 @@ __all__ = [
     "NodeRemovedEvent",
     "NodeChangedEvent",
     "ContentChangedEvent",
+    "HumanInputRequestEvent",
+    "HumanInputResponseEvent",
     "CustomEvent",
     "ToolResultEvent",
     "CursorFocusEvent",
