@@ -16,6 +16,7 @@ def test_cli_help() -> None:
     assert result.exit_code == 0
     assert "Remora" in result.stdout
     assert "start" in result.stdout
+    assert "lsp" in result.stdout
 
 
 def test_cli_start_help() -> None:
@@ -25,6 +26,27 @@ def test_cli_start_help() -> None:
     assert "--project-root" in result.stdout
     assert "--bind" in result.stdout
     assert "--no-web" in result.stdout
+
+
+def test_cli_lsp_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["lsp", "--help"])
+    assert result.exit_code == 0
+    assert "--project-root" in result.stdout
+    assert "--log-level" in result.stdout
+
+
+def test_cli_lsp_requires_existing_db(tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "lsp",
+            "--project-root",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 1
 
 
 def test_cli_start_smoke(tmp_path: Path) -> None:

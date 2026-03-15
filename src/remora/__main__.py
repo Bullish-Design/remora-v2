@@ -20,7 +20,7 @@ from remora.core.config import load_config
 from remora.core.db import open_database
 from remora.core.events import Event
 from remora.core.services import RuntimeServices
-from remora.lsp import create_lsp_server
+from remora.lsp import create_lsp_server, create_lsp_server_standalone
 from remora.web.server import create_app
 
 app = typer.Typer(
@@ -102,6 +102,28 @@ def discover_command(
     typer.echo(f"Discovered {len(nodes)} nodes")
     for node in nodes:
         typer.echo(f"{node.node_type:8} {node.file_path}::{node.full_name}")
+
+
+@app.command("lsp")
+def lsp_command(
+    project_root: Annotated[Path, PROJECT_ROOT_ARG] = Path("."),
+    config_path: Annotated[Path | None, CONFIG_ARG] = None,
+    log_level: Annotated[str, LOG_LEVEL_ARG] = "INFO",
+) -> None:
+    """Start the LSP server standalone using a shared Remora sqlite database."""
+    _configure_logging(log_level, lsp_mode=True)
+    logger = logging.getLogger(__name__)
+
+    project_root = project_root.resolve()
+    config = load_config(config_path)
+    db_path = project_root / config.workspace_root / "remora.db"
+    if not db_path.exists():
+        logger.error("Database not found at %s. Is 'remora start' running?", db_path)
+        raise typer.Exit(code=1)
+
+    lsp_server = create_lsp_server_standalone(db_path)
+    logger.info("Starting standalone LSP server on stdin/stdout")
+    lsp_server.start_io()
 
 
 async def _start(
