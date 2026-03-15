@@ -15,3 +15,6 @@
 - Decision 005: Implemented LSP code actions as command-backed actions (`remora.chat`, `remora.trigger`) to keep client integration fully standard.
   - Rationale: no editor-specific protocol extensions required; Neovim-compatible via native codeAction + executeCommand flow.
 
+- Decision 006: Keep panel state client-side using SSE-reduced `agentEventCache` and avoid new server aggregation endpoints.
+  - Rationale: aligns with event-projection architecture and keeps UI updates low-latency and decoupled.
+

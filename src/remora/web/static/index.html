@@ -90,29 +90,6 @@
       font-size: 0.82rem;
       white-space: pre-wrap;
     }
-    #conversation-panel {
-      max-height: 220px;
-      overflow: auto;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #f9f6f0;
-      padding: 8px;
-      font-size: 0.82rem;
-      white-space: pre-wrap;
-    }
-    .conversation-msg {
-      margin-bottom: 8px;
-      padding: 6px;
-      border-radius: 6px;
-      background: #fffcf7;
-    }
-    .conversation-msg strong {
-      color: var(--accent);
-      display: block;
-      margin-bottom: 4px;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-    }
     #timeline-container {
       max-height: 220px;
       overflow: auto;
@@ -143,6 +120,69 @@
     .timeline-event.type-AgentErrorEvent { border-color: #b91c1c; }
     .timeline-event.type-AgentMessageEvent { border-color: #ea580c; }
     .timeline-event.type-ContentChangedEvent { border-color: #7c3aed; }
+    #agent-panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f9f6f0;
+      padding: 10px;
+      margin-top: 12px;
+    }
+    #agent-header {
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    #agent-stream {
+      max-height: 320px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffcf7;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .panel-item {
+      margin-bottom: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .panel-user {
+      border-left: 4px solid #0f766e;
+      background: #e0f2f1;
+    }
+    .panel-agent {
+      border-left: 4px solid #2563eb;
+    }
+    .panel-error {
+      border-left: 4px solid #b91c1c;
+      background: #fee2e2;
+    }
+    .panel-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .proposal-actions {
+      margin-top: 8px;
+    }
+    .proposal-actions button {
+      margin-bottom: 4px;
+    }
+    .diff-block {
+      margin-top: 8px;
+      max-height: 180px;
+      overflow: auto;
+      background: #f4f4f5;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 0.74rem;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
   <!-- Configure Sigma via the data attribute below. Increase `data-sigma-iterations` for slower, smoother layouts. -->
@@ -194,28 +234,16 @@
       <h2 id="node-name">Select a node</h2>
       <div id="node-details"></div>
     </section>
-    <section>
-      <h3>Chat</h3>
-      <div id="chat-messages" style="
-        max-height: 300px;
-        overflow-y: auto;
-        padding: 8px;
-        margin-bottom: 8px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #f9f6f0;
-        display: none;
-      "></div>
-      <textarea id="chat-input" rows="4" placeholder="Ask selected node..."></textarea>
+    <section id="agent-panel">
+      <h3>Agent Panel</h3>
+      <div id="agent-header">(select a node)</div>
+      <div id="agent-stream"></div>
+      <textarea id="chat-input" rows="3" placeholder="Send message to selected agent..."></textarea>
       <button id="send-chat">Send</button>
     </section>
     <section>
       <h3>Events</h3>
       <div id="events"></div>
-    </section>
-    <section>
-      <h3>Conversation</h3>
-      <div id="conversation-panel">(select a node)</div>
     </section>
     <section>
       <h3>Timeline</h3>
@@ -243,6 +271,8 @@
     let fileIndex = 0;
     const timelineEvents = [];
     const MAX_TIMELINE_EVENTS = 200;
+    const agentEventCache = new Map();
+    const CACHE_LIMIT = 200;
 
     const colorByType = {
       function: getComputedStyle(document.documentElement).getPropertyValue("--function").trim(),
@@ -255,6 +285,9 @@
         return getComputedStyle(document.documentElement)
           .getPropertyValue("--running")
           .trim();
+      }
+      if (status === "awaiting_input" || status === "awaiting_review") {
+        return "#ca8a04";
       }
       if (status === "error") {
         return getComputedStyle(document.documentElement)
@@ -399,30 +432,33 @@
       box.textContent = `${text}\n${box.textContent}`.slice(0, 4000);
     }
 
-    function appendChatMessage(sender, content, role) {
-      const container = document.getElementById("chat-messages");
-      container.style.display = "block";
-      const msg = document.createElement("div");
-      msg.style.cssText = `
-        margin-bottom: 8px;
-        padding: 8px;
-        border-radius: 6px;
-        background: ${role === "agent" ? "#f1f5f9" : "#e0f2f1"};
-        color: #1f1a16;
-        font-size: 13px;
-        word-wrap: break-word;
-      `;
-      const senderLabel = document.createElement("div");
-      senderLabel.style.cssText = "font-weight: bold; margin-bottom: 4px; color: var(--accent); font-size: 11px;";
-      senderLabel.textContent = sender.split("::").pop();
-      msg.appendChild(senderLabel);
+    function cacheEvent(eventType, payload) {
+      const agentId = payload?.agent_id || payload?.from_agent || payload?.to_agent;
+      if (!agentId) return;
+      if (!agentEventCache.has(agentId)) {
+        agentEventCache.set(agentId, []);
+      }
+      const cache = agentEventCache.get(agentId);
+      cache.push({ eventType, payload, timestamp: Date.now() });
+      if (cache.length > CACHE_LIMIT) cache.shift();
+    }
 
-      const text = document.createElement("div");
-      text.textContent = content;
-      msg.appendChild(text);
-
-      container.appendChild(msg);
-      container.scrollTop = container.scrollHeight;
+    function renderSimpleDiff(oldSource, newSource) {
+      const oldLines = String(oldSource || "").split("\n");
+      const newLines = String(newSource || "").split("\n");
+      const maxLen = Math.max(oldLines.length, newLines.length);
+      const out = [];
+      for (let i = 0; i < maxLen; i++) {
+        const oldLine = oldLines[i] ?? "";
+        const newLine = newLines[i] ?? "";
+        if (oldLine === newLine) {
+          out.push(`  ${oldLine}`);
+        } else {
+          if (oldLine) out.push(`- ${oldLine}`);
+          if (newLine) out.push(`+ ${newLine}`);
+        }
+      }
+      return out.join("\n");
     }
 
     function addTimelineEvent(eventType, payload) {
@@ -470,28 +506,80 @@
         .replaceAll("'", "&#39;");
     }
 
-    async function loadConversation(nodeId) {
-      const panel = document.getElementById("conversation-panel");
-      try {
-        const response = await fetch(`/api/nodes/${encodeURIComponent(nodeId)}/conversation`);
-        if (!response.ok) {
-          panel.textContent = "(no active conversation)";
-          return;
-        }
-        const payload = await response.json();
-        if (!payload.history || payload.history.length === 0) {
-          panel.textContent = "(empty conversation)";
-          return;
-        }
-        panel.innerHTML = payload.history.map((message) => (
-          `<div class=\"conversation-msg\">` +
-          `<strong>${escapeHtml(message.role || "unknown")}</strong>` +
-          `<div>${escapeHtml(message.content || "")}</div>` +
-          `</div>`
-        )).join("");
-      } catch {
-        panel.textContent = "(failed to load conversation)";
+    async function renderAgentPanel(nodeId) {
+      const header = document.getElementById("agent-header");
+      const stream = document.getElementById("agent-stream");
+      if (!nodeId) {
+        header.textContent = "(select a node)";
+        stream.innerHTML = "";
+        return;
       }
+
+      try {
+        const response = await fetch(`/api/nodes/${encodeURIComponent(nodeId)}`);
+        if (response.ok) {
+          const node = await response.json();
+          header.textContent = `${node.full_name} · ${node.node_type} · ${node.status}`;
+        }
+      } catch {
+        header.textContent = `${nodeId} · unavailable`;
+      }
+
+      const events = agentEventCache.get(nodeId) || [];
+      if (events.length === 0) {
+        stream.innerHTML = "<div class=\"panel-item\">No events yet for this agent.</div>";
+        return;
+      }
+
+      const items = events.slice(-60).map((entry) => {
+        const eventType = entry.eventType;
+        const payload = entry.payload || {};
+        if (eventType === "AgentMessageEvent" && payload.from_agent === "user") {
+          return `<div class=\"panel-item panel-user\"><div class=\"panel-meta\">User</div>${escapeHtml(payload.content || "")}</div>`;
+        }
+        if (eventType === "AgentCompleteEvent") {
+          return `<div class=\"panel-item panel-agent\"><div class=\"panel-meta\">Agent Response</div>${escapeHtml(payload.full_response || payload.result_summary || "")}</div>`;
+        }
+        if (eventType === "AgentStartEvent") {
+          return `<div class=\"panel-item\"><div class=\"panel-meta\">Agent Start</div>Turn started.</div>`;
+        }
+        if (eventType === "AgentErrorEvent") {
+          return `<div class=\"panel-item panel-error\"><div class=\"panel-meta\">Agent Error</div>${escapeHtml(payload.error || "")}</div>`;
+        }
+        if (eventType === "ToolResultEvent") {
+          return `<div class=\"panel-item\"><div class=\"panel-meta\">Tool Result · ${escapeHtml(payload.tool_name || "")}</div>${escapeHtml(payload.result_summary || "")}</div>`;
+        }
+        if (eventType === "HumanInputRequestEvent") {
+          const options = Array.isArray(payload.options) ? payload.options.join(", ") : "";
+          return (
+            `<div class=\"panel-item\" data-request-id=\"${escapeHtml(payload.request_id || "")}\">` +
+            `<div class=\"panel-meta\">Human Input Needed</div>` +
+            `<div>${escapeHtml(payload.question || "")}</div>` +
+            (options ? `<div class=\"panel-meta\">Options: ${escapeHtml(options)}</div>` : "") +
+            `<textarea data-request-input=\"${escapeHtml(payload.request_id || "")}\" rows=\"2\" placeholder=\"Type response...\"></textarea>` +
+            `<button data-request-submit=\"${escapeHtml(payload.request_id || "")}\">Submit Response</button>` +
+            `</div>`
+          );
+        }
+        if (eventType === "RewriteProposalEvent") {
+          return (
+            `<div class=\"panel-item\" data-proposal-node=\"${escapeHtml(nodeId)}\">` +
+            `<div class=\"panel-meta\">Rewrite Proposal</div>` +
+            `<div>${escapeHtml(payload.reason || "Proposal ready for review.")}</div>` +
+            `<div class=\"proposal-actions\">` +
+            `<button data-proposal-diff=\"${escapeHtml(nodeId)}\">View Diff</button>` +
+            `<button data-proposal-accept=\"${escapeHtml(nodeId)}\">Accept</button>` +
+            `<button data-proposal-reject=\"${escapeHtml(nodeId)}\">Reject</button>` +
+            `</div>` +
+            `<div class=\"diff-block\" data-proposal-diff-output=\"${escapeHtml(nodeId)}\" style=\"display:none\"></div>` +
+            `</div>`
+          );
+        }
+        return `<div class=\"panel-item\"><div class=\"panel-meta\">${escapeHtml(eventType)}</div>${escapeHtml(JSON.stringify(payload))}</div>`;
+      });
+
+      stream.innerHTML = items.join("");
+      stream.scrollTop = stream.scrollHeight;
     }
 
     async function showNode(nodeId) {
@@ -522,11 +610,8 @@
 
     function selectNode(nodeId) {
       selectedNode = nodeId;
-      const chat = document.getElementById("chat-messages");
-      chat.innerHTML = "";
-      chat.style.display = "none";
       showNode(nodeId);
-      loadConversation(nodeId);
+      renderAgentPanel(nodeId);
     }
 
     renderer.on("clickNode", ({ node }) => {
@@ -536,13 +621,68 @@
     document.getElementById("send-chat").addEventListener("click", async () => {
       const message = document.getElementById("chat-input").value.trim();
       if (!selectedNode || !message) return;
-      appendChatMessage("You", message, "user");
+      cacheEvent("AgentMessageEvent", {
+        from_agent: "user",
+        to_agent: selectedNode,
+        content: message,
+      });
+      renderAgentPanel(selectedNode);
       await fetch("/api/chat", {
         method: "POST",
         headers: {"content-type": "application/json"},
         body: JSON.stringify({ node_id: selectedNode, message })
       });
       document.getElementById("chat-input").value = "";
+    });
+
+    document.getElementById("agent-stream").addEventListener("click", async (event) => {
+      const requestId = event.target?.dataset?.requestSubmit;
+      if (requestId && selectedNode) {
+        const input = document.querySelector(`textarea[data-request-input=\"${requestId}\"]`);
+        const responseText = input?.value?.trim?.() || "";
+        if (!responseText) return;
+        await fetch(`/api/nodes/${encodeURIComponent(selectedNode)}/respond`, {
+          method: "POST",
+          headers: {"content-type": "application/json"},
+          body: JSON.stringify({ request_id: requestId, response: responseText })
+        });
+        if (input) input.value = "";
+        return;
+      }
+
+      const proposalNodeDiff = event.target?.dataset?.proposalDiff;
+      if (proposalNodeDiff) {
+        const response = await fetch(`/api/proposals/${encodeURIComponent(proposalNodeDiff)}/diff`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        const target = document.querySelector(`[data-proposal-diff-output=\"${proposalNodeDiff}\"]`);
+        if (!target) return;
+        const diffText = (payload.diffs || [])
+          .map((item) => `# ${item.file}\n${renderSimpleDiff(item.old, item.new)}`)
+          .join("\n\n");
+        target.style.display = "block";
+        target.textContent = diffText || "(no diff)";
+        return;
+      }
+
+      const proposalNodeAccept = event.target?.dataset?.proposalAccept;
+      if (proposalNodeAccept) {
+        await fetch(`/api/proposals/${encodeURIComponent(proposalNodeAccept)}/accept`, {
+          method: "POST",
+          headers: {"content-type": "application/json"},
+          body: "{}",
+        });
+        return;
+      }
+
+      const proposalNodeReject = event.target?.dataset?.proposalReject;
+      if (proposalNodeReject) {
+        await fetch(`/api/proposals/${encodeURIComponent(proposalNodeReject)}/reject`, {
+          method: "POST",
+          headers: {"content-type": "application/json"},
+          body: JSON.stringify({ feedback: "Rejected from web panel" }),
+        });
+      }
     });
 
     function ssePayload(event) {
@@ -620,15 +760,18 @@
       });
       evtSource.addEventListener("AgentStartEvent", (event) => {
         const payload = ssePayload(event);
+        cacheEvent("AgentStartEvent", payload);
         if (graph.hasNode(payload.agent_id)) {
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "running"));
           renderer.refresh();
         }
         appendEventLine(`AgentStartEvent: ${payload.agent_id}`);
         addTimelineEvent("AgentStartEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
       evtSource.addEventListener("AgentCompleteEvent", (event) => {
         const payload = ssePayload(event);
+        cacheEvent("AgentCompleteEvent", payload);
         if (graph.hasNode(payload.agent_id)) {
           const nodeType = graph.getNodeAttribute(payload.agent_id, "node_type");
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor(nodeType, "idle"));
@@ -636,23 +779,65 @@
         }
         appendEventLine(`AgentCompleteEvent: ${payload.agent_id}`);
         addTimelineEvent("AgentCompleteEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
       evtSource.addEventListener("AgentErrorEvent", (event) => {
         const payload = ssePayload(event);
+        cacheEvent("AgentErrorEvent", payload);
         if (graph.hasNode(payload.agent_id)) {
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "error"));
           renderer.refresh();
         }
         appendEventLine(`AgentErrorEvent: ${payload.agent_id}`);
         addTimelineEvent("AgentErrorEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
       evtSource.addEventListener("AgentMessageEvent", (event) => {
         const payload = ssePayload(event);
-        if (payload.to_agent === "user") {
-          appendChatMessage(payload.from_agent || "agent", payload.content || "", "agent");
-        }
+        cacheEvent("AgentMessageEvent", payload);
         appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
         addTimelineEvent("AgentMessageEvent", payload);
+        if (selectedNode && (selectedNode === payload.to_agent || selectedNode === payload.from_agent)) {
+          renderAgentPanel(selectedNode);
+        }
+      });
+      evtSource.addEventListener("HumanInputRequestEvent", (event) => {
+        const payload = ssePayload(event);
+        cacheEvent("HumanInputRequestEvent", payload);
+        if (graph.hasNode(payload.agent_id)) {
+          graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "awaiting_input"));
+          renderer.refresh();
+        }
+        addTimelineEvent("HumanInputRequestEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
+      });
+      evtSource.addEventListener("HumanInputResponseEvent", (event) => {
+        const payload = ssePayload(event);
+        cacheEvent("HumanInputResponseEvent", payload);
+        addTimelineEvent("HumanInputResponseEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
+      });
+      evtSource.addEventListener("RewriteProposalEvent", (event) => {
+        const payload = ssePayload(event);
+        cacheEvent("RewriteProposalEvent", payload);
+        if (graph.hasNode(payload.agent_id)) {
+          graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "awaiting_review"));
+          renderer.refresh();
+        }
+        addTimelineEvent("RewriteProposalEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
+      });
+      evtSource.addEventListener("RewriteAcceptedEvent", (event) => {
+        const payload = ssePayload(event);
+        cacheEvent("RewriteAcceptedEvent", payload);
+        addTimelineEvent("RewriteAcceptedEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
+      });
+      evtSource.addEventListener("RewriteRejectedEvent", (event) => {
+        const payload = ssePayload(event);
+        cacheEvent("RewriteRejectedEvent", payload);
+        addTimelineEvent("RewriteRejectedEvent", payload);
+        if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
       evtSource.addEventListener("CursorFocusEvent", (event) => {
         const payload = ssePayload(event);
@@ -698,6 +883,9 @@
           }, 500);
         }
         addTimelineEvent("CursorFocusEvent", payload);
+        if (payload.node_id) {
+          selectNode(payload.node_id);
+        }
       });
       evtSource.onmessage = (event) => {
         try {
@@ -712,7 +900,12 @@
     }
 
     createEventSource();
-    loadGraph();
+    loadGraph().then(() => {
+      const requestedNode = new URLSearchParams(window.location.search).get("node");
+      if (requestedNode) {
+        selectNode(requestedNode);
+      }
+    });
   </script>
 </body>
 </html>
