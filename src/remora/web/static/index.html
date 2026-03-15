@@ -151,9 +151,23 @@
   </aside>
   <script>
     const graph = new graphology.Graph();
-    const renderer = new Sigma(graph, document.getElementById("graph"));
+    const renderer = new Sigma(graph, document.getElementById("graph"), {
+      nodeReducer: (node, data) => {
+        if (data.node_type === "__label__") {
+          return {
+            ...data,
+            size: 2,
+            color: "#6f645c",
+            label: data.label,
+          };
+        }
+        return data;
+      },
+    });
     const SIGMA_ITERATIONS = Number(document.body.dataset.sigmaIterations) || 30;
     let selectedNode = null;
+    const fileGroups = {};
+    let fileIndex = 0;
 
     const colorByType = {
       function: getComputedStyle(document.documentElement).getPropertyValue("--function").trim(),
@@ -194,21 +208,61 @@
       };
     }
 
+    function getFileCluster(filePath) {
+      if (!fileGroups[filePath]) {
+        const angle = (fileIndex / 6) * 2 * Math.PI;
+        const radius = 3;
+        fileGroups[filePath] = {
+          cx: radius * Math.cos(angle),
+          cy: radius * Math.sin(angle),
+          index: fileIndex,
+          count: 0,
+        };
+        fileIndex++;
+      }
+
+      const cluster = fileGroups[filePath];
+      cluster.count++;
+      return {
+        x: cluster.cx + (Math.random() - 0.5) * 1.5,
+        y: cluster.cy + (Math.random() - 0.5) * 1.5,
+      };
+    }
+
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
       for (const node of nodes) {
         if (!graph.hasNode(node.node_id)) {
-          const { x, y } = deterministicPosition(node.node_id);
+          const filePath = node.file_path || "";
+          const { x, y } = filePath
+            ? getFileCluster(filePath)
+            : deterministicPosition(node.node_id);
           graph.addNode(node.node_id, {
             label: node.name,
             size: 8,
             x,
             y,
             color: nodeColor(node.node_type, node.status),
-            node_type: node.node_type
+            node_type: node.node_type,
+            file_path: filePath,
           });
         }
+      }
+
+      for (const [filePath, cluster] of Object.entries(fileGroups)) {
+        const labelId = `__label__${filePath}`;
+        if (graph.hasNode(labelId)) continue;
+        const shortName = filePath.split("/").pop();
+        graph.addNode(labelId, {
+          label: shortName,
+          size: 3,
+          x: cluster.cx,
+          y: cluster.cy,
+          color: "#6f645c",
+          node_type: "__label__",
+          file_path: filePath,
+        });
       }
 
       const edgeResp = await fetch("/api/edges");
@@ -316,15 +370,32 @@
     evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
       const payload = ssePayload(event);
       if (!graph.hasNode(payload.node_id)) {
-        const { x, y } = deterministicPosition(payload.node_id);
+        const filePath = payload.file_path || "";
+        const { x, y } = filePath
+          ? getFileCluster(filePath)
+          : deterministicPosition(payload.node_id);
         graph.addNode(payload.node_id, {
           label: payload.name || payload.node_id.split("::").pop(),
           size: 8,
           x,
           y,
           node_type: payload.node_type || "function",
-          color: nodeColor(payload.node_type || "function", "idle")
+          color: nodeColor(payload.node_type || "function", "idle"),
+          file_path: filePath,
         });
+
+        if (filePath && !graph.hasNode(`__label__${filePath}`)) {
+          const cluster = fileGroups[filePath];
+          graph.addNode(`__label__${filePath}`, {
+            label: filePath.split("/").pop(),
+            size: 3,
+            x: cluster.cx,
+            y: cluster.cy,
+            color: "#6f645c",
+            node_type: "__label__",
+            file_path: filePath,
+          });
+        }
       }
       renderer.refresh();
       appendEventLine(`NodeDiscoveredEvent: ${payload.node_id}`);
