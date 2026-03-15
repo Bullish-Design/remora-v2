@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -12,16 +11,19 @@ from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
+from remora.core.events.bus import EventBus
+from remora.core.events.store import EventStore
 from remora.core.events import AgentMessageEvent, CursorFocusEvent
+from remora.core.graph import NodeStore
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
 def create_app(
-    event_store: Any,
-    node_store: Any,
-    event_bus: Any,
+    event_store: EventStore,
+    node_store: NodeStore,
+    event_bus: EventBus,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
 
