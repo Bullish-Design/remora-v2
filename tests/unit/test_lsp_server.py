@@ -39,6 +39,64 @@ async def test_lsp_server_creates(lsp_env) -> None:
     assert isinstance(server, LanguageServer)
 
 
+@pytest.mark.asyncio
+async def test_lsp_server_accepts_shared_services(lsp_env, tmp_path: Path) -> None:
+    node_store, event_store = lsp_env
+    server = create_lsp_server(node_store=node_store, event_store=event_store)
+    handlers = server._remora_handlers  # type: ignore[attr-defined]
+    did_save = handlers["did_save"]
+
+    file_path = tmp_path / "src" / "shared.py"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("def x():\n    return 1\n", encoding="utf-8")
+    await did_save(
+        lsp.DidSaveTextDocumentParams(
+            text_document=lsp.TextDocumentIdentifier(uri=f"file://{file_path}"),
+        )
+    )
+
+    events = await event_store.get_events(limit=5)
+    assert any(
+        event["event_type"] == "ContentChangedEvent"
+        and event["payload"].get("path") == str(file_path)
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_lsp_server_accepts_db_path(tmp_path: Path) -> None:
+    db_path = tmp_path / "standalone-lsp.db"
+    db = await open_database(db_path)
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    await db.close()
+
+    server = create_lsp_server(db_path=db_path)
+    handlers = server._remora_handlers  # type: ignore[attr-defined]
+    did_save = handlers["did_save"]
+
+    file_path = tmp_path / "src" / "standalone.py"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("def y():\n    return 2\n", encoding="utf-8")
+    await did_save(
+        lsp.DidSaveTextDocumentParams(
+            text_document=lsp.TextDocumentIdentifier(uri=f"file://{file_path}"),
+        )
+    )
+
+    verify_db = await open_database(db_path)
+    verify_store = EventStore(db=verify_db)
+    rows = await verify_store.get_events(limit=10)
+    await verify_db.close()
+    assert any(
+        event["event_type"] == "ContentChangedEvent"
+        and event["payload"].get("path") == str(file_path)
+        for event in rows
+    )
+
+
 def test_node_to_lens() -> None:
     node = make_node("src/app.py::a", file_path="src/app.py", start_line=2, end_line=5)
     lens = _node_to_lens(node)

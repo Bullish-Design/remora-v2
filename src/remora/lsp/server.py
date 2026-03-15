@@ -51,21 +51,39 @@ class DocumentStore:
         return text
 
 
-def create_lsp_server(node_store: NodeStore, event_store: EventStore) -> LanguageServer:
-    """Create an LSP server that projects Remora state into editor surfaces."""
+def create_lsp_server(
+    node_store: NodeStore | None = None,
+    event_store: EventStore | None = None,
+    db_path: Path | None = None,
+) -> LanguageServer:
+    """Create an LSP server from shared stores or a standalone sqlite path."""
     server = LanguageServer("remora", "2.0.0")
     documents = DocumentStore()
+    stores: dict[str, Any] = {}
+
+    async def get_stores() -> tuple[NodeStore, EventStore]:
+        if node_store is not None and event_store is not None:
+            return node_store, event_store
+        if db_path is None:
+            raise RuntimeError("create_lsp_server requires shared stores or db_path")
+        if "node_store" not in stores or "event_store" not in stores:
+            opened_node_store, opened_event_store = await _open_standalone_stores(db_path)
+            stores["node_store"] = opened_node_store
+            stores["event_store"] = opened_event_store
+        return stores["node_store"], stores["event_store"]
 
     @server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)
     async def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
+        current_node_store, _event_store = await get_stores()
         file_path = _uri_to_path(params.text_document.uri)
-        nodes = await node_store.list_nodes(file_path=file_path)
+        nodes = await current_node_store.list_nodes(file_path=file_path)
         return [_node_to_lens(node) for node in nodes]
 
     @server.feature(lsp.TEXT_DOCUMENT_HOVER)
     async def hover(params: lsp.HoverParams) -> lsp.Hover | None:
+        current_node_store, _event_store = await get_stores()
         file_path = _uri_to_path(params.text_document.uri)
-        nodes = await node_store.list_nodes(file_path=file_path)
+        nodes = await current_node_store.list_nodes(file_path=file_path)
         node = _find_node_at_line(nodes, params.position.line + 1)
         if node is None:
             return None
@@ -73,14 +91,16 @@ def create_lsp_server(node_store: NodeStore, event_store: EventStore) -> Languag
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_SAVE)
     async def did_save(params: lsp.DidSaveTextDocumentParams) -> None:
+        _node_store, current_event_store = await get_stores()
         file_path = _uri_to_path(params.text_document.uri)
-        await event_store.append(ContentChangedEvent(path=file_path, change_type="modified"))
+        await current_event_store.append(ContentChangedEvent(path=file_path, change_type="modified"))
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
     async def did_open(params: lsp.DidOpenTextDocumentParams) -> None:
+        _node_store, current_event_store = await get_stores()
         documents.open(params.text_document.uri, params.text_document.text)
         file_path = _uri_to_path(params.text_document.uri)
-        await event_store.append(ContentChangedEvent(path=file_path, change_type="opened"))
+        await current_event_store.append(ContentChangedEvent(path=file_path, change_type="opened"))
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
     async def did_close(params: lsp.DidCloseTextDocumentParams) -> None:
@@ -118,62 +138,7 @@ async def _open_standalone_stores(db_path: Path) -> tuple[NodeStore, EventStore]
 
 def create_lsp_server_standalone(db_path: Path) -> LanguageServer:
     """Create an LSP server that lazily opens stores from a sqlite DB path."""
-    server = LanguageServer("remora", "2.0.0")
-    documents = DocumentStore()
-    stores: dict[str, Any] = {}
-
-    async def get_stores() -> tuple[NodeStore, EventStore]:
-        if "node_store" not in stores or "event_store" not in stores:
-            node_store, event_store = await _open_standalone_stores(db_path)
-            stores["node_store"] = node_store
-            stores["event_store"] = event_store
-        return stores["node_store"], stores["event_store"]
-
-    @server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)
-    async def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
-        node_store, _event_store = await get_stores()
-        file_path = _uri_to_path(params.text_document.uri)
-        nodes = await node_store.list_nodes(file_path=file_path)
-        return [_node_to_lens(node) for node in nodes]
-
-    @server.feature(lsp.TEXT_DOCUMENT_HOVER)
-    async def hover(params: lsp.HoverParams) -> lsp.Hover | None:
-        node_store, _event_store = await get_stores()
-        file_path = _uri_to_path(params.text_document.uri)
-        nodes = await node_store.list_nodes(file_path=file_path)
-        node = _find_node_at_line(nodes, params.position.line + 1)
-        if node is None:
-            return None
-        return _node_to_hover(node)
-
-    @server.feature(lsp.TEXT_DOCUMENT_DID_SAVE)
-    async def did_save(params: lsp.DidSaveTextDocumentParams) -> None:
-        _node_store, event_store = await get_stores()
-        file_path = _uri_to_path(params.text_document.uri)
-        await event_store.append(ContentChangedEvent(path=file_path, change_type="modified"))
-
-    @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
-    async def did_open(params: lsp.DidOpenTextDocumentParams) -> None:
-        documents.open(params.text_document.uri, params.text_document.text)
-
-    @server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
-    async def did_close(params: lsp.DidCloseTextDocumentParams) -> None:
-        documents.close(params.text_document.uri)
-
-    @server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
-    async def did_change(params: lsp.DidChangeTextDocumentParams) -> None:
-        documents.apply_changes(params.text_document.uri, params.content_changes)
-
-    server._remora_handlers = {  # type: ignore[attr-defined]
-        "code_lens": code_lens,
-        "hover": hover,
-        "did_save": did_save,
-        "did_open": did_open,
-        "did_close": did_close,
-        "did_change": did_change,
-        "documents": documents,
-    }
-    return server
+    return create_lsp_server(db_path=db_path)
 
 
 def _node_to_lens(node: Node) -> lsp.CodeLens:
