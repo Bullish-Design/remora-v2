@@ -22,11 +22,8 @@ def create_app(
     event_store: Any,
     node_store: Any,
     event_bus: Any,
-    *,
-    project_root: Path | None = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
-    del project_root
 
     async def index(_request: Request) -> HTMLResponse:
         return HTMLResponse(_INDEX_HTML)

@@ -43,7 +43,6 @@ async def web_env(tmp_path: Path):
         event_store,
         node_store,
         event_bus,
-        project_root=tmp_path,
     )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
