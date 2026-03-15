@@ -1,4 +1,4 @@
-# Query the node graph for agents matching filters (type, status, path).
+# Query the node graph for agents. Filter by node_type, status, or file_path pattern.
 from grail import Input, external
 
 node_type: str = Input("node_type", default="")

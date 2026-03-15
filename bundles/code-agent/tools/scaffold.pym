@@ -1,4 +1,4 @@
-# Create scaffolding files in the agent's workspace.
+# Create scaffolding files in the agent's workspace for organizing analysis and notes.
 from grail import Input, external
 
 intent: str = Input("intent")

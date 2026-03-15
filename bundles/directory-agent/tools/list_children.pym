@@ -1,4 +1,4 @@
-# List all child nodes in this directory.
+# List all child nodes (functions, classes, subdirectories) in this directory.
 from grail import external
 
 

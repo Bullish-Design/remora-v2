@@ -1,4 +1,4 @@
-# Get information about this node's parent directory node.
+# Get information about this node's parent directory agent.
 from grail import external
 
 
