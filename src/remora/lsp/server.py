@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
 from remora.core.db import open_database
-from remora.core.events import EventBus, SubscriptionRegistry, TriggerDispatcher
-from remora.core.events import ContentChangedEvent
+from remora.core.events import (
+    AgentMessageEvent,
+    ContentChangedEvent,
+    EventBus,
+    SubscriptionRegistry,
+    TriggerDispatcher,
+)
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import Node
+
+_STATUS_ICONS = {
+    "idle": "○",
+    "running": "▶",
+    "awaiting_input": "⏸",
+    "awaiting_review": "⏳",
+    "error": "✗",
+}
 
 
 class DocumentStore:
@@ -81,19 +95,40 @@ def create_lsp_server(
 
     @server.feature(lsp.TEXT_DOCUMENT_HOVER)
     async def hover(params: lsp.HoverParams) -> lsp.Hover | None:
-        current_node_store, _event_store = await get_stores()
+        current_node_store, current_event_store = await get_stores()
         file_path = _uri_to_path(params.text_document.uri)
         nodes = await current_node_store.list_nodes(file_path=file_path)
         node = _find_node_at_line(nodes, params.position.line + 1)
         if node is None:
             return None
-        return _node_to_hover(node)
+        edges = await current_node_store.get_edges(node.node_id, direction="both")
+        callers = sorted({edge.from_id for edge in edges if edge.to_id == node.node_id})
+        callees = sorted({edge.to_id for edge in edges if edge.from_id == node.node_id})
+        recent_rows = await current_event_store.get_events_for_agent(node.node_id, limit=5)
+        recent_events = [
+            str(row.get("event_type", ""))
+            for row in recent_rows
+            if row.get("event_type")
+        ]
+        return _node_to_hover(node, callers=callers, callees=callees, recent_events=recent_events)
+
+    @server.feature(lsp.TEXT_DOCUMENT_CODE_ACTION)
+    async def code_action(params: lsp.CodeActionParams) -> list[lsp.CodeAction]:
+        current_node_store, _event_store = await get_stores()
+        file_path = _uri_to_path(params.text_document.uri)
+        nodes = await current_node_store.list_nodes(file_path=file_path)
+        node = _find_node_at_line(nodes, params.range.start.line + 1)
+        if node is None:
+            return []
+        return _node_to_actions(node.node_id)
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_SAVE)
     async def did_save(params: lsp.DidSaveTextDocumentParams) -> None:
         _node_store, current_event_store = await get_stores()
         file_path = _uri_to_path(params.text_document.uri)
-        await current_event_store.append(ContentChangedEvent(path=file_path, change_type="modified"))
+        await current_event_store.append(
+            ContentChangedEvent(path=file_path, change_type="modified")
+        )
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
     async def did_open(params: lsp.DidOpenTextDocumentParams) -> None:
@@ -110,6 +145,33 @@ def create_lsp_server(
     async def did_change(params: lsp.DidChangeTextDocumentParams) -> None:
         documents.apply_changes(params.text_document.uri, params.content_changes)
 
+    @server.command("remora.chat")
+    async def chat_command(ls: LanguageServer, args: list[Any]) -> None:
+        node_id = str(args[0]).strip() if args else ""
+        if not node_id:
+            return
+        ls.show_document(
+            lsp.ShowDocumentParams(
+                uri=f"http://localhost:8080/?node={node_id}",
+                external=True,
+            )
+        )
+
+    @server.command("remora.trigger")
+    async def trigger_command(ls: LanguageServer, args: list[Any]) -> None:
+        del ls
+        node_id = str(args[0]).strip() if args else ""
+        if not node_id:
+            return
+        _node_store, current_event_store = await get_stores()
+        await current_event_store.append(
+            AgentMessageEvent(
+                from_agent="user",
+                to_agent=node_id,
+                content="Manual trigger from editor",
+            )
+        )
+
     # Expose handlers for direct unit testing without spinning up an LSP transport.
     server._remora_handlers = {  # type: ignore[attr-defined]
         "code_lens": code_lens,
@@ -118,6 +180,9 @@ def create_lsp_server(
         "did_open": did_open,
         "did_close": did_close,
         "did_change": did_change,
+        "code_action": code_action,
+        "chat_command": chat_command,
+        "trigger_command": trigger_command,
         "documents": documents,
     }
 
@@ -144,13 +209,14 @@ def create_lsp_server_standalone(db_path: Path) -> LanguageServer:
 def _node_to_lens(node: Node) -> lsp.CodeLens:
     """Map a Node to a CodeLens entry showing runtime status."""
     status = node.status.value if hasattr(node.status, "value") else str(node.status)
+    icon = _STATUS_ICONS.get(status, "○")
     return lsp.CodeLens(
         range=lsp.Range(
             start=lsp.Position(line=max(0, node.start_line - 1), character=0),
             end=lsp.Position(line=max(0, node.end_line - 1), character=0),
         ),
         command=lsp.Command(
-            title=f"Remora: {status}",
+            title=f"Remora {icon} {status}",
             command="remora.showNode",
             arguments=[node.node_id],
         ),
@@ -158,16 +224,35 @@ def _node_to_lens(node: Node) -> lsp.CodeLens:
     )
 
 
-def _node_to_hover(node: Node) -> lsp.Hover:
+def _node_to_hover(
+    node: Node,
+    *,
+    callers: list[str] | None = None,
+    callees: list[str] | None = None,
+    recent_events: list[str] | None = None,
+) -> lsp.Hover:
     """Map a Node to markdown hover details."""
     node_type = node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
     status = node.status.value if hasattr(node.status, "value") else str(node.status)
+    caller_ids = callers or []
+    callee_ids = callees or []
+    event_names = recent_events or []
+    recent_events_block = (
+        "\n".join(f"- `{event_name}`" for event_name in event_names)
+        if event_names
+        else "- _none_"
+    )
     value = (
         f"### {node.full_name}\n"
         f"- Node ID: `{node.node_id}`\n"
         f"- Type: `{node_type}`\n"
         f"- Status: `{status}`\n"
-        f"- File: `{node.file_path}:{node.start_line}-{node.end_line}`"
+        f"- File: `{node.file_path}:{node.start_line}-{node.end_line}`\n"
+        f"- Parent: `{node.parent_id or '-'}`\n"
+        f"- Callers: `{len(caller_ids)}`\n"
+        f"- Callees: `{len(callee_ids)}`\n"
+        "#### Recent Events\n"
+        f"{recent_events_block}"
     )
     return lsp.Hover(
         contents=lsp.MarkupContent(
@@ -175,6 +260,29 @@ def _node_to_hover(node: Node) -> lsp.Hover:
             value=value,
         )
     )
+
+
+def _node_to_actions(node_id: str) -> list[lsp.CodeAction]:
+    return [
+        lsp.CodeAction(
+            title="Remora: Open Chat Panel",
+            kind=lsp.CodeActionKind.Refactor,
+            command=lsp.Command(
+                title="Open Chat Panel",
+                command="remora.chat",
+                arguments=[node_id],
+            ),
+        ),
+        lsp.CodeAction(
+            title="Remora: Trigger Agent",
+            kind=lsp.CodeActionKind.QuickFix,
+            command=lsp.Command(
+                title="Trigger Agent",
+                command="remora.trigger",
+                arguments=[node_id],
+            ),
+        ),
+    ]
 
 
 def _find_node_at_line(nodes: list[Node], line: int) -> Node | None:

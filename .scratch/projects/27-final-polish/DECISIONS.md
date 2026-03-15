@@ -12,3 +12,6 @@
 - Decision 004: Workspace proposal file mapping supports `source/{node_id}` as canonical self-rewrite path.
   - Rationale: deterministic mapping from agent workspace content to on-disk node file during accept.
 
+- Decision 005: Implemented LSP code actions as command-backed actions (`remora.chat`, `remora.trigger`) to keep client integration fully standard.
+  - Rationale: no editor-specific protocol extensions required; Neovim-compatible via native codeAction + executeCommand flow.
+
