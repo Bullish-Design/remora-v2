@@ -122,6 +122,7 @@ def create_app(
     async def sse_stream(request: Request) -> StreamingResponse:
         once = request.query_params.get("once", "").lower() in {"1", "true", "yes"}
         replay_raw = request.query_params.get("replay", "0")
+        last_event_id = request.headers.get("Last-Event-ID")
         try:
             replay_limit = max(0, min(500, int(replay_raw)))
         except ValueError:
@@ -129,10 +130,11 @@ def create_app(
 
         async def event_generator():
             yield ": connected\n\n"
-            if replay_limit > 0:
-                rows = await event_store.get_events(limit=replay_limit)
-                for row in reversed(rows):
+            if last_event_id:
+                rows = await event_store.get_events_after(last_event_id)
+                for row in rows:
                     event_name = row.get("event_type", "Event")
+                    event_id = row.get("id", "")
                     replay_payload = {
                         "event_type": event_name,
                         "timestamp": row.get("timestamp"),
@@ -140,7 +142,20 @@ def create_app(
                         "payload": row.get("payload", {}),
                     }
                     payload_text = json.dumps(replay_payload, separators=(",", ":"))
-                    yield f"event: {event_name}\ndata: {payload_text}\n\n"
+                    yield f"id: {event_id}\nevent: {event_name}\ndata: {payload_text}\n\n"
+            elif replay_limit > 0:
+                rows = await event_store.get_events(limit=replay_limit)
+                for row in reversed(rows):
+                    event_name = row.get("event_type", "Event")
+                    event_id = row.get("id", "")
+                    replay_payload = {
+                        "event_type": event_name,
+                        "timestamp": row.get("timestamp"),
+                        "correlation_id": row.get("correlation_id"),
+                        "payload": row.get("payload", {}),
+                    }
+                    payload_text = json.dumps(replay_payload, separators=(",", ":"))
+                    yield f"id: {event_id}\nevent: {event_name}\ndata: {payload_text}\n\n"
             if once:
                 return
             async with event_bus.stream() as stream:
@@ -148,7 +163,7 @@ def create_app(
                     if await request.is_disconnected():
                         break
                     payload = json.dumps(event.to_envelope(), separators=(",", ":"))
-                    yield f"event: {event.event_type}\ndata: {payload}\n\n"
+                    yield f"id: {event.timestamp}\nevent: {event.event_type}\ndata: {payload}\n\n"
 
         headers = {
             "Cache-Control": "no-cache",

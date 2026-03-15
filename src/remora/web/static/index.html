@@ -40,6 +40,15 @@
       overflow-y: auto;
     }
     h1 { margin: 0 0 12px; font-size: 1.1rem; letter-spacing: 0.02em; }
+    #connection-status.connected { color: #15803d; }
+    #connection-status.disconnected {
+      color: #b91c1c;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
     .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; }
     #node-details pre {
       max-height: 220px;
@@ -87,7 +96,10 @@
 <body data-sigma-iterations="30">
   <div id="graph"></div>
   <aside id="sidebar">
-    <h1>Remora</h1>
+    <h1>
+      Remora
+      <span id="connection-status" class="connected" title="SSE connection status">●</span>
+    </h1>
     <div class="meta">Live agent graph</div>
     <section>
       <div id="companion-panel" style="
@@ -400,141 +412,163 @@
       document.getElementById("chat-input").value = "";
     });
 
-    const evtSource = new EventSource('/sse');
     function ssePayload(event) {
       const data = JSON.parse(event.data);
       return data.payload || data;
     }
-    evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
-      const payload = ssePayload(event);
-      if (!graph.hasNode(payload.node_id)) {
-        const filePath = payload.file_path || "";
-        const { x, y } = filePath
-          ? getFileCluster(filePath)
-          : deterministicPosition(payload.node_id);
-        graph.addNode(payload.node_id, {
-          label: payload.name || payload.node_id.split("::").pop(),
-          size: 8,
-          x,
-          y,
-          node_type: payload.node_type || "function",
-          color: nodeColor(payload.node_type || "function", "idle"),
-          file_path: filePath,
-        });
+    function setConnectionStatus(connected) {
+      const indicator = document.getElementById("connection-status");
+      if (!indicator) return;
+      indicator.classList.toggle("connected", connected);
+      indicator.classList.toggle("disconnected", !connected);
+    }
 
-        if (filePath && !graph.hasNode(`__label__${filePath}`)) {
-          const cluster = fileGroups[filePath];
-          graph.addNode(`__label__${filePath}`, {
-            label: filePath.split("/").pop(),
-            size: 3,
-            x: cluster.cx,
-            y: cluster.cy,
-            color: "#6f645c",
-            node_type: "__label__",
+    function createEventSource() {
+      const evtSource = new EventSource("/sse?replay=50");
+
+      evtSource.onopen = () => {
+        setConnectionStatus(true);
+      };
+
+      evtSource.onerror = () => {
+        setConnectionStatus(false);
+        if (evtSource.readyState === EventSource.CLOSED) {
+          setTimeout(createEventSource, 2000);
+        }
+      };
+
+      evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
+        const payload = ssePayload(event);
+        if (!graph.hasNode(payload.node_id)) {
+          const filePath = payload.file_path || "";
+          const { x, y } = filePath
+            ? getFileCluster(filePath)
+            : deterministicPosition(payload.node_id);
+          graph.addNode(payload.node_id, {
+            label: payload.name || payload.node_id.split("::").pop(),
+            size: 8,
+            x,
+            y,
+            node_type: payload.node_type || "function",
+            color: nodeColor(payload.node_type || "function", "idle"),
             file_path: filePath,
           });
+
+          if (filePath && !graph.hasNode(`__label__${filePath}`)) {
+            const cluster = fileGroups[filePath];
+            graph.addNode(`__label__${filePath}`, {
+              label: filePath.split("/").pop(),
+              size: 3,
+              x: cluster.cx,
+              y: cluster.cy,
+              color: "#6f645c",
+              node_type: "__label__",
+              file_path: filePath,
+            });
+          }
         }
-      }
-      renderer.refresh();
-      appendEventLine(`NodeDiscoveredEvent: ${payload.node_id}`);
-    });
-    evtSource.addEventListener("NodeRemovedEvent", (event) => {
-      const payload = ssePayload(event);
-      if (graph.hasNode(payload.node_id)) {
-        graph.dropNode(payload.node_id);
         renderer.refresh();
-      }
-      appendEventLine(`NodeRemovedEvent: ${payload.node_id}`);
-    });
-    evtSource.addEventListener("NodeChangedEvent", (event) => {
-      const payload = ssePayload(event);
-      appendEventLine(`NodeChangedEvent: ${payload.node_id}`);
-    });
-    evtSource.addEventListener("AgentStartEvent", (event) => {
-      const payload = ssePayload(event);
-      if (graph.hasNode(payload.agent_id)) {
-        graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "running"));
-        renderer.refresh();
-      }
-      appendEventLine(`AgentStartEvent: ${payload.agent_id}`);
-    });
-    evtSource.addEventListener("AgentCompleteEvent", (event) => {
-      const payload = ssePayload(event);
-      if (graph.hasNode(payload.agent_id)) {
-        const nodeType = graph.getNodeAttribute(payload.agent_id, "node_type");
-        graph.setNodeAttribute(payload.agent_id, "color", nodeColor(nodeType, "idle"));
-        renderer.refresh();
-      }
-      appendEventLine(`AgentCompleteEvent: ${payload.agent_id}`);
-    });
-    evtSource.addEventListener("AgentErrorEvent", (event) => {
-      const payload = ssePayload(event);
-      if (graph.hasNode(payload.agent_id)) {
-        graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "error"));
-        renderer.refresh();
-      }
-      appendEventLine(`AgentErrorEvent: ${payload.agent_id}`);
-    });
-    evtSource.addEventListener("AgentMessageEvent", (event) => {
-      const payload = ssePayload(event);
-      if (payload.to_agent === "user") {
-        appendChatMessage(payload.from_agent || "agent", payload.content || "", "agent");
-      }
-      appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
-    });
-    evtSource.addEventListener("CursorFocusEvent", (event) => {
-      const payload = ssePayload(event);
-      const panel = document.getElementById("companion-panel");
+        appendEventLine(`NodeDiscoveredEvent: ${payload.node_id}`);
+      });
+      evtSource.addEventListener("NodeRemovedEvent", (event) => {
+        const payload = ssePayload(event);
+        if (graph.hasNode(payload.node_id)) {
+          graph.dropNode(payload.node_id);
+          renderer.refresh();
+        }
+        appendEventLine(`NodeRemovedEvent: ${payload.node_id}`);
+      });
+      evtSource.addEventListener("NodeChangedEvent", (event) => {
+        const payload = ssePayload(event);
+        appendEventLine(`NodeChangedEvent: ${payload.node_id}`);
+      });
+      evtSource.addEventListener("AgentStartEvent", (event) => {
+        const payload = ssePayload(event);
+        if (graph.hasNode(payload.agent_id)) {
+          graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "running"));
+          renderer.refresh();
+        }
+        appendEventLine(`AgentStartEvent: ${payload.agent_id}`);
+      });
+      evtSource.addEventListener("AgentCompleteEvent", (event) => {
+        const payload = ssePayload(event);
+        if (graph.hasNode(payload.agent_id)) {
+          const nodeType = graph.getNodeAttribute(payload.agent_id, "node_type");
+          graph.setNodeAttribute(payload.agent_id, "color", nodeColor(nodeType, "idle"));
+          renderer.refresh();
+        }
+        appendEventLine(`AgentCompleteEvent: ${payload.agent_id}`);
+      });
+      evtSource.addEventListener("AgentErrorEvent", (event) => {
+        const payload = ssePayload(event);
+        if (graph.hasNode(payload.agent_id)) {
+          graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "error"));
+          renderer.refresh();
+        }
+        appendEventLine(`AgentErrorEvent: ${payload.agent_id}`);
+      });
+      evtSource.addEventListener("AgentMessageEvent", (event) => {
+        const payload = ssePayload(event);
+        if (payload.to_agent === "user") {
+          appendChatMessage(payload.from_agent || "agent", payload.content || "", "agent");
+        }
+        appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
+      });
+      evtSource.addEventListener("CursorFocusEvent", (event) => {
+        const payload = ssePayload(event);
+        const panel = document.getElementById("companion-panel");
 
-      if (!payload.node_id) {
-        panel.style.display = "none";
-        return;
-      }
+        if (!payload.node_id) {
+          panel.style.display = "none";
+          return;
+        }
 
-      panel.style.display = "block";
-      document.getElementById("companion-node-name").textContent = payload.node_name || payload.node_id;
-      document.getElementById("companion-meta").textContent =
-        `${payload.node_type || "unknown"} · ${payload.file_path}:${payload.line}`;
+        panel.style.display = "block";
+        document.getElementById("companion-node-name").textContent = payload.node_name || payload.node_id;
+        document.getElementById("companion-meta").textContent =
+          `${payload.node_type || "unknown"} · ${payload.file_path}:${payload.line}`;
 
-      fetch(`/api/nodes/${encodeURIComponent(payload.node_id)}`)
-        .then((response) => response.json())
-        .then((node) => {
-          if (node.source_code) {
-            document.getElementById("companion-source").textContent = node.source_code;
-          } else {
-            document.getElementById("companion-source").textContent = "(no source)";
-          }
-        })
-        .catch(() => {
-          document.getElementById("companion-source").textContent = "(failed to load)";
-        });
+        fetch(`/api/nodes/${encodeURIComponent(payload.node_id)}`)
+          .then((response) => response.json())
+          .then((node) => {
+            if (node.source_code) {
+              document.getElementById("companion-source").textContent = node.source_code;
+            } else {
+              document.getElementById("companion-source").textContent = "(no source)";
+            }
+          })
+          .catch(() => {
+            document.getElementById("companion-source").textContent = "(failed to load)";
+          });
 
-      if (graph.hasNode(payload.node_id)) {
-        const prevSize = graph.getNodeAttribute(payload.node_id, "size");
-        graph.setNodeAttribute(payload.node_id, "size", prevSize * 1.5);
+        if (graph.hasNode(payload.node_id)) {
+          const prevSize = graph.getNodeAttribute(payload.node_id, "size");
+          graph.setNodeAttribute(payload.node_id, "size", prevSize * 1.5);
 
-        const nodePos = graph.getNodeAttributes(payload.node_id);
-        const camera = renderer.getCamera();
-        camera.animate({ x: nodePos.x, y: nodePos.y, ratio: 0.5 }, { duration: 300 });
+          const nodePos = graph.getNodeAttributes(payload.node_id);
+          const camera = renderer.getCamera();
+          camera.animate({ x: nodePos.x, y: nodePos.y, ratio: 0.5 }, { duration: 300 });
 
-        renderer.refresh();
-        setTimeout(() => {
-          if (graph.hasNode(payload.node_id)) {
-            graph.setNodeAttribute(payload.node_id, "size", prevSize);
-            renderer.refresh();
-          }
-        }, 500);
-      }
-    });
-    evtSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        appendEventLine(`${payload.event_type || "Event"}: ${payload.correlation_id || ""}`);
-      } catch {
-        appendEventLine(event.data);
-      }
-    };
+          renderer.refresh();
+          setTimeout(() => {
+            if (graph.hasNode(payload.node_id)) {
+              graph.setNodeAttribute(payload.node_id, "size", prevSize);
+              renderer.refresh();
+            }
+          }, 500);
+        }
+      });
+      evtSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          appendEventLine(`${payload.event_type || "Event"}: ${payload.correlation_id || ""}`);
+        } catch {
+          appendEventLine(event.data);
+        }
+      };
+    }
 
+    createEventSource();
     loadGraph();
   </script>
 </body>

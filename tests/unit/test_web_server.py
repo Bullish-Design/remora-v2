@@ -17,6 +17,19 @@ from remora.web.server import create_app
 from tests.factories import make_node
 
 
+async def _read_sse_event_lines(response: httpx.Response) -> list[str]:
+    lines: list[str] = []
+    async for line in response.aiter_lines():
+        if not line:
+            if lines:
+                return lines
+            continue
+        if line.startswith(":"):
+            continue
+        lines.append(line)
+    raise AssertionError("SSE stream closed before event payload was received")
+
+
 @pytest_asyncio.fixture
 async def web_env(tmp_path: Path):
     db = await open_database(tmp_path / "web.db")
@@ -259,6 +272,63 @@ async def test_sse_replay_and_live_payload_shapes_match(web_env) -> None:
     live_payload = json.loads(live_line.removeprefix("data: ").strip())
     assert set(replay_payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
     assert set(live_payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
+
+
+@pytest.mark.asyncio
+async def test_sse_includes_event_id(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+    event_id = await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="with-id")
+    )
+
+    async with client.stream("GET", "/sse?once=1&replay=1") as response:
+        lines = await asyncio.wait_for(_read_sse_event_lines(response), timeout=2.0)
+
+    id_line = next((line for line in lines if line.startswith("id: ")), None)
+    data_line = next((line for line in lines if line.startswith("data: ")), None)
+    assert id_line == f"id: {event_id}"
+    assert data_line is not None
+    payload = json.loads(data_line.removeprefix("data: ").strip())
+    assert payload["payload"]["content"] == "with-id"
+
+
+@pytest.mark.asyncio
+async def test_sse_last_event_id_header(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+    first_id = await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="first")
+    )
+    _second_id = await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="second")
+    )
+
+    async with client.stream(
+        "GET",
+        "/sse?once=1",
+        headers={"Last-Event-ID": str(first_id)},
+    ) as response:
+        lines = await asyncio.wait_for(_read_sse_event_lines(response), timeout=2.0)
+
+    id_line = next((line for line in lines if line.startswith("id: ")), None)
+    data_line = next((line for line in lines if line.startswith("data: ")), None)
+    assert id_line is not None
+    assert data_line is not None
+    payload = json.loads(data_line.removeprefix("data: ").strip())
+    assert payload["payload"]["content"] == "second"
+
+
+@pytest.mark.asyncio
+async def test_get_events_after(web_env) -> None:
+    _client, _node_store, event_store, _source_path = web_env
+    first_id = await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="a")
+    )
+    await event_store.append(AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="b"))
+    await event_store.append(AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="c"))
+
+    rows = await event_store.get_events_after(str(first_id))
+    assert [row["payload"]["content"] for row in rows] == ["b", "c"]
+    assert rows[0]["id"] > first_id
 
 
 @pytest.mark.asyncio

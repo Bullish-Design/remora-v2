@@ -124,4 +124,21 @@ class EventStore:
             row["payload"] = json.loads(row["payload"])
         return result
 
+    async def get_events_after(self, after_id: str, limit: int = 500) -> list[dict[str, Any]]:
+        """Get events after a given event id, oldest first."""
+        try:
+            numeric_id = int(after_id)
+        except (TypeError, ValueError):
+            return []
+
+        cursor = await self._db.execute(
+            "SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?",
+            (numeric_id, limit),
+        )
+        rows = await cursor.fetchall()
+        result = [dict(row) for row in rows]
+        for row in result:
+            row["payload"] = json.loads(row["payload"])
+        return result
+
 __all__ = ["EventStore"]
