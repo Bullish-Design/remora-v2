@@ -523,6 +523,7 @@ trigger_cooldown_ms: 2000
 | Remora installed | `remora --help` | CLI help text |
 | Demo project set up | `ls demo-project/src/` | 4 Python files |
 | Neovim LSP configured | Open .py file, `:LspInfo` | remora attached |
+| Neovim helper copied | `ls ~/.config/nvim/lua/remora.lua` | file exists |
 | Web UI accessible | `curl http://localhost:8080/` | HTML response |
 | Bundles copied | `ls demo-project/bundles/` | system, code-agent, directory-agent |
 | Queries available | `ls demo-project/queries/` | python.scm |
