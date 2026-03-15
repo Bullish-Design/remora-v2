@@ -90,6 +90,42 @@
     <h1>Remora</h1>
     <div class="meta">Live agent graph</div>
     <section>
+      <div id="companion-panel" style="
+        display: none;
+        padding: 12px;
+        margin-bottom: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f9f6f0;
+      ">
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;">
+          FOLLOWING CURSOR
+        </div>
+        <div id="companion-node-name" style="
+          font-weight: bold;
+          font-size: 16px;
+          color: var(--accent);
+          margin-bottom: 8px;
+        "></div>
+        <div id="companion-meta" style="
+          font-size: 12px;
+          color: var(--muted);
+          margin-bottom: 8px;
+        "></div>
+        <div id="companion-source" style="
+          font-family: monospace;
+          font-size: 11px;
+          background: #fffcf7;
+          padding: 8px;
+          border-radius: 4px;
+          max-height: 200px;
+          overflow-y: auto;
+          white-space: pre-wrap;
+          color: #1f1a16;
+        "></div>
+      </div>
+    </section>
+    <section>
       <h2 id="node-name">Select a node</h2>
       <div id="node-details"></div>
     </section>
@@ -336,6 +372,50 @@
         appendChatMessage(payload.from_agent || "agent", payload.content || "", "agent");
       }
       appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
+    });
+    evtSource.addEventListener("CursorFocusEvent", (event) => {
+      const payload = ssePayload(event);
+      const panel = document.getElementById("companion-panel");
+
+      if (!payload.node_id) {
+        panel.style.display = "none";
+        return;
+      }
+
+      panel.style.display = "block";
+      document.getElementById("companion-node-name").textContent = payload.node_name || payload.node_id;
+      document.getElementById("companion-meta").textContent =
+        `${payload.node_type || "unknown"} · ${payload.file_path}:${payload.line}`;
+
+      fetch(`/api/nodes/${encodeURIComponent(payload.node_id)}`)
+        .then((response) => response.json())
+        .then((node) => {
+          if (node.source_code) {
+            document.getElementById("companion-source").textContent = node.source_code;
+          } else {
+            document.getElementById("companion-source").textContent = "(no source)";
+          }
+        })
+        .catch(() => {
+          document.getElementById("companion-source").textContent = "(failed to load)";
+        });
+
+      if (graph.hasNode(payload.node_id)) {
+        const prevSize = graph.getNodeAttribute(payload.node_id, "size");
+        graph.setNodeAttribute(payload.node_id, "size", prevSize * 1.5);
+
+        const nodePos = graph.getNodeAttributes(payload.node_id);
+        const camera = renderer.getCamera();
+        camera.animate({ x: nodePos.x, y: nodePos.y, ratio: 0.5 }, { duration: 300 });
+
+        renderer.refresh();
+        setTimeout(() => {
+          if (graph.hasNode(payload.node_id)) {
+            graph.setNodeAttribute(payload.node_id, "size", prevSize);
+            renderer.refresh();
+          }
+        }, 500);
+      }
     });
     evtSource.onmessage = (event) => {
       try {
