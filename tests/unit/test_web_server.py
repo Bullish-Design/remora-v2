@@ -159,6 +159,33 @@ async def test_api_events(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_cursor_resolves_node(web_env) -> None:
+    client, _node_store, _event_store, source_path = web_env
+    response = await client.post(
+        "/api/cursor",
+        json={
+            "file_path": str(source_path),
+            "line": 1,
+            "character": 0,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["node_id"] == "src/app.py::a"
+
+
+@pytest.mark.asyncio
+async def test_api_cursor_requires_file_path(web_env) -> None:
+    client, *_rest = web_env
+    response = await client.post(
+        "/api/cursor",
+        json={"line": 1, "character": 0},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_sse_stream_connected(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
 

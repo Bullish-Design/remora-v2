@@ -8,6 +8,7 @@ from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
     ContentChangedEvent,
+    CursorFocusEvent,
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
@@ -87,6 +88,7 @@ def test_all_event_types_instantiate() -> None:
             new_hash="new",
         ),
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
+        CursorFocusEvent(file_path="src/app.py", line=3, character=0, node_id="src/app.py::a"),
     ]
     assert all(event.event_type for event in events)
 

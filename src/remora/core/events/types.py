@@ -111,6 +111,17 @@ class ToolResultEvent(Event):
         return self.result_summary
 
 
+class CursorFocusEvent(Event):
+    """Emitted when the editor cursor focuses on a code element."""
+
+    file_path: str
+    line: int
+    character: int
+    node_id: str | None = None
+    node_name: str | None = None
+    node_type: str | None = None
+
+
 EventHandler = Callable[[Event], Any]
 
 
@@ -126,5 +137,6 @@ __all__ = [
     "ContentChangedEvent",
     "CustomEvent",
     "ToolResultEvent",
+    "CursorFocusEvent",
     "EventHandler",
 ]
