@@ -90,6 +90,29 @@
       font-size: 0.82rem;
       white-space: pre-wrap;
     }
+    #conversation-panel {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f9f6f0;
+      padding: 8px;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+    }
+    .conversation-msg {
+      margin-bottom: 8px;
+      padding: 6px;
+      border-radius: 6px;
+      background: #fffcf7;
+    }
+    .conversation-msg strong {
+      color: var(--accent);
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
   </style>
 </head>
   <!-- Configure Sigma via the data attribute below. Increase `data-sigma-iterations` for slower, smoother layouts. -->
@@ -159,6 +182,10 @@
     <section>
       <h3>Events</h3>
       <div id="events"></div>
+    </section>
+    <section>
+      <h3>Conversation</h3>
+      <div id="conversation-panel">(select a node)</div>
     </section>
   </aside>
   <script>
@@ -362,6 +389,39 @@
       container.scrollTop = container.scrollHeight;
     }
 
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('\"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    async function loadConversation(nodeId) {
+      const panel = document.getElementById("conversation-panel");
+      try {
+        const response = await fetch(`/api/nodes/${encodeURIComponent(nodeId)}/conversation`);
+        if (!response.ok) {
+          panel.textContent = "(no active conversation)";
+          return;
+        }
+        const payload = await response.json();
+        if (!payload.history || payload.history.length === 0) {
+          panel.textContent = "(empty conversation)";
+          return;
+        }
+        panel.innerHTML = payload.history.map((message) => (
+          `<div class=\"conversation-msg\">` +
+          `<strong>${escapeHtml(message.role || "unknown")}</strong>` +
+          `<div>${escapeHtml(message.content || "")}</div>` +
+          `</div>`
+        )).join("");
+      } catch {
+        panel.textContent = "(failed to load conversation)";
+      }
+    }
+
     async function showNode(nodeId) {
       const response = await fetch(`/api/nodes/${encodeURIComponent(nodeId)}`);
       if (!response.ok) return;
@@ -394,6 +454,7 @@
       chat.innerHTML = "";
       chat.style.display = "none";
       showNode(nodeId);
+      loadConversation(nodeId);
     }
 
     renderer.on("clickNode", ({ node }) => {

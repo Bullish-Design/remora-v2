@@ -7,6 +7,7 @@ import json
 import time
 from collections import deque
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -19,6 +20,9 @@ from remora.core.events.store import EventStore
 from remora.core.events import AgentMessageEvent, CursorFocusEvent
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
+
+if TYPE_CHECKING:
+    from remora.core.runner import ActorPool
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
@@ -47,6 +51,7 @@ def create_app(
     node_store: NodeStore,
     event_bus: EventBus,
     metrics: Metrics | None = None,
+    actor_pool: "ActorPool | None" = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()
@@ -123,6 +128,23 @@ def create_app(
         if metrics is not None:
             health["metrics"] = metrics.snapshot()
         return JSONResponse(health)
+
+    async def api_conversation(request: Request) -> JSONResponse:
+        if actor_pool is None:
+            return JSONResponse({"error": "No active actor for this node"}, status_code=404)
+
+        node_id = request.path_params["node_id"]
+        actor = actor_pool.actors.get(node_id)
+        if actor is None:
+            return JSONResponse({"error": "No active actor for this node"}, status_code=404)
+        history = [
+            {
+                "role": str(getattr(message, "role", "")),
+                "content": str(getattr(message, "content", ""))[:2000],
+            }
+            for message in actor.history
+        ]
+        return JSONResponse({"node_id": node_id, "history": history})
 
     async def api_cursor(request: Request) -> JSONResponse:
         data = await request.json()
@@ -233,6 +255,7 @@ def create_app(
         Route("/api/nodes", endpoint=api_nodes),
         Route("/api/edges", endpoint=api_all_edges),
         Route("/api/nodes/{node_id:path}/edges", endpoint=api_edges),
+        Route("/api/nodes/{node_id:path}/conversation", endpoint=api_conversation),
         Route("/api/nodes/{node_id:path}", endpoint=api_node),
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
         Route("/api/events", endpoint=api_events),

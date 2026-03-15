@@ -156,6 +156,7 @@ class Actor:
         self._metrics = metrics
         self._task: asyncio.Task | None = None
         self._last_active: float = time.time()
+        self._history: list[Message] = []
 
         # Per-actor policy state (moved from global runner dicts)
         self._last_trigger_ms: float = 0.0
@@ -168,6 +169,11 @@ class Actor:
     @property
     def is_running(self) -> bool:
         return self._task is not None and not self._task.done()
+
+    @property
+    def history(self) -> list[Message]:
+        """Read-only access to conversation history for observability."""
+        return list(self._history)
 
     def start(self) -> None:
         """Launch the actor's processing loop as a managed asyncio.Task."""
@@ -269,6 +275,7 @@ class Actor:
                     Message(role="system", content=system_prompt),
                     Message(role="user", content=self._build_prompt(node, trigger)),
                 ]
+                self._history.extend(messages)
 
                 result = await self._run_kernel(
                     node_id,
@@ -282,6 +289,7 @@ class Actor:
                 )
 
                 response_text = extract_response_text(result)
+                self._history.append(Message(role="assistant", content=response_text))
                 await self._complete_agent_turn(node_id, response_text, outbox, trigger, turn_log)
                 if self._metrics is not None:
                     self._metrics.agent_turns_total += 1

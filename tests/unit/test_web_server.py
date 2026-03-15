@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 import pytest_asyncio
+from structured_agents import Message
 
 from remora.core.events import AgentMessageEvent, EventBus, EventStore
 from remora.core.db import open_database
@@ -419,6 +420,44 @@ async def test_sse_stream_stops_on_shutdown(web_env) -> None:
                     break
 
     assert ": server-shutdown" in lines
+
+
+@pytest.mark.asyncio
+async def test_conversation_endpoint_returns_history(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeActor:
+        @property
+        def history(self) -> list[Message]:
+            return [
+                Message(role="user", content="hello"),
+                Message(role="assistant", content="hi"),
+            ]
+
+    class FakeActorPool:
+        @property
+        def actors(self) -> dict[str, FakeActor]:
+            return {"src/app.py::a": FakeActor()}
+
+    app = create_app(event_store, node_store, EventBus(), actor_pool=FakeActorPool())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/nodes/src/app.py::a/conversation")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["node_id"] == "src/app.py::a"
+    assert payload["history"][0]["role"] == "user"
+    assert payload["history"][1]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_conversation_endpoint_404_no_actor(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+    app = create_app(event_store, node_store, EventBus())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/nodes/src/app.py::a/conversation")
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
