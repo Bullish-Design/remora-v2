@@ -1,3 +1,4 @@
+# Write a reflection note to persistent workspace storage for future reference.
 from grail import Input, external
 
 node_id: str = Input("node_id", default="")

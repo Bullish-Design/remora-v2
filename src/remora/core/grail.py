@@ -57,6 +57,34 @@ def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
     return _cached_script(content_hash, filename, source)
 
 
+def _extract_description(script: grail.GrailScript, source: str | None = None) -> str:
+    """Extract a tool description from script metadata or source text."""
+    docstring = getattr(script, "docstring", None)
+    if isinstance(docstring, str) and docstring.strip():
+        return docstring.strip()
+
+    if source:
+        lines = source.strip().splitlines()
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#") and not stripped.startswith("#!"):
+                return stripped.lstrip("# ").strip()
+            if stripped.startswith('"""') or stripped.startswith("'''"):
+                quote = stripped[:3]
+                if stripped.count(quote) >= 2:
+                    inner = stripped[3 : stripped.index(quote, 3)].strip()
+                    if inner:
+                        return inner
+                break
+            if stripped.startswith("from ") or stripped.startswith("import "):
+                continue
+            break
+
+    return f"Tool: {script.name}"
+
+
 class GrailTool:
     """A structured-agents tool wrapper around a GrailScript."""
 
@@ -68,6 +96,7 @@ class GrailTool:
         name_override: str | None = None,
         agent_id: str = "?",
         source_file: str | None = None,
+        source: str | None = None,
     ):
         self._script = script
         self._capabilities = capabilities if capabilities is not None else {}
@@ -75,7 +104,7 @@ class GrailTool:
         self._source_file = source_file or f"{script.name}.pym"
         self._schema = ToolSchema(
             name=name_override or script.name,
-            description=f"Tool: {script.name}",
+            description=_extract_description(script, source),
             parameters=_build_parameters(script),
         )
 
@@ -160,6 +189,7 @@ async def discover_tools(
                     capabilities=resolved_capabilities,
                     agent_id=agent_id,
                     source_file=filename,
+                    source=source,
                 )
             )
         except Exception:  # noqa: BLE001 - skip invalid tool and continue

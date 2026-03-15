@@ -1,3 +1,4 @@
+# Summarize the directory tree structure below this node.
 from grail import Input, external
 
 max_depth: int = Input("max_depth", default=3)

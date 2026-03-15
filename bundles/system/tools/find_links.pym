@@ -1,3 +1,4 @@
+# Find related links and references for this code element.
 from grail import Input, external
 
 node_id: str = Input("node_id", default="")

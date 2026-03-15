@@ -1,3 +1,4 @@
+# Rewrite this code element's source code with the provided new_source.
 from grail import Input, external
 
 new_source: str = Input("new_source")

@@ -1,3 +1,4 @@
+# Write a value to the agent's persistent key-value store.
 from grail import Input, external
 
 key: str = Input("key")

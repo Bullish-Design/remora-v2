@@ -1,3 +1,4 @@
+# Broadcast a message to all agents matching a path glob pattern.
 from grail import Input, external
 
 pattern: str = Input("pattern")

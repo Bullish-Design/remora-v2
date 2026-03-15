@@ -1,3 +1,4 @@
+# Categorize this code element by purpose and domain.
 from grail import Input, external
 
 node_id: str = Input("node_id", default="")

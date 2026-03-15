@@ -67,6 +67,18 @@ def test_grail_tool_schema(tmp_path: Path) -> None:
     assert tool.schema.parameters["properties"]["name"]["type"] == "string"
 
 
+def test_grail_tool_description_from_source_comment(tmp_path: Path) -> None:
+    script = _load_script(tmp_path)
+    source = (
+        "# Send a message to another agent.\n"
+        "from grail import Input\n"
+        'name: str = Input("name")\n'
+        "result = name\n"
+    )
+    tool = GrailTool(script=script, source=source)
+    assert tool.schema.description == "Send a message to another agent."
+
+
 @pytest.mark.asyncio
 async def test_grail_tool_execute(tmp_path: Path) -> None:
     _ = _load_script(tmp_path)

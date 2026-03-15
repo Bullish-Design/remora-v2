@@ -1,3 +1,4 @@
+# Remove a subscription from this agent.
 from grail import Input, external
 
 subscription_id: int = Input("subscription_id")

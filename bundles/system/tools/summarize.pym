@@ -1,3 +1,4 @@
+# Generate a summary of this agent's workspace and context.
 from grail import Input, external
 
 node_id: str = Input("node_id", default="")

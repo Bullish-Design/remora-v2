@@ -1,3 +1,4 @@
+# Subscribe this agent to events matching specified types and path patterns.
 from grail import Input, external
 
 event_types: str = Input("event_types", default="")
