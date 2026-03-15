@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from collections import deque
@@ -17,16 +18,21 @@ from starlette.staticfiles import StaticFiles
 
 from remora.core.events import (
     AgentMessageEvent,
+    ContentChangedEvent,
     CursorFocusEvent,
     HumanInputResponseEvent,
+    RewriteAcceptedEvent,
+    RewriteRejectedEvent,
 )
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
+from remora.core.types import NodeStatus
 
 if TYPE_CHECKING:
     from remora.core.runner import ActorPool
+    from remora.core.workspace import CairnWorkspaceService
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
@@ -56,10 +62,37 @@ def create_app(
     event_bus: EventBus,
     metrics: Metrics | None = None,
     actor_pool: ActorPool | None = None,
+    workspace_service: CairnWorkspaceService | None = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()
     chat_limiter = RateLimiter(max_requests=10, window_seconds=60.0)
+
+    def _workspace_path_to_disk_path(
+        node_id: str,
+        node_file_path: str,
+        workspace_path: str,
+    ) -> Path:
+        normalized = workspace_path.strip("/")
+        if normalized.startswith("source/"):
+            source_path = normalized.removeprefix("source/")
+            if source_path:
+                if source_path.startswith("/"):
+                    return Path(source_path)
+                if source_path == node_id:
+                    return Path(node_file_path)
+                if source_path == node_file_path:
+                    return Path(node_file_path)
+                if workspace_service is not None:
+                    return workspace_service._project_root / source_path
+        return Path(node_file_path)
+
+    async def _latest_rewrite_proposal(node_id: str) -> dict | None:
+        rows = await event_store.get_events_for_agent(node_id, limit=200)
+        for row in rows:
+            if row.get("event_type") == "RewriteProposalEvent":
+                return row
+        return None
 
     async def index(_request: Request) -> HTMLResponse:
         return HTMLResponse(_INDEX_HTML)
@@ -134,6 +167,155 @@ def create_app(
             )
         )
         return JSONResponse({"status": "ok"})
+
+    async def api_proposals(_request: Request) -> JSONResponse:
+        pending = await node_store.list_nodes(status=NodeStatus.AWAITING_REVIEW)
+        payload: list[dict[str, object]] = []
+        for node in pending:
+            proposal_event = await _latest_rewrite_proposal(node.node_id)
+            event_payload = proposal_event.get("payload", {}) if proposal_event else {}
+            payload.append(
+                {
+                    "node_id": node.node_id,
+                    "status": str(node.status),
+                    "proposal_id": event_payload.get("proposal_id", ""),
+                    "reason": event_payload.get("reason", ""),
+                    "files": event_payload.get("files", []),
+                }
+            )
+        return JSONResponse(payload)
+
+    async def api_proposal_diff(request: Request) -> JSONResponse:
+        if workspace_service is None:
+            return JSONResponse({"error": "workspace service unavailable"}, status_code=503)
+
+        node_id = request.path_params["node_id"]
+        node = await node_store.get_node(node_id)
+        if node is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+
+        proposal_event = await _latest_rewrite_proposal(node_id)
+        if proposal_event is None:
+            return JSONResponse({"error": "no proposal found"}, status_code=404)
+
+        proposal_payload = proposal_event.get("payload", {})
+        files = proposal_payload.get("files", [])
+        workspace = await workspace_service.get_agent_workspace(node_id)
+        diffs: list[dict[str, str]] = []
+        for workspace_path in files:
+            if not isinstance(workspace_path, str):
+                continue
+            try:
+                new_source = await workspace.read(workspace_path)
+            except FileNotFoundError:
+                continue
+            disk_path = _workspace_path_to_disk_path(node.node_id, node.file_path, workspace_path)
+            if disk_path.exists():
+                old_source = disk_path.read_text(encoding="utf-8")
+            else:
+                old_source = ""
+            diffs.append(
+                {
+                    "workspace_path": workspace_path,
+                    "file": str(disk_path),
+                    "old": old_source,
+                    "new": new_source,
+                }
+            )
+
+        return JSONResponse(
+            {
+                "node_id": node_id,
+                "proposal_id": proposal_payload.get("proposal_id", ""),
+                "reason": proposal_payload.get("reason", ""),
+                "diffs": diffs,
+            }
+        )
+
+    async def api_proposal_accept(request: Request) -> JSONResponse:
+        if workspace_service is None:
+            return JSONResponse({"error": "workspace service unavailable"}, status_code=503)
+
+        node_id = request.path_params["node_id"]
+        node = await node_store.get_node(node_id)
+        if node is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+
+        proposal_event = await _latest_rewrite_proposal(node_id)
+        if proposal_event is None:
+            return JSONResponse({"error": "no proposal found"}, status_code=404)
+
+        proposal_payload = proposal_event.get("payload", {})
+        proposal_id = str(proposal_payload.get("proposal_id", "")).strip()
+        files = proposal_payload.get("files", [])
+        workspace = await workspace_service.get_agent_workspace(node_id)
+        materialized: list[str] = []
+
+        for workspace_path in files:
+            if not isinstance(workspace_path, str):
+                continue
+            try:
+                new_source = await workspace.read(workspace_path)
+            except FileNotFoundError:
+                continue
+
+            disk_path = _workspace_path_to_disk_path(node.node_id, node.file_path, workspace_path)
+            old_bytes = disk_path.read_bytes() if disk_path.exists() else b""
+            new_bytes = new_source.encode("utf-8")
+            if old_bytes == new_bytes:
+                continue
+
+            disk_path.parent.mkdir(parents=True, exist_ok=True)
+            disk_path.write_bytes(new_bytes)
+            await event_store.append(
+                ContentChangedEvent(
+                    path=str(disk_path),
+                    change_type="modified",
+                    agent_id=node_id,
+                    old_hash=hashlib.sha256(old_bytes).hexdigest(),
+                    new_hash=hashlib.sha256(new_bytes).hexdigest(),
+                )
+            )
+            materialized.append(str(disk_path))
+
+        await node_store.transition_status(node_id, NodeStatus.IDLE)
+        await event_store.append(
+            RewriteAcceptedEvent(
+                agent_id=node_id,
+                proposal_id=proposal_id,
+            )
+        )
+        return JSONResponse(
+            {
+                "status": "accepted",
+                "proposal_id": proposal_id,
+                "files": materialized,
+            }
+        )
+
+    async def api_proposal_reject(request: Request) -> JSONResponse:
+        node_id = request.path_params["node_id"]
+        node = await node_store.get_node(node_id)
+        if node is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+
+        proposal_event = await _latest_rewrite_proposal(node_id)
+        if proposal_event is None:
+            return JSONResponse({"error": "no proposal found"}, status_code=404)
+        proposal_payload = proposal_event.get("payload", {})
+        proposal_id = str(proposal_payload.get("proposal_id", "")).strip()
+
+        data = await request.json()
+        feedback = str(data.get("feedback", "")).strip()
+        await node_store.transition_status(node_id, NodeStatus.IDLE)
+        await event_store.append(
+            RewriteRejectedEvent(
+                agent_id=node_id,
+                proposal_id=proposal_id,
+                feedback=feedback,
+            )
+        )
+        return JSONResponse({"status": "rejected", "proposal_id": proposal_id})
 
     async def api_events(request: Request) -> JSONResponse:
         raw_limit = request.query_params.get("limit", "50")
@@ -283,9 +465,21 @@ def create_app(
         Route("/api/edges", endpoint=api_all_edges),
         Route("/api/nodes/{node_id:path}/edges", endpoint=api_edges),
         Route("/api/nodes/{node_id:path}/conversation", endpoint=api_conversation),
-        Route("/api/nodes/{node_id:path}", endpoint=api_node),
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
         Route("/api/nodes/{node_id:path}/respond", endpoint=api_respond, methods=["POST"]),
+        Route("/api/nodes/{node_id:path}", endpoint=api_node),
+        Route("/api/proposals", endpoint=api_proposals),
+        Route("/api/proposals/{node_id:path}/diff", endpoint=api_proposal_diff),
+        Route(
+            "/api/proposals/{node_id:path}/accept",
+            endpoint=api_proposal_accept,
+            methods=["POST"],
+        ),
+        Route(
+            "/api/proposals/{node_id:path}/reject",
+            endpoint=api_proposal_reject,
+            methods=["POST"],
+        ),
         Route("/api/events", endpoint=api_events),
         Route("/api/health", endpoint=api_health),
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),

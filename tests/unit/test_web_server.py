@@ -12,10 +12,17 @@ import pytest_asyncio
 from structured_agents import Message
 from tests.factories import make_node
 
+from remora.core.config import Config
 from remora.core.db import open_database
-from remora.core.events import AgentMessageEvent, EventBus, EventStore
+from remora.core.events import (
+    AgentMessageEvent,
+    EventBus,
+    EventStore,
+    RewriteProposalEvent,
+)
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
+from remora.core.workspace import CairnWorkspaceService
 from remora.web.server import create_app
 
 
@@ -63,6 +70,57 @@ async def web_env(tmp_path: Path):
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client, node_store, event_store, source_path
 
+    await db.close()
+
+
+@pytest_asyncio.fixture
+async def proposal_web_env(tmp_path: Path):
+    db = await open_database(tmp_path / "proposal-web.db")
+    event_bus = EventBus()
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db, event_bus=event_bus)
+    await event_store.create_tables()
+
+    source_path = tmp_path / "src" / "app.py"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text("def a():\n    return 1\n", encoding="utf-8")
+
+    node = make_node(
+        "src/app.py::a",
+        file_path=str(source_path),
+        source_code="def a():\n    return 1\n",
+        start_line=1,
+        end_line=2,
+        status="awaiting_review",
+    )
+    await node_store.upsert_node(node)
+
+    config = Config(workspace_root=".remora-web-proposals")
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+    workspace = await workspace_service.get_agent_workspace(node.node_id)
+    await workspace.write("source/src/app.py::a", "def a():\n    return 2\n")
+    await event_store.append(
+        RewriteProposalEvent(
+            agent_id=node.node_id,
+            proposal_id="proposal-1",
+            files=("source/src/app.py::a",),
+            reason="Improve return value",
+        )
+    )
+
+    app = create_app(
+        event_store,
+        node_store,
+        event_bus,
+        workspace_service=workspace_service,
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client, node_store, event_store, workspace_service, source_path
+
+    await workspace_service.close()
     await db.close()
 
 
@@ -199,6 +257,60 @@ async def test_api_respond_resolves_pending_request_and_emits_event(web_env) -> 
         and event["payload"].get("response") == "approved"
         for event in events
     )
+
+
+@pytest.mark.asyncio
+async def test_api_proposals_lists_pending_nodes(proposal_web_env) -> None:
+    client, _node_store, _event_store, _workspace_service, _source_path = proposal_web_env
+    response = await client.get("/api/proposals")
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert payload
+    assert payload[0]["node_id"] == "src/app.py::a"
+    assert payload[0]["proposal_id"] == "proposal-1"
+
+
+@pytest.mark.asyncio
+async def test_api_proposal_diff_returns_old_and_new_sources(proposal_web_env) -> None:
+    client, _node_store, _event_store, _workspace_service, _source_path = proposal_web_env
+    response = await client.get("/api/proposals/src/app.py::a/diff")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["node_id"] == "src/app.py::a"
+    assert payload["proposal_id"] == "proposal-1"
+    assert payload["diffs"]
+    assert payload["diffs"][0]["old"] == "def a():\n    return 1\n"
+    assert payload["diffs"][0]["new"] == "def a():\n    return 2\n"
+
+
+@pytest.mark.asyncio
+async def test_api_proposal_accept_materializes_workspace_and_emits_events(
+    proposal_web_env,
+) -> None:
+    client, _node_store, event_store, _workspace_service, source_path = proposal_web_env
+    response = await client.post("/api/proposals/src/app.py::a/accept", json={})
+    assert response.status_code == 200
+    assert source_path.read_text(encoding="utf-8") == "def a():\n    return 2\n"
+
+    events = await event_store.get_events(limit=20)
+    types = [event["event_type"] for event in events]
+    assert "RewriteAcceptedEvent" in types
+    assert "ContentChangedEvent" in types
+
+
+@pytest.mark.asyncio
+async def test_api_proposal_reject_emits_rejected_event(proposal_web_env) -> None:
+    client, _node_store, event_store, _workspace_service, _source_path = proposal_web_env
+    response = await client.post(
+        "/api/proposals/src/app.py::a/reject",
+        json={"feedback": "Try a smaller change"},
+    )
+    assert response.status_code == 200
+
+    events = await event_store.get_events(limit=20)
+    rejected = next(event for event in events if event["event_type"] == "RewriteRejectedEvent")
+    assert rejected["payload"]["feedback"] == "Try a smaller change"
 
 
 @pytest.mark.asyncio

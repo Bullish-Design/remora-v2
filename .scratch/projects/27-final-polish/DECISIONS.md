@@ -9,3 +9,6 @@
 - Decision 003: Added `human_input_timeout_s` to config and injected it into `TurnContext` from `Actor`.
   - Rationale: keeps timeout policy centralized and testable instead of hardcoded in externals.
 
+- Decision 004: Workspace proposal file mapping supports `source/{node_id}` as canonical self-rewrite path.
+  - Rationale: deterministic mapping from agent workspace content to on-disk node file during accept.
+

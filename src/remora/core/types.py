@@ -11,6 +11,7 @@ class NodeStatus(StrEnum):
     IDLE = "idle"
     RUNNING = "running"
     AWAITING_INPUT = "awaiting_input"
+    AWAITING_REVIEW = "awaiting_review"
     ERROR = "error"
 
 
@@ -41,8 +42,10 @@ STATUS_TRANSITIONS: dict[NodeStatus, set[NodeStatus]] = {
         NodeStatus.IDLE,
         NodeStatus.ERROR,
         NodeStatus.AWAITING_INPUT,
+        NodeStatus.AWAITING_REVIEW,
     },
     NodeStatus.AWAITING_INPUT: {NodeStatus.RUNNING, NodeStatus.IDLE},
+    NodeStatus.AWAITING_REVIEW: {NodeStatus.RUNNING, NodeStatus.IDLE},
     NodeStatus.ERROR: {NodeStatus.IDLE, NodeStatus.RUNNING},
 }
 

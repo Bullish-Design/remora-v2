@@ -1,16 +1,20 @@
-# Rewrite this code element's source code with new_source. Use carefully - changes are applied immediately.
+# Propose a rewrite in workspace and submit it for human review.
 from grail import Input, external
 
 new_source: str = Input("new_source")
+reason: str = Input("reason", default="")
 
 
 @external
-async def apply_rewrite(new_source: str) -> bool: ...
+async def write_file(path: str, content: str) -> bool: ...
 
+@external
+async def propose_changes(reason: str = "") -> str: ...
 
-success = await apply_rewrite(new_source)
-if success:
-    message = "Rewrite applied successfully."
-else:
-    message = "Rewrite failed: the source could not be applied."
-message
+@external
+async def my_node_id() -> str: ...
+
+node_id = await my_node_id()
+await write_file(f"source/{node_id}", new_source)
+proposal_id = await propose_changes(reason or "Code rewrite proposed")
+f"Proposal {proposal_id} submitted. Awaiting human review."

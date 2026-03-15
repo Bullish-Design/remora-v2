@@ -117,6 +117,30 @@ class HumanInputResponseEvent(Event):
     response: str
 
 
+class RewriteProposalEvent(Event):
+    """Agent indicates workspace changes are ready for human review."""
+
+    agent_id: str
+    proposal_id: str
+    files: tuple[str, ...] = ()
+    reason: str = ""
+
+
+class RewriteAcceptedEvent(Event):
+    """Human accepted an agent rewrite proposal."""
+
+    agent_id: str
+    proposal_id: str
+
+
+class RewriteRejectedEvent(Event):
+    """Human rejected an agent rewrite proposal."""
+
+    agent_id: str
+    proposal_id: str
+    feedback: str = ""
+
+
 class CustomEvent(Event):
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -156,6 +180,9 @@ __all__ = [
     "ContentChangedEvent",
     "HumanInputRequestEvent",
     "HumanInputResponseEvent",
+    "RewriteProposalEvent",
+    "RewriteAcceptedEvent",
+    "RewriteRejectedEvent",
     "CustomEvent",
     "ToolResultEvent",
     "CursorFocusEvent",

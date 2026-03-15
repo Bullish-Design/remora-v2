@@ -14,6 +14,9 @@ from remora.core.events import (
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
+    RewriteAcceptedEvent,
+    RewriteProposalEvent,
+    RewriteRejectedEvent,
     ToolResultEvent,
 )
 from remora.core.events.subscriptions import SubscriptionPattern
@@ -114,6 +117,21 @@ def test_all_event_types_instantiate() -> None:
             agent_id="a",
             request_id="req-1",
             response="yes",
+        ),
+        RewriteProposalEvent(
+            agent_id="a",
+            proposal_id="proposal-1",
+            files=("source/src/app.py",),
+            reason="Improve readability",
+        ),
+        RewriteAcceptedEvent(
+            agent_id="a",
+            proposal_id="proposal-1",
+        ),
+        RewriteRejectedEvent(
+            agent_id="a",
+            proposal_id="proposal-2",
+            feedback="Please simplify",
         ),
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
         CursorFocusEvent(file_path="src/app.py", line=3, character=0, node_id="src/app.py::a"),

@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
-import hashlib
 import uuid
-from pathlib import Path
 from typing import Any
 
 from remora.core.events import (
     AgentMessageEvent,
-    ContentChangedEvent,
     CustomEvent,
     HumanInputRequestEvent,
+    RewriteProposalEvent,
     SubscriptionPattern,
 )
 from remora.core.events.store import EventStore
@@ -236,38 +234,24 @@ class TurnContext:
         finally:
             await self._node_store.transition_status(self.node_id, NodeStatus.RUNNING)
 
-    async def apply_rewrite(self, new_source: str) -> bool:
-        node = await self._node_store.get_node(self.node_id)
-        if node is None:
-            return False
-
-        file_path = Path(node.file_path)
-        if not file_path.exists():
-            return False
-
-        full_bytes = file_path.read_bytes()
-        if node.start_byte > 0 or node.end_byte > 0:
-            before = full_bytes[: node.start_byte].decode("utf-8", errors="replace")
-            after = full_bytes[node.end_byte :].decode("utf-8", errors="replace")
-            next_text = before + new_source + after
-        else:
-            full_text = full_bytes.decode("utf-8", errors="replace")
-            next_text = full_text.replace(node.source_code, new_source, 1)
-
-        old_hash = hashlib.sha256(full_bytes).hexdigest()
-        new_hash = hashlib.sha256(next_text.encode("utf-8")).hexdigest()
-        file_path.write_text(next_text, encoding="utf-8")
+    async def propose_changes(self, reason: str = "") -> str:
+        proposal_id = str(uuid.uuid4())
+        changed_files = await self._collect_changed_files()
+        await self._node_store.transition_status(self.node_id, NodeStatus.AWAITING_REVIEW)
         await self._emit(
-            ContentChangedEvent(
-                path=str(file_path),
-                change_type="modified",
+            RewriteProposalEvent(
                 agent_id=self.node_id,
-                old_hash=old_hash,
-                new_hash=new_hash,
+                proposal_id=proposal_id,
+                files=tuple(changed_files),
+                reason=reason,
                 correlation_id=self.correlation_id,
             )
         )
-        return True
+        return proposal_id
+
+    async def _collect_changed_files(self) -> list[str]:
+        all_paths = await self.workspace.list_all_paths()
+        return sorted(path for path in all_paths if not path.startswith("_bundle/"))
 
     async def get_node_source(self, target_id: str) -> str:
         node = await self._node_store.get_node(target_id)
@@ -303,7 +287,7 @@ class TurnContext:
             "send_message": self.send_message,
             "broadcast": self.broadcast,
             "request_human_input": self.request_human_input,
-            "apply_rewrite": self.apply_rewrite,
+            "propose_changes": self.propose_changes,
             "get_node_source": self.get_node_source,
             "my_node_id": self.my_node_id,
             "my_correlation_id": self.my_correlation_id,

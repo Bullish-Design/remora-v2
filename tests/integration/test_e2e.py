@@ -55,9 +55,13 @@ def _write_bundles(root: Path) -> None:
         code / "tools" / "rewrite_self.pym",
         "from grail import Input, external\n"
         "new_source: str = Input('new_source')\n"
-        "@external\nasync def apply_rewrite(new_source: str) -> bool: ...\n"
-        "applied = await apply_rewrite(new_source)\n"
-        "str(applied)\n",
+        "@external\nasync def write_file(path: str, content: str) -> bool: ...\n"
+        "@external\nasync def propose_changes(reason: str = '') -> str: ...\n"
+        "@external\nasync def my_node_id() -> str: ...\n"
+        "node_id = await my_node_id()\n"
+        "await write_file(f'source/{node_id}', new_source)\n"
+        "proposal_id = await propose_changes('integration rewrite')\n"
+        "proposal_id\n",
     )
 
 
@@ -121,7 +125,11 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     assert await workspace.exists("_bundle/bundle.yaml")
     assert await workspace.exists("_bundle/tools/rewrite_self.pym")
 
-    trigger_event = AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="please rewrite")
+    trigger_event = AgentMessageEvent(
+        from_agent="user",
+        to_agent=node.node_id,
+        content="please rewrite",
+    )
     await runtime["event_store"].append(trigger_event)
 
     class MockKernel:
@@ -166,11 +174,16 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
             )
 
         async def execute(self, arguments, context):  # noqa: ANN001, ANN201
-            applied = await self._capabilities["apply_rewrite"](arguments["new_source"])
+            node_id = await self._capabilities["my_node_id"]()
+            await self._capabilities["write_file"](
+                f"source/{node_id}",
+                arguments["new_source"],
+            )
+            proposal_id = await self._capabilities["propose_changes"]("integration rewrite")
             return ToolResult(
                 call_id=getattr(context, "id", ""),
                 name="rewrite_self",
-                output=str(applied),
+                output=proposal_id,
                 is_error=False,
             )
 
@@ -194,11 +207,11 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     )
 
     updated_source = runtime["source_path"].read_text(encoding="utf-8")
-    assert "def alpha():\n    return 42\n" in updated_source
+    assert "def alpha():\n    return 1\n" in updated_source
     assert "def beta():\n    return 2\n" in updated_source
 
     events_after = await runtime["event_store"].get_events(limit=50)
-    assert any(event["event_type"] == "ContentChangedEvent" for event in events_after)
+    assert any(event["event_type"] == "RewriteProposalEvent" for event in events_after)
 
     await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
@@ -270,7 +283,9 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
                     {"to_node_id": alpha.node_id, "content": "pong"},
                     ToolCall(id="call-beta-pong", name="send_message", arguments={}),
                 )
-                return SimpleNamespace(final_message=Message(role="assistant", content="beta sent pong"))
+                return SimpleNamespace(
+                    final_message=Message(role="assistant", content="beta sent pong")
+                )
             return SimpleNamespace(final_message=Message(role="assistant", content="no-op"))
 
         async def close(self) -> None:
@@ -285,7 +300,9 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
         deadline = asyncio.get_running_loop().time() + timeout_s
         while asyncio.get_running_loop().time() < deadline:
             events = await runtime["event_store"].get_events(limit=100)
-            message_events = [event for event in events if event["event_type"] == "AgentMessageEvent"]
+            message_events = [
+                event for event in events if event["event_type"] == "AgentMessageEvent"
+            ]
             ping_seen = any(
                 event["payload"].get("from_agent") == alpha.node_id
                 and event["payload"].get("to_agent") == beta.node_id

@@ -22,6 +22,9 @@ from remora.core.events.types import (
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
+    RewriteAcceptedEvent,
+    RewriteProposalEvent,
+    RewriteRejectedEvent,
     ToolResultEvent,
 )
 
@@ -37,6 +40,9 @@ __all__ = [
     "ContentChangedEvent",
     "HumanInputRequestEvent",
     "HumanInputResponseEvent",
+    "RewriteProposalEvent",
+    "RewriteAcceptedEvent",
+    "RewriteRejectedEvent",
     "CursorFocusEvent",
     "CustomEvent",
     "ToolResultEvent",

@@ -10,7 +10,7 @@ system_prompt_extension: |
   ## Tools Available
   - send_message: Send a message to another agent or to "user" for chat. ALWAYS use this to reply to the user.
   - query_agents: Search the node graph for related agents. Use this to find callers, callees, and siblings.
-  - rewrite_self: Modify your own source code. Use carefully.
+  - rewrite_self: Propose a source rewrite for human review.
   - reflect: Write notes to your workspace for future reference.
   - kv_get/kv_set: Read/write your persistent memory.
   - subscribe/unsubscribe: Manage your event subscriptions.

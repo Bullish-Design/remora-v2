@@ -313,50 +313,52 @@ async def test_externals_code_ops(context_env) -> None:
     context = await _context(node.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    assert await externals["apply_rewrite"]("def alpha():\n    return 2\n")
+    await externals["write_file"](f"source/{node.node_id}", "def alpha():\n    return 2\n")
+    await externals["graph_set_status"](node.node_id, "running")
+    proposal_id = await externals["propose_changes"]("Update alpha behavior")
+    assert isinstance(proposal_id, str)
+    assert proposal_id
 
     source = await externals["get_node_source"](node.node_id)
     assert "def alpha" in source
     file_source = source_path.read_text(encoding="utf-8")
-    assert "def alpha():\n    return 2\n" in file_source
+    assert "def alpha():\n    return 1\n" in file_source
 
     events = await event_store.get_events(limit=5)
-    rewrite_events = [event for event in events if event["event_type"] == "ContentChangedEvent"]
-    assert rewrite_events
-    assert rewrite_events[0]["payload"]["path"] == str(source_path)
+    proposal_events = [event for event in events if event["event_type"] == "RewriteProposalEvent"]
+    assert proposal_events
+    assert proposal_events[0]["payload"]["proposal_id"] == proposal_id
+    assert proposal_events[0]["payload"]["reason"] == "Update alpha behavior"
+    assert proposal_events[0]["payload"]["files"] == [f"source/{node.node_id}"]
+    updated_node = await node_store.get_node(node.node_id)
+    assert updated_node is not None
+    assert updated_node.status == "awaiting_review"
 
 
 @pytest.mark.asyncio
-async def test_apply_rewrite_duplicate_source_blocks(context_env) -> None:
+async def test_propose_changes_excludes_bundle_paths(context_env) -> None:
     node_store, event_store, workspace_service = context_env
-    source_path = workspace_service._project_root / "src" / "dup.py"
-    source_path.parent.mkdir(parents=True, exist_ok=True)
-    source_path.write_text(
-        "def helper():\n    return 1\n\ndef helper():\n    return 1\n",
-        encoding="utf-8",
-    )
-
-    node = make_node(f"{source_path}::helper_2", file_path=str(source_path))
-    node = node.model_copy(
-        update={
-            "name": "helper",
-            "full_name": "helper",
-            "start_line": 4,
-            "end_line": 5,
-            "start_byte": 28,
-            "end_byte": 55,
-            "source_code": "def helper():\n    return 1\n",
-        }
-    )
+    node = make_node("src/app.py::helper")
     await node_store.upsert_node(node)
+    await node_store.set_status(node.node_id, "running")
     ws = await workspace_service.get_agent_workspace(node.node_id)
+    await ws.write("_bundle/tools/internal.pym", "ignored\n")
+    await ws.write(f"source/{node.node_id}", "def helper():\n    return 2\n")
+    await ws.write("notes/analysis.txt", "candidate notes\n")
     context = await _context(node.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    applied = await externals["apply_rewrite"]("def helper():\n    return 2\n")
-    assert applied
-    new_source = source_path.read_text(encoding="utf-8")
-    assert "def helper():\n    return 1\n\ndef helper():\n    return 2\n" == new_source
+    proposal_id = await externals["propose_changes"]()
+    assert proposal_id
+
+    events = await event_store.get_events(limit=10)
+    proposal_event = next(
+        event for event in events if event["event_type"] == "RewriteProposalEvent"
+    )
+    files = proposal_event["payload"]["files"]
+    assert f"source/{node.node_id}" in files
+    assert "notes/analysis.txt" in files
+    assert "_bundle/tools/internal.pym" not in files
 
 
 @pytest.mark.asyncio

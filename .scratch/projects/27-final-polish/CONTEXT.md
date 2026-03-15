@@ -1,6 +1,6 @@
 # Context
 
-- Proposal A complete and pushed.
-- Proposal B complete: human-input event types, EventStore pending futures, `request_human_input` external with timeout and status transitions, `/api/nodes/{node_id}/respond` endpoint, and `ask_human` tool.
-- Added tests for request/response flow, timeout behavior, status transition, web response endpoint, and tool parsing.
-- Next action: Proposal C (workspace-native rewrite proposals, API endpoints, and replacement of direct rewrite flow).
+- Proposals A and B complete and pushed.
+- Proposal C complete: rewrite proposal events/status, `propose_changes` external, rewrite_self tool migration to workspace proposals, web proposal endpoints (list/diff/accept/reject), and runtime wiring of `workspace_service` into web app.
+- Direct `apply_rewrite` external path removed; rewrites now follow workspace -> proposal -> human accept/reject flow.
+- Next action: Proposal D (rich hover and LSP code actions/commands).
