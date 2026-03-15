@@ -223,7 +223,14 @@ async def _start(
         else:
             await asyncio.gather(*tasks)
     finally:
-        await services.close()
+        if services.reconciler is not None:
+            services.reconciler.stop()
+        if services.runner is not None:
+            try:
+                await asyncio.wait_for(services.runner.stop_and_wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning("Actor pool did not drain within 10s, forcing shutdown")
+
         reconciler_stop_task = (
             services.reconciler.stop_task
             if services.reconciler is not None
@@ -231,6 +238,7 @@ async def _start(
         )
         if web_server is not None:
             web_server.should_exit = True
+        await services.close()
         for task in tasks:
             if not task.done():
                 task.cancel()

@@ -332,6 +332,39 @@ async def test_get_events_after(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_sse_stream_stops_on_shutdown(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeEventBus:
+        @asynccontextmanager
+        async def stream(self) -> AsyncIterator[AsyncIterator[AgentMessageEvent]]:
+            async def iterate() -> AsyncIterator[AgentMessageEvent]:
+                while True:
+                    await asyncio.sleep(1.0)
+                    yield AgentMessageEvent(
+                        from_agent="user",
+                        to_agent="src/app.py::a",
+                        content="idle",
+                    )
+
+            yield iterate()
+
+    app = create_app(event_store, node_store, FakeEventBus())
+    app.state.sse_shutdown_event.set()
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        async with client.stream("GET", "/sse") as response:
+            lines: list[str] = []
+            async for line in response.aiter_lines():
+                lines.append(line)
+                if "server-shutdown" in line:
+                    break
+
+    assert ": server-shutdown" in lines
+
+
+@pytest.mark.asyncio
 async def test_api_approve_endpoint_removed(web_env) -> None:
     client, *_rest = web_env
     response = await client.post("/api/approve", json={"id": "x"})

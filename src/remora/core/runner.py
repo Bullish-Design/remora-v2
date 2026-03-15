@@ -37,6 +37,7 @@ class ActorPool:
         self._workspace_service = workspace_service
         self._config = config
         self._running = False
+        self._accepting_events = True
         self._semaphore = asyncio.Semaphore(config.max_concurrency)
         self._actors: dict[str, Actor] = {}
 
@@ -45,6 +46,8 @@ class ActorPool:
 
     def _route_to_actor(self, agent_id: str, event: Event) -> None:
         """Route an event to the target agent's inbox, creating the actor if needed."""
+        if not self._accepting_events:
+            return
         actor = self.get_or_create_actor(agent_id)
         actor.inbox.put_nowait(event)
 
@@ -79,10 +82,12 @@ class ActorPool:
     def stop(self) -> None:
         """Signal the runner to stop."""
         self._running = False
+        self._accepting_events = False
 
     async def stop_and_wait(self) -> None:
         """Stop all actors and wait for them to finish."""
         self._running = False
+        self._accepting_events = False
         tasks = []
         for actor in self._actors.values():
             tasks.append(actor.stop())

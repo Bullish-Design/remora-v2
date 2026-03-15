@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -26,6 +27,7 @@ def create_app(
     event_bus: EventBus,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
+    shutdown_event = asyncio.Event()
 
     async def index(_request: Request) -> HTMLResponse:
         return HTMLResponse(_INDEX_HTML)
@@ -161,11 +163,20 @@ def create_app(
             if once:
                 return
             async with event_bus.stream() as stream:
-                async for event in stream:
-                    if await request.is_disconnected():
+                stream_iterator = stream.__aiter__()
+                while True:
+                    if await request.is_disconnected() or shutdown_event.is_set():
+                        break
+                    try:
+                        event = await asyncio.wait_for(stream_iterator.__anext__(), timeout=0.25)
+                    except asyncio.TimeoutError:
+                        continue
+                    except StopAsyncIteration:
                         break
                     payload = json.dumps(event.to_envelope(), separators=(",", ":"))
                     yield f"id: {event.timestamp}\nevent: {event.event_type}\ndata: {payload}\n\n"
+            if shutdown_event.is_set():
+                yield ": server-shutdown\n\n"
 
         headers = {
             "Cache-Control": "no-cache",
@@ -173,6 +184,9 @@ def create_app(
             "X-Accel-Buffering": "no",
         }
         return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
+
+    async def on_shutdown() -> None:
+        shutdown_event.set()
 
     routes = [
         Route("/", endpoint=index),
@@ -185,7 +199,8 @@ def create_app(
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),
         Route("/sse", endpoint=sse_stream),
     ]
-    app = Starlette(routes=routes)
+    app = Starlette(routes=routes, on_shutdown=[on_shutdown])
+    app.state.sse_shutdown_event = shutdown_event
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     return app
 

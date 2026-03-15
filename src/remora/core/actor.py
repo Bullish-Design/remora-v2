@@ -133,7 +133,7 @@ class Actor:
         semaphore: asyncio.Semaphore,
     ) -> None:
         self.node_id = node_id
-        self.inbox: asyncio.Queue[Event] = asyncio.Queue()
+        self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
         self._event_store = event_store
         self._node_store = node_store
         self._workspace_service = workspace_service
@@ -161,13 +161,11 @@ class Actor:
         self._task = asyncio.create_task(self._run(), name=f"actor-{self.node_id}")
 
     async def stop(self) -> None:
-        """Cancel the processing loop and wait for it to finish."""
+        """Stop the processing loop and wait for it to finish."""
         if self._task is not None and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+            # Sentinel event allows current in-flight turn to finish before exit.
+            self.inbox.put_nowait(None)
+            await self._task
         self._task = None
 
     async def _run(self) -> None:
@@ -175,6 +173,8 @@ class Actor:
         try:
             while True:
                 event = await self.inbox.get()
+                if event is None:
+                    break
                 self._last_active = time.time()
                 correlation_id = event.correlation_id or str(uuid.uuid4())
 
