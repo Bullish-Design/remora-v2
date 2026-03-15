@@ -232,12 +232,50 @@
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
+      const nodeById = Object.fromEntries(nodes.map((node) => [node.node_id, node]));
+      const depthCache = {};
+      const visiting = new Set();
+      const parentToChildren = {};
+
+      function nodeDepth(nodeId) {
+        if (depthCache[nodeId] !== undefined) return depthCache[nodeId];
+        if (visiting.has(nodeId)) return 0;
+        visiting.add(nodeId);
+        const node = nodeById[nodeId];
+        if (!node || !node.parent_id || !nodeById[node.parent_id]) {
+          depthCache[nodeId] = 0;
+        } else {
+          depthCache[nodeId] = nodeDepth(node.parent_id) + 1;
+        }
+        visiting.delete(nodeId);
+        return depthCache[nodeId];
+      }
+
+      for (const node of nodes) {
+        const parentKey = node.parent_id || "__root__";
+        parentToChildren[parentKey] ||= [];
+        parentToChildren[parentKey].push(node.node_id);
+      }
+
+      for (const parentKey of Object.keys(parentToChildren)) {
+        parentToChildren[parentKey].sort();
+      }
+
       for (const node of nodes) {
         if (!graph.hasNode(node.node_id)) {
           const filePath = node.file_path || "";
-          const { x, y } = filePath
+          const base = filePath
             ? getFileCluster(filePath)
             : deterministicPosition(node.node_id);
+          const depth = nodeDepth(node.node_id);
+          const siblings = parentToChildren[node.parent_id || "__root__"] || [node.node_id];
+          const siblingIndex = siblings.indexOf(node.node_id);
+          const spread =
+            siblings.length > 1
+              ? (siblingIndex - (siblings.length - 1) / 2) * 0.45
+              : 0;
+          const x = base.x + spread;
+          const y = base.y + depth * 0.6;
           graph.addNode(node.node_id, {
             label: node.name,
             size: 8,
