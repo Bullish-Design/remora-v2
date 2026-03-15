@@ -21,6 +21,7 @@ from remora.core.externals import TurnContext
 from remora.core.grail import GrailTool, discover_tools
 from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
+from remora.core.metrics import Metrics
 from remora.core.node import Node
 from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
@@ -143,6 +144,7 @@ class Actor:
         workspace_service: CairnWorkspaceService,
         config: Config,
         semaphore: asyncio.Semaphore,
+        metrics: Metrics | None = None,
     ) -> None:
         self.node_id = node_id
         self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
@@ -151,6 +153,7 @@ class Actor:
         self._workspace_service = workspace_service
         self._config = config
         self._semaphore = semaphore
+        self._metrics = metrics
         self._task: asyncio.Task | None = None
         self._last_active: float = time.time()
 
@@ -280,8 +283,12 @@ class Actor:
 
                 response_text = extract_response_text(result)
                 await self._complete_agent_turn(node_id, response_text, outbox, trigger, turn_log)
+                if self._metrics is not None:
+                    self._metrics.agent_turns_total += 1
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
                 turn_log.exception("Agent turn failed")
+                if self._metrics is not None:
+                    self._metrics.agent_turns_failed += 1
                 await self._node_store.transition_status(node_id, NodeStatus.ERROR)
                 await outbox.emit(
                     AgentErrorEvent(

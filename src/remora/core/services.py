@@ -11,6 +11,7 @@ from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.graph import NodeStore
+from remora.core.metrics import Metrics
 from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
@@ -23,6 +24,7 @@ class RuntimeServices:
         self.project_root = project_root.resolve()
         self.db = db
 
+        self.metrics = Metrics()
         self.node_store = NodeStore(db)
 
         self.event_bus = EventBus()
@@ -32,9 +34,10 @@ class RuntimeServices:
             db=db,
             event_bus=self.event_bus,
             dispatcher=self.dispatcher,
+            metrics=self.metrics,
         )
 
-        self.workspace_service = CairnWorkspaceService(config, project_root)
+        self.workspace_service = CairnWorkspaceService(config, project_root, metrics=self.metrics)
         self.language_registry = LanguageRegistry()
 
         self.reconciler: FileReconciler | None = None
@@ -62,6 +65,7 @@ class RuntimeServices:
             self.workspace_service,
             self.config,
             dispatcher=self.dispatcher,
+            metrics=self.metrics,
         )
 
     async def close(self) -> None:

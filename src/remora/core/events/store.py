@@ -10,6 +10,7 @@ from remora.core.events.bus import EventBus
 from remora.core.events.dispatcher import TriggerDispatcher
 from remora.core.events.subscriptions import SubscriptionRegistry
 from remora.core.events.types import Event
+from remora.core.metrics import Metrics
 
 
 class EventStore:
@@ -20,10 +21,12 @@ class EventStore:
         db: aiosqlite.Connection,
         event_bus: EventBus | None = None,
         dispatcher: TriggerDispatcher | None = None,
+        metrics: Metrics | None = None,
     ) -> None:
         self._db = db
         self._event_bus = event_bus or EventBus()
         self._dispatcher = dispatcher or TriggerDispatcher(SubscriptionRegistry(db))
+        self._metrics = metrics
 
     @property
     def dispatcher(self) -> TriggerDispatcher:
@@ -86,6 +89,8 @@ class EventStore:
         )
         await self._db.commit()
         event_id = int(cursor.lastrowid)
+        if self._metrics is not None:
+            self._metrics.events_emitted_total += 1
 
         await self._event_bus.emit(event)
         await self._dispatcher.dispatch(event)

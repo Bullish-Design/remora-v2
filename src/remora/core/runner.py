@@ -11,6 +11,7 @@ from remora.core.config import Config
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
 from remora.core.graph import NodeStore
+from remora.core.metrics import Metrics
 from remora.core.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -30,12 +31,14 @@ class ActorPool:
         workspace_service: CairnWorkspaceService,
         config: Config,
         dispatcher: TriggerDispatcher | None = None,
+        metrics: Metrics | None = None,
     ):
         self._event_store = event_store
         self._dispatcher = dispatcher or event_store.dispatcher
         self._node_store = node_store
         self._workspace_service = workspace_service
         self._config = config
+        self._metrics = metrics
         self._running = False
         self._accepting_events = True
         self._semaphore = asyncio.Semaphore(config.max_concurrency)
@@ -50,6 +53,7 @@ class ActorPool:
             return
         actor = self.get_or_create_actor(agent_id)
         actor.inbox.put_nowait(event)
+        self._refresh_pending_inbox_items()
 
     def get_or_create_actor(self, node_id: str) -> Actor:
         """Get an existing actor or create a new one for the given node."""
@@ -61,9 +65,11 @@ class ActorPool:
                 workspace_service=self._workspace_service,
                 config=self._config,
                 semaphore=self._semaphore,
+                metrics=self._metrics,
             )
             actor.start()
             self._actors[node_id] = actor
+            self._refresh_actor_gauges()
             logger.debug("Created actor for %s", node_id)
         return self._actors[node_id]
 
@@ -94,6 +100,7 @@ class ActorPool:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._actors.clear()
+        self._refresh_actor_gauges()
 
     async def _evict_idle(self, max_idle_seconds: float = 300.0) -> None:
         """Stop and remove actors that have been idle longer than threshold."""
@@ -107,11 +114,24 @@ class ActorPool:
             actor = self._actors.pop(node_id)
             await actor.stop()
             logger.debug("Evicted idle actor: %s", node_id)
+        if to_evict:
+            self._refresh_actor_gauges()
 
     @property
     def actors(self) -> dict[str, Actor]:
         """Read-only access to actor registry (for observability)."""
         return dict(self._actors)
+
+    def _refresh_actor_gauges(self) -> None:
+        if self._metrics is None:
+            return
+        self._metrics.active_actors = len(self._actors)
+        self._refresh_pending_inbox_items()
+
+    def _refresh_pending_inbox_items(self) -> None:
+        if self._metrics is None:
+            return
+        self._metrics.pending_inbox_items = sum(actor.inbox.qsize() for actor in self._actors.values())
 
 
 __all__ = ["ActorPool"]

@@ -13,6 +13,7 @@ from cairn.runtime import workspace_manager as cairn_wm
 from fsdantic import ViewQuery
 
 from remora.core.config import Config
+from remora.core.metrics import Metrics
 
 
 class AgentWorkspace:
@@ -100,13 +101,14 @@ class AgentWorkspace:
 class CairnWorkspaceService:
     """Manages per-agent Cairn workspaces."""
 
-    def __init__(self, config: Config, project_root: Path):
+    def __init__(self, config: Config, project_root: Path, metrics: Metrics | None = None):
         self._config = config
         self._project_root = project_root.resolve()
         self._workspace_root = self._project_root / config.workspace_root
         self._manager = cairn_wm.WorkspaceManager()
         self._agent_workspaces: dict[str, AgentWorkspace] = {}
         self._raw_agent_workspaces: dict[str, Any] = {}
+        self._metrics = metrics
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
@@ -120,11 +122,15 @@ class CairnWorkspaceService:
         async with self._lock:
             cached = self._agent_workspaces.get(node_id)
             if cached is not None:
+                if self._metrics is not None:
+                    self._metrics.workspace_cache_hits += 1
                 return cached
 
             workspace_path = self._workspace_root / "agents" / self._safe_id(node_id)
             raw_workspace = await cairn_wm.open_workspace(str(workspace_path))
             self._manager.track_workspace(raw_workspace)
+            if self._metrics is not None:
+                self._metrics.workspace_provisions_total += 1
 
             agent_workspace = AgentWorkspace(raw_workspace, node_id)
             self._raw_agent_workspaces[node_id] = raw_workspace
