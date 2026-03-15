@@ -15,7 +15,9 @@ def resolve_discovery_paths(config: Config, project_root: Path) -> list[Path]:
         candidate = Path(configured)
         if not candidate.is_absolute():
             candidate = project_root / candidate
-        resolved.append(candidate.resolve())
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate.exists():
+            resolved.append(resolved_candidate)
     return resolved
 
 

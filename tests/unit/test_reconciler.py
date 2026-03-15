@@ -395,3 +395,50 @@ async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) ->
     finally:
         await workspace_service.close()
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_reconciler_handles_external_paths(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    external_root = tmp_path / "external"
+    source_file = external_root / "pkg" / "outside.py"
+
+    write_file(source_file, "def outside_fn():\n    return 1\n")
+
+    db = await open_database(tmp_path / "external-paths.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+
+    bundles_root = tmp_path / "bundles"
+    write_bundle_templates(bundles_root)
+
+    config = Config(
+        discovery_paths=(str(external_root),),
+        discovery_languages=("python",),
+        language_map={".py": "python"},
+        query_paths=(),
+        workspace_root=".remora-reconcile",
+        bundle_root=str(bundles_root),
+    )
+    workspace_service = CairnWorkspaceService(config, project_root)
+    await workspace_service.initialize()
+
+    try:
+        reconciler = FileReconciler(
+            config,
+            node_store,
+            event_store,
+            workspace_service,
+            project_root=project_root,
+        )
+        await reconciler.reconcile_cycle()
+
+        fn_node = await node_store.get_node(f"{source_file}::outside_fn")
+        assert fn_node is not None
+        assert fn_node.file_path == str(source_file)
+        assert fn_node.parent_id == str(source_file.parent)
+    finally:
+        await workspace_service.close()
+        await db.close()

@@ -194,7 +194,7 @@ class FileReconciler:
             while True:
                 dir_id = self._normalize_dir_id(current)
                 dir_paths.add(dir_id)
-                if dir_id == ".":
+                if dir_id == "." or current == current.parent:
                     break
                 current = current.parent
 
@@ -315,7 +315,10 @@ class FileReconciler:
 
     @staticmethod
     def _parent_dir_id(path_like: str) -> str:
-        parent = Path(path_like).parent
+        path = Path(path_like)
+        parent = path.parent
+        if parent == path:
+            return "."
         parent_str = parent.as_posix()
         return "." if parent_str in {"", "."} else parent_str
 

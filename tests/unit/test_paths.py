@@ -7,6 +7,7 @@ from remora.core.config import Config
 
 
 def test_resolve_paths_relative_to_project_root(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
     config = Config(discovery_paths=("src",), query_paths=("queries",))
     discovery = resolve_discovery_paths(config, tmp_path)
     queries = resolve_query_paths(config, tmp_path)
@@ -26,3 +27,11 @@ def test_walk_source_files_respects_ignore_patterns(tmp_path: Path) -> None:
     paths = {p.relative_to(tmp_path).as_posix() for p in files}
     assert "src/a.py" in paths
     assert ".git/hidden.py" not in paths
+
+
+def test_resolve_discovery_paths_absolute(tmp_path: Path) -> None:
+    external = tmp_path / "external-src"
+    external.mkdir(parents=True, exist_ok=True)
+    config = Config(discovery_paths=(str(external),))
+    discovery = resolve_discovery_paths(config, tmp_path / "project-root")
+    assert discovery == [external.resolve()]
