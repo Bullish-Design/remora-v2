@@ -437,17 +437,26 @@ class Actor:
         trigger: Trigger,
         turn_log: logging.LoggerAdapter,
     ) -> None:
+        full_response = response_text
+        max_chars = self._config.max_response_chars
+        if len(full_response) > max_chars:
+            original_size = len(full_response)
+            full_response = (
+                f"{full_response[:max_chars]}\n\n"
+                f"[Truncated: {original_size} chars -> {max_chars}]"
+            )
+
         turn_log.info(
             "Agent turn complete node=%s corr=%s response=%s",
             node_id,
             trigger.correlation_id,
-            response_text,
+            full_response,
         )
         await outbox.emit(
             AgentCompleteEvent(
                 agent_id=node_id,
-                result_summary=response_text[:200],
-                full_response=response_text,
+                result_summary=full_response[:200],
+                full_response=full_response,
                 correlation_id=trigger.correlation_id,
             )
         )

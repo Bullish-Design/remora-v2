@@ -450,6 +450,65 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
 
 
 @pytest.mark.asyncio
+async def test_agent_response_truncated_when_over_limit(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::truncate")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    long_response = "x" * 120
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content=long_response))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    config = Config(
+        workspace_root=".remora-actor-test",
+        trigger_cooldown_ms=1000,
+        max_trigger_depth=2,
+        max_response_chars=50,
+    )
+    actor = Actor(
+        node_id=node.node_id,
+        event_store=env["event_store"],
+        node_store=env["node_store"],
+        workspace_service=env["workspace_service"],
+        config=config,
+        semaphore=env["semaphore"],
+    )
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-truncate",
+        event=AgentMessageEvent(
+            from_agent="user",
+            to_agent=node.node_id,
+            content="hello",
+            correlation_id="corr-truncate",
+        ),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-truncate",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=10)
+    complete = next(event for event in events if event["event_type"] == "AgentCompleteEvent")
+    full_response = complete["payload"]["full_response"]
+    assert full_response.startswith("x" * 50)
+    assert "[Truncated: 120 chars -> 50]" in full_response
+
+
+@pytest.mark.asyncio
 async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) -> None:
     env = actor_env
     node = make_node("src/app.py::logged-newlines")
