@@ -28,6 +28,18 @@ from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 logger = logging.getLogger(__name__)
 
 
+def _turn_logger(node_id: str, correlation_id: str, turn_number: int) -> logging.LoggerAdapter:
+    """Create a logger adapter with per-turn context fields."""
+    return logging.LoggerAdapter(
+        logger,
+        {
+            "node_id": node_id,
+            "correlation_id": correlation_id,
+            "turn": turn_number,
+        },
+    )
+
+
 class Outbox:
     """Write-through emitter that tags events with actor metadata.
 
@@ -218,10 +230,12 @@ class Actor:
         """Execute one agent turn."""
         node_id = trigger.node_id
         depth_key = trigger.correlation_id
+        turn_number = max(1, self._depths.get(depth_key, 1))
+        turn_log = _turn_logger(node_id, trigger.correlation_id, turn_number)
 
         async with self._semaphore:
             try:
-                start_result = await self._start_agent_turn(node_id, trigger, outbox)
+                start_result = await self._start_agent_turn(node_id, trigger, outbox, turn_log)
                 if start_result is None:
                     return
                 node, workspace, bundle_config = start_result
@@ -238,7 +252,7 @@ class Actor:
                     outbox,
                 )
 
-                logger.info(
+                turn_log.info(
                     "Agent turn start node=%s corr=%s model=%s tools=%d max_turns=%d trigger=%s",
                     node_id,
                     trigger.correlation_id,
@@ -261,12 +275,13 @@ class Actor:
                     model_name,
                     tools,
                     max_turns,
+                    turn_log,
                 )
 
                 response_text = extract_response_text(result)
-                await self._complete_agent_turn(node_id, response_text, outbox, trigger)
+                await self._complete_agent_turn(node_id, response_text, outbox, trigger, turn_log)
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
-                logger.exception("Agent turn failed for %s", node_id)
+                turn_log.exception("Agent turn failed")
                 await self._node_store.transition_status(node_id, NodeStatus.ERROR)
                 await outbox.emit(
                     AgentErrorEvent(
@@ -276,18 +291,22 @@ class Actor:
                     )
                 )
             finally:
-                await self._reset_agent_state(node_id, depth_key)
+                await self._reset_agent_state(node_id, depth_key, turn_log)
 
     async def _start_agent_turn(
-        self, node_id: str, trigger: Trigger, outbox: Outbox
+        self,
+        node_id: str,
+        trigger: Trigger,
+        outbox: Outbox,
+        turn_log: logging.LoggerAdapter,
     ) -> tuple[Node, AgentWorkspace, dict[str, Any]] | None:
         node = await self._node_store.get_node(node_id)
         if node is None:
-            logger.warning("Trigger for unknown node: %s", node_id)
+            turn_log.warning("Trigger for unknown node")
             return None
 
         if not await self._node_store.transition_status(node_id, NodeStatus.RUNNING):
-            logger.warning("Failed to transition node %s into running state", node_id)
+            turn_log.warning("Failed to transition node into running state")
             return None
 
         await outbox.emit(
@@ -347,6 +366,7 @@ class Actor:
         model_name: str,
         tools: list[GrailTool],
         max_turns: int,
+        turn_log: logging.LoggerAdapter,
     ) -> Any:
         max_retries = 1
         last_exc: Exception | None = None
@@ -362,7 +382,7 @@ class Actor:
             )
             try:
                 if attempt == 0:
-                    logger.info(
+                    turn_log.info(
                         (
                             "Model request node=%s corr=%s base_url=%s model=%s "
                             "tools=%s system=%s user=%s"
@@ -376,7 +396,7 @@ class Actor:
                         messages[1].content or "",
                     )
                 else:
-                    logger.warning(
+                    turn_log.warning(
                         "Retrying model request node=%s attempt=%d/%d",
                         node_id,
                         attempt + 1,
@@ -387,7 +407,7 @@ class Actor:
                 last_exc = exc
                 if attempt < max_retries:
                     backoff = 2.0**attempt
-                    logger.warning(
+                    turn_log.warning(
                         "Model request failed node=%s attempt=%d, retrying in %.1fs: %s",
                         node_id,
                         attempt + 1,
@@ -403,9 +423,14 @@ class Actor:
         raise RuntimeError(str(last_exc) if last_exc is not None else "kernel run failed")
 
     async def _complete_agent_turn(
-        self, node_id: str, response_text: str, outbox: Outbox, trigger: Trigger
+        self,
+        node_id: str,
+        response_text: str,
+        outbox: Outbox,
+        trigger: Trigger,
+        turn_log: logging.LoggerAdapter,
     ) -> None:
-        logger.info(
+        turn_log.info(
             "Agent turn complete node=%s corr=%s response=%s",
             node_id,
             trigger.correlation_id,
@@ -420,13 +445,15 @@ class Actor:
             )
         )
 
-    async def _reset_agent_state(self, node_id: str, depth_key: str | None) -> None:
+    async def _reset_agent_state(
+        self, node_id: str, depth_key: str | None, turn_log: logging.LoggerAdapter
+    ) -> None:
         try:
             current_node = await self._node_store.get_node(node_id)
             if current_node is not None and current_node.status == NodeStatus.RUNNING:
                 await self._node_store.transition_status(node_id, NodeStatus.IDLE)
         except Exception:  # noqa: BLE001 - best effort cleanup
-            logger.exception("Failed to reset node status for %s", node_id)
+            turn_log.exception("Failed to reset node status")
         if depth_key is not None:
             remaining = self._depths.get(depth_key, 1) - 1
             if remaining <= 0:

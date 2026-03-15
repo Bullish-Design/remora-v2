@@ -357,6 +357,51 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
 
 
 @pytest.mark.asyncio
+async def test_turn_logs_include_correlation_id(actor_env, monkeypatch, caplog) -> None:
+    env = actor_env
+    node = make_node("src/app.py::log-context")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-turn-context",
+        event=AgentMessageEvent(
+            from_agent="user",
+            to_agent=node.node_id,
+            content="hello",
+            correlation_id="corr-turn-context",
+        ),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-turn-context",
+    )
+
+    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+        await actor._execute_turn(trigger, outbox)
+
+    assert any(
+        getattr(record, "correlation_id", None) == "corr-turn-context"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
 async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, caplog) -> None:
     env = actor_env
     node = make_node("src/app.py::logged-long")

@@ -30,6 +30,20 @@ app = typer.Typer(
     add_completion=False,
 )
 
+
+class _ContextFilter(logging.Filter):
+    """Inject default structured context fields for non-actor log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "node_id"):
+            record.node_id = "-"
+        if not hasattr(record, "correlation_id"):
+            record.correlation_id = "-"
+        if not hasattr(record, "turn"):
+            record.turn = "-"
+        return True
+
+
 PROJECT_ROOT_ARG = typer.Option(
     "--project-root",
     exists=True,
@@ -291,8 +305,11 @@ def _configure_logging(level_name: str, *, lsp_mode: bool = False) -> None:
 
     stream = sys.stderr if lsp_mode else sys.stdout
     stream_handler = logging.StreamHandler(stream)
+    stream_handler.addFilter(_ContextFilter())
     stream_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s [%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
+        )
     )
     root_logger.addHandler(stream_handler)
 
@@ -314,9 +331,12 @@ def _configure_file_logging(log_path: Path) -> None:
         backupCount=3,
         encoding="utf-8",
     )
+    file_handler.addFilter(_ContextFilter())
     file_handler.setLevel(root_logger.level)
     file_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s [%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
+        )
     )
     root_logger.addHandler(file_handler)
 
