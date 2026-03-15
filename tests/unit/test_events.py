@@ -14,6 +14,7 @@ from remora.core.events import (
     NodeRemovedEvent,
     ToolResultEvent,
 )
+from remora.core.events.subscriptions import SubscriptionPattern
 
 
 def test_agent_text_response_event_removed() -> None:
@@ -49,15 +50,29 @@ def test_event_to_envelope_shape() -> None:
         to_agent="b",
         content="hello",
         correlation_id="corr-1",
+        tags=("chat",),
     )
     envelope = event.to_envelope()
     assert envelope["event_type"] == "AgentMessageEvent"
     assert envelope["correlation_id"] == "corr-1"
+    assert envelope["tags"] == ["chat"]
     assert envelope["payload"] == {
         "from_agent": "a",
         "to_agent": "b",
         "content": "hello",
     }
+
+
+def test_subscription_pattern_matches_tags() -> None:
+    event = AgentMessageEvent(
+        from_agent="a",
+        to_agent="b",
+        content="hello",
+        tags=("scaffold", "review"),
+    )
+    assert SubscriptionPattern(tags=["scaffold"]).matches(event)
+    assert SubscriptionPattern(tags=["review"]).matches(event)
+    assert not SubscriptionPattern(tags=["missing"]).matches(event)
 
 
 def test_all_event_types_instantiate() -> None:

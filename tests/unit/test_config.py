@@ -52,7 +52,8 @@ def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:
         "    role: test-agent\n"
         "    subscriptions:\n"
         "      - event_types: [NodeChangedEvent]\n"
-        "        path_glob: src/**\n",
+        "        path_glob: src/**\n"
+        "        tags: [scaffold, ci]\n",
         encoding="utf-8",
     )
     config = load_config(yaml_path)
@@ -60,6 +61,7 @@ def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:
     assert config.virtual_agents[0].id == "test-agent"
     assert config.virtual_agents[0].role == "test-agent"
     assert config.virtual_agents[0].subscriptions[0].event_types == ("NodeChangedEvent",)
+    assert config.virtual_agents[0].subscriptions[0].tags == ("scaffold", "ci")
 
 
 def test_env_var_expansion(monkeypatch) -> None:

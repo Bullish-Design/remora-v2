@@ -581,6 +581,7 @@ class FileReconciler:
                 from_agents=list(item.from_agents) if item.from_agents else None,
                 to_agent=item.to_agent,
                 path_glob=item.path_glob,
+                tags=list(item.tags) if item.tags else None,
             )
             for item in spec.subscriptions
         )
@@ -595,6 +596,7 @@ class FileReconciler:
                     "from_agents": list(item.from_agents) if item.from_agents else None,
                     "to_agent": item.to_agent,
                     "path_glob": item.path_glob,
+                    "tags": list(item.tags) if item.tags else None,
                 }
                 for item in spec.subscriptions
             ],

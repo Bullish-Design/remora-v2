@@ -21,6 +21,7 @@ class VirtualSubscriptionConfig(BaseModel):
     from_agents: tuple[str, ...] | None = None
     to_agent: str | None = None
     path_glob: str | None = None
+    tags: tuple[str, ...] | None = None
 
 
 class VirtualAgentConfig(BaseModel):

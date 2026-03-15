@@ -17,6 +17,7 @@ class Event(BaseModel):
     event_type: str = ""
     timestamp: float = Field(default_factory=time.time)
     correlation_id: str | None = None
+    tags: tuple[str, ...] = ()
 
     def model_post_init(self, __context: Any) -> None:
         if not self.event_type:
@@ -28,12 +29,13 @@ class Event(BaseModel):
 
     def to_envelope(self) -> dict[str, Any]:
         payload = self.model_dump(
-            exclude={"event_type", "timestamp", "correlation_id"},
+            exclude={"event_type", "timestamp", "correlation_id", "tags"},
         )
         return {
             "event_type": self.event_type,
             "timestamp": self.timestamp,
             "correlation_id": self.correlation_id,
+            "tags": list(self.tags),
             "payload": payload,
         }
 

@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 import aiosqlite
+
 from remora.core.events.bus import EventBus
 from remora.core.events.dispatcher import TriggerDispatcher
 from remora.core.events.subscriptions import SubscriptionRegistry
@@ -48,6 +49,7 @@ class EventStore:
                 to_agent TEXT,
                 correlation_id TEXT,
                 timestamp REAL NOT NULL,
+                tags TEXT NOT NULL DEFAULT '[]',
                 payload TEXT NOT NULL,
                 summary TEXT DEFAULT ''
             );
@@ -72,9 +74,9 @@ class EventStore:
             """
             INSERT INTO events (
                 event_type, agent_id, from_agent, to_agent,
-                correlation_id, timestamp, payload, summary
+                correlation_id, timestamp, tags, payload, summary
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 envelope["event_type"],
@@ -83,6 +85,7 @@ class EventStore:
                 to_agent,
                 envelope["correlation_id"],
                 envelope["timestamp"],
+                json.dumps(envelope.get("tags", [])),
                 json.dumps(payload),
                 summary,
             ),
@@ -105,6 +108,7 @@ class EventStore:
         rows = await cursor.fetchall()
         result = [dict(row) for row in rows]
         for row in result:
+            row["tags"] = json.loads(row.get("tags") or "[]")
             row["payload"] = json.loads(row["payload"])
         return result
 
@@ -126,6 +130,7 @@ class EventStore:
         rows = await cursor.fetchall()
         result = [dict(row) for row in rows]
         for row in result:
+            row["tags"] = json.loads(row.get("tags") or "[]")
             row["payload"] = json.loads(row["payload"])
         return result
 
@@ -143,6 +148,7 @@ class EventStore:
         rows = await cursor.fetchall()
         result = [dict(row) for row in rows]
         for row in result:
+            row["tags"] = json.loads(row.get("tags") or "[]")
             row["payload"] = json.loads(row["payload"])
         return result
 

@@ -10,6 +10,7 @@ from remora.core.actor import Outbox, RecordingOutbox
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore
+from remora.core.events.types import CustomEvent
 from remora.core.externals import TurnContext
 from remora.core.graph import NodeStore
 from remora.core.types import NodeType
@@ -138,10 +139,11 @@ async def test_externals_event_ops(context_env) -> None:
 
     sub_id = await externals["event_subscribe"](["AgentMessageEvent"], None, None)
     assert isinstance(sub_id, int)
-    assert await externals["event_emit"]("CustomEvent", {"value": "x"})
+    assert await externals["event_emit"]("CustomEvent", {"value": "x"}, tags=["scaffold"])
     stored = await event_store.get_events(limit=10)
     custom = next(event for event in stored if event["event_type"] == "CustomEvent")
     assert custom["payload"]["payload"]["value"] == "x"
+    assert custom["tags"] == ["scaffold"]
     history = await externals["event_get_history"](node.node_id, limit=10)
     assert isinstance(history, list)
     assert await externals["event_unsubscribe"](sub_id)
@@ -149,6 +151,35 @@ async def test_externals_event_ops(context_env) -> None:
     await event_store.append(AgentMessageEvent(from_agent="a", to_agent=node.node_id, content="x"))
     got = await event_store.get_events_for_agent(node.node_id, limit=5)
     assert got
+
+
+@pytest.mark.asyncio
+async def test_externals_event_subscribe_supports_tag_filters(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::alpha")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    sub_id = await externals["event_subscribe"](["CustomEvent"], None, None, ["review"])
+    assert isinstance(sub_id, int)
+
+    await externals["event_emit"]("CustomEvent", {"value": "no-match"}, tags=["other"])
+    await externals["event_emit"]("CustomEvent", {"value": "match"}, tags=["review"])
+
+    no_match_event = CustomEvent(
+        event_type="CustomEvent",
+        payload={"value": "n"},
+        tags=("other",),
+    )
+    yes_match_event = CustomEvent(
+        event_type="CustomEvent",
+        payload={"value": "y"},
+        tags=("review",),
+    )
+    assert node.node_id not in await event_store.subscriptions.get_matching_agents(no_match_event)
+    assert node.node_id in await event_store.subscriptions.get_matching_agents(yes_match_event)
 
 
 @pytest.mark.asyncio

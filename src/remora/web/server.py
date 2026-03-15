@@ -15,9 +15,9 @@ from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
+from remora.core.events import AgentMessageEvent, CursorFocusEvent
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
-from remora.core.events import AgentMessageEvent, CursorFocusEvent
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 
@@ -51,7 +51,7 @@ def create_app(
     node_store: NodeStore,
     event_bus: EventBus,
     metrics: Metrics | None = None,
-    actor_pool: "ActorPool | None" = None,
+    actor_pool: ActorPool | None = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()
@@ -205,6 +205,7 @@ def create_app(
                         "event_type": event_name,
                         "timestamp": row.get("timestamp"),
                         "correlation_id": row.get("correlation_id"),
+                        "tags": row.get("tags", []),
                         "payload": row.get("payload", {}),
                     }
                     payload_text = json.dumps(replay_payload, separators=(",", ":"))
@@ -218,6 +219,7 @@ def create_app(
                         "event_type": event_name,
                         "timestamp": row.get("timestamp"),
                         "correlation_id": row.get("correlation_id"),
+                        "tags": row.get("tags", []),
                         "payload": row.get("payload", {}),
                     }
                     payload_text = json.dumps(replay_payload, separators=(",", ":"))
@@ -231,7 +233,7 @@ def create_app(
                         break
                     try:
                         event = await asyncio.wait_for(stream_iterator.__anext__(), timeout=0.25)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
                     except StopAsyncIteration:
                         break

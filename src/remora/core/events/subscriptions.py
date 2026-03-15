@@ -21,6 +21,7 @@ class SubscriptionPattern(BaseModel):
     from_agents: list[str] | None = None
     to_agent: str | None = None
     path_glob: str | None = None
+    tags: list[str] | None = None
 
     def matches(self, event: Event) -> bool:
         """Return True when the event matches this pattern."""
@@ -40,6 +41,11 @@ class SubscriptionPattern(BaseModel):
         if self.path_glob:
             path = getattr(event, "path", None) or getattr(event, "file_path", None)
             if path is None or not PurePath(path).match(self.path_glob):
+                return False
+
+        if self.tags:
+            event_tags = set(getattr(event, "tags", ()))
+            if not event_tags.intersection(self.tags):
                 return False
 
         return True

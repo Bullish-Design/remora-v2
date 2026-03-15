@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-import json
 from pathlib import Path
 
 import httpx
 import pytest
 import pytest_asyncio
 from structured_agents import Message
+from tests.factories import make_node
 
-from remora.core.events import AgentMessageEvent, EventBus, EventStore
 from remora.core.db import open_database
+from remora.core.events import AgentMessageEvent, EventBus, EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 from remora.web.server import create_app
-from tests.factories import make_node
 
 
 async def _read_sse_event_lines(response: httpx.Response) -> list[str]:
@@ -288,7 +288,13 @@ async def test_sse_receives_events(web_env) -> None:
     payload = json.loads(data_line.removeprefix("data: ").strip())
     assert payload["event_type"] == "AgentMessageEvent"
     assert payload["payload"]["content"] == "from-sse-test"
-    assert set(payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
+    assert set(payload.keys()) == {
+        "event_type",
+        "timestamp",
+        "correlation_id",
+        "tags",
+        "payload",
+    }
 
 
 @pytest.mark.asyncio
@@ -328,8 +334,20 @@ async def test_sse_replay_and_live_payload_shapes_match(web_env) -> None:
 
     replay_payload = json.loads(replay_line.removeprefix("data: ").strip())
     live_payload = json.loads(live_line.removeprefix("data: ").strip())
-    assert set(replay_payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
-    assert set(live_payload.keys()) == {"event_type", "timestamp", "correlation_id", "payload"}
+    assert set(replay_payload.keys()) == {
+        "event_type",
+        "timestamp",
+        "correlation_id",
+        "tags",
+        "payload",
+    }
+    assert set(live_payload.keys()) == {
+        "event_type",
+        "timestamp",
+        "correlation_id",
+        "tags",
+        "payload",
+    }
 
 
 @pytest.mark.asyncio
@@ -381,8 +399,12 @@ async def test_get_events_after(web_env) -> None:
     first_id = await event_store.append(
         AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="a")
     )
-    await event_store.append(AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="b"))
-    await event_store.append(AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="c"))
+    await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="b")
+    )
+    await event_store.append(
+        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="c")
+    )
 
     rows = await event_store.get_events_after(str(first_id))
     assert [row["payload"]["content"] for row in rows] == ["b", "c"]

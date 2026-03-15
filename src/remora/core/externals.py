@@ -143,11 +143,17 @@ class TurnContext:
         await self._node_store.set_status(target_id, new_status)
         return True
 
-    async def event_emit(self, event_type: str, payload: dict[str, Any]) -> bool:
+    async def event_emit(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        tags: list[str] | None = None,
+    ) -> bool:
         event = CustomEvent(
             event_type=event_type,
             payload=payload,
             correlation_id=self.correlation_id,
+            tags=tuple(tags or ()),
         )
         await self._emit(event)
         return True
@@ -157,11 +163,13 @@ class TurnContext:
         event_types: list[str] | None = None,
         from_agents: list[str] | None = None,
         path_glob: str | None = None,
+        tags: list[str] | None = None,
     ) -> int:
         pattern = SubscriptionPattern(
             event_types=event_types,
             from_agents=from_agents,
             path_glob=path_glob,
+            tags=tags,
         )
         return await self._event_store.subscriptions.register(self.node_id, pattern)
 
