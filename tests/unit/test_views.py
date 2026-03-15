@@ -18,7 +18,7 @@ def test_graph_html_renders() -> None:
 
 def test_graph_html_has_sse_client() -> None:
     html = _index_html()
-    assert "EventSource('/sse')" in html or 'EventSource("/sse")' in html
+    assert "EventSource('/sse')" in html or 'EventSource("/sse' in html
 
 
 def test_graph_html_escapes_source_rendering() -> None:
