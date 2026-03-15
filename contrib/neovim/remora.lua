@@ -2,6 +2,7 @@
 -- Copy to ~/.config/nvim/lua/remora.lua and require("remora") in init.lua
 
 local M = {}
+local _cursor_timer = nil
 
 M.config = {
   filetypes = { "python", "markdown", "toml" },
@@ -46,23 +47,35 @@ function M.setup(opts)
 end
 
 function M._setup_cursor_tracking(opts)
+  if vim.o.updatetime > 500 then
+    vim.o.updatetime = 300
+  end
+
   vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
     group = vim.api.nvim_create_augroup("RemoraCursor", { clear = true }),
     callback = function()
-      local file = vim.api.nvim_buf_get_name(0)
-      if file == "" then return end
-      local cursor = vim.api.nvim_win_get_cursor(0)
-      local url = opts.web_url .. "/api/cursor"
-      local payload = vim.fn.json_encode({
-        file_path = file,
-        line = cursor[1],
-        character = cursor[2],
-      })
-      vim.fn.jobstart({
-        "curl", "-s", "-X", "POST", url,
-        "-H", "Content-Type: application/json",
-        "-d", payload,
-      }, { detach = true })
+      if _cursor_timer then
+        _cursor_timer:stop()
+        _cursor_timer = nil
+      end
+
+      _cursor_timer = vim.defer_fn(function()
+        _cursor_timer = nil
+        local file = vim.api.nvim_buf_get_name(0)
+        if file == "" then return end
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        local url = opts.web_url .. "/api/cursor"
+        local payload = vim.fn.json_encode({
+          file_path = file,
+          line = cursor[1],
+          character = cursor[2],
+        })
+        vim.fn.jobstart({
+          "curl", "-s", "-X", "POST", url,
+          "-H", "Content-Type: application/json",
+          "-d", payload,
+        }, { detach = true })
+      end, opts.cursor_debounce_ms or 300)
     end,
   })
 end
