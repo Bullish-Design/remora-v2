@@ -1,0 +1,21 @@
+# List nodes available for review prioritization.
+from grail import external
+
+
+@external
+async def graph_list_nodes() -> list[dict]: ...
+
+
+nodes = await graph_list_nodes()
+if not nodes:
+    result = "No nodes found."
+else:
+    lines = []
+    for node in nodes[:20]:
+        lines.append(
+            f"- [{node.get('node_type', '?')}] "
+            f"{node.get('full_name', node.get('name', '?'))} "
+            f"({node.get('node_id', '?')})"
+        )
+    result = f"Nodes ({len(nodes)} total, showing first 20):\n" + "\n".join(lines)
+result

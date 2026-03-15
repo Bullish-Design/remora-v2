@@ -1,4 +1,5 @@
 name: test-agent
+tools_dir: tools
 system_prompt: >-
   You are a test scaffolding virtual agent.
   Monitor code changes and maintain test quality.
