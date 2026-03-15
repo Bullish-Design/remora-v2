@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+from collections import deque
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -22,6 +24,24 @@ _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
+class RateLimiter:
+    """Simple in-memory sliding window rate limiter."""
+
+    def __init__(self, max_requests: int = 10, window_seconds: float = 60.0) -> None:
+        self._max_requests = max_requests
+        self._window_seconds = window_seconds
+        self._timestamps: deque[float] = deque()
+
+    def allow(self) -> bool:
+        now = time.time()
+        while self._timestamps and self._timestamps[0] < now - self._window_seconds:
+            self._timestamps.popleft()
+        if len(self._timestamps) >= self._max_requests:
+            return False
+        self._timestamps.append(now)
+        return True
+
+
 def create_app(
     event_store: EventStore,
     node_store: NodeStore,
@@ -30,6 +50,7 @@ def create_app(
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()
+    chat_limiter = RateLimiter(max_requests=10, window_seconds=60.0)
 
     async def index(_request: Request) -> HTMLResponse:
         return HTMLResponse(_INDEX_HTML)
@@ -63,6 +84,12 @@ def create_app(
         return JSONResponse(payload)
 
     async def api_chat(request: Request) -> JSONResponse:
+        if not chat_limiter.allow():
+            return JSONResponse(
+                {"error": "Rate limit exceeded. Try again later."},
+                status_code=429,
+            )
+
         data = await request.json()
         node_id = str(data.get("node_id", "")).strip()
         message = str(data.get("message", "")).strip()

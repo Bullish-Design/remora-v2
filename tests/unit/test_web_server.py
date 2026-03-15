@@ -159,6 +159,37 @@ async def test_api_chat_missing_node_returns_404(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_rate_limit_allows_within_limit(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    statuses = []
+    for idx in range(10):
+        response = await client.post(
+            "/api/chat",
+            json={"node_id": "src/app.py::a", "message": f"msg-{idx}"},
+        )
+        statuses.append(response.status_code)
+    assert statuses == [200] * 10
+
+
+@pytest.mark.asyncio
+async def test_chat_rate_limit_blocks_excess(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    for idx in range(10):
+        response = await client.post(
+            "/api/chat",
+            json={"node_id": "src/app.py::a", "message": f"msg-{idx}"},
+        )
+        assert response.status_code == 200
+
+    blocked = await client.post(
+        "/api/chat",
+        json={"node_id": "src/app.py::a", "message": "overflow"},
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["error"].startswith("Rate limit exceeded")
+
+
+@pytest.mark.asyncio
 async def test_api_events(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     await event_store.append(
