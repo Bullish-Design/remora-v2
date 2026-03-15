@@ -10,6 +10,8 @@ from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
 from remora.core.events import ContentChangedEvent
+from remora.core.events.store import EventStore
+from remora.core.graph import NodeStore
 from remora.core.node import Node
 
 
@@ -47,7 +49,7 @@ class DocumentStore:
         return text
 
 
-def create_lsp_server(node_store, event_store) -> LanguageServer:  # noqa: ANN001
+def create_lsp_server(node_store: NodeStore, event_store: EventStore) -> LanguageServer:
     """Create an LSP server that projects Remora state into editor surfaces."""
     server = LanguageServer("remora", "2.0.0")
     documents = DocumentStore()
