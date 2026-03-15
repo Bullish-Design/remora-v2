@@ -16,6 +16,7 @@ from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.events import AgentMessageEvent, CursorFocusEvent
 from remora.core.graph import NodeStore
+from remora.core.metrics import Metrics
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
@@ -25,6 +26,7 @@ def create_app(
     event_store: EventStore,
     node_store: NodeStore,
     event_bus: EventBus,
+    metrics: Metrics | None = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()
@@ -83,6 +85,17 @@ def create_app(
         except ValueError:
             return JSONResponse({"error": "invalid limit"}, status_code=400)
         return JSONResponse(await event_store.get_events(limit=limit))
+
+    async def api_health(_request: Request) -> JSONResponse:
+        node_count = len(await node_store.list_nodes())
+        health: dict[str, object] = {
+            "status": "ok",
+            "version": "0.5.0",
+            "nodes": node_count,
+        }
+        if metrics is not None:
+            health["metrics"] = metrics.snapshot()
+        return JSONResponse(health)
 
     async def api_cursor(request: Request) -> JSONResponse:
         data = await request.json()
@@ -196,6 +209,7 @@ def create_app(
         Route("/api/nodes/{node_id:path}", endpoint=api_node),
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
         Route("/api/events", endpoint=api_events),
+        Route("/api/health", endpoint=api_health),
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),
         Route("/sse", endpoint=sse_stream),
     ]

@@ -208,6 +208,7 @@ async def _start(
             services.event_store,
             services.node_store,
             services.event_bus,
+            metrics=services.metrics,
         )
         logger.info("Starting web server on %s:%d", bind, port)
         web_config = uvicorn.Config(

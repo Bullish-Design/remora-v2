@@ -13,6 +13,7 @@ import pytest_asyncio
 from remora.core.events import AgentMessageEvent, EventBus, EventStore
 from remora.core.db import open_database
 from remora.core.graph import NodeStore
+from remora.core.metrics import Metrics
 from remora.web.server import create_app
 from tests.factories import make_node
 
@@ -169,6 +170,31 @@ async def test_api_events(web_env) -> None:
     payload = response.json()
     assert isinstance(payload, list)
     assert payload and payload[0]["event_type"] == "AgentMessageEvent"
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_returns_ok(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.get("/api/health")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["nodes"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_includes_metrics(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+    metrics = Metrics(agent_turns_total=2, events_emitted_total=3)
+    app = create_app(event_store, node_store, EventBus(), metrics=metrics)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/health")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["metrics"]["agent_turns_total"] == 2
+    assert payload["metrics"]["events_emitted_total"] == 3
 
 
 @pytest.mark.asyncio
