@@ -16,7 +16,14 @@ from structured_agents import Message
 from remora.core.config import Config, _expand_env_vars
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
-from remora.core.events.types import Event
+from remora.core.events.types import (
+    Event,
+    ModelRequestEvent,
+    ModelResponseEvent,
+    RemoraToolCallEvent,
+    RemoraToolResultEvent,
+    TurnCompleteEvent,
+)
 from remora.core.externals import TurnContext
 from remora.core.grail import GrailTool, discover_tools
 from remora.core.graph import NodeStore
@@ -118,6 +125,61 @@ class RecordingOutbox:
             event.correlation_id = self._correlation_id
         self.events.append(event)
         return self._sequence
+
+
+class OutboxObserver:
+    """Bridge structured-agents kernel observer events into Remora events."""
+
+    def __init__(self, outbox: Outbox, agent_id: str) -> None:
+        self._outbox = outbox
+        self._agent_id = agent_id
+
+    async def emit(self, event: Any) -> None:
+        remora_event = self._translate(event)
+        if remora_event is not None:
+            await self._outbox.emit(remora_event)
+
+    def _translate(self, event: Any) -> Event | None:
+        event_name = type(event).__name__
+        if event_name == "ModelRequestEvent":
+            return ModelRequestEvent(
+                agent_id=self._agent_id,
+                model=str(getattr(event, "model", "")),
+                tool_count=int(getattr(event, "tools_count", 0) or 0),
+                turn=int(getattr(event, "turn", 0) or 0),
+            )
+        if event_name == "ModelResponseEvent":
+            return ModelResponseEvent(
+                agent_id=self._agent_id,
+                response_preview=str(getattr(event, "content", "") or "")[:200],
+                duration_ms=int(getattr(event, "duration_ms", 0) or 0),
+                tool_calls_count=int(getattr(event, "tool_calls_count", 0) or 0),
+                turn=int(getattr(event, "turn", 0) or 0),
+            )
+        if event_name == "ToolCallEvent":
+            return RemoraToolCallEvent(
+                agent_id=self._agent_id,
+                tool_name=str(getattr(event, "tool_name", "")),
+                arguments_summary=str(getattr(event, "arguments", {}))[:200],
+                turn=int(getattr(event, "turn", 0) or 0),
+            )
+        if event_name == "ToolResultEvent":
+            return RemoraToolResultEvent(
+                agent_id=self._agent_id,
+                tool_name=str(getattr(event, "tool_name", "")),
+                is_error=bool(getattr(event, "is_error", False)),
+                duration_ms=int(getattr(event, "duration_ms", 0) or 0),
+                output_preview=str(getattr(event, "output_preview", "") or "")[:200],
+                turn=int(getattr(event, "turn", 0) or 0),
+            )
+        if event_name == "TurnCompleteEvent":
+            return TurnCompleteEvent(
+                agent_id=self._agent_id,
+                turn=int(getattr(event, "turn", 0) or 0),
+                tool_calls_count=int(getattr(event, "tool_calls_count", 0) or 0),
+                errors_count=int(getattr(event, "errors_count", 0) or 0),
+            )
+        return None
 
 
 @dataclass
@@ -285,6 +347,7 @@ class Actor:
                     model_name,
                     tools,
                     max_turns,
+                    outbox,
                     turn_log,
                 )
 
@@ -382,6 +445,7 @@ class Actor:
         model_name: str,
         tools: list[GrailTool],
         max_turns: int,
+        outbox: Outbox,
         turn_log: logging.LoggerAdapter,
     ) -> Any:
         max_retries = 1
@@ -395,6 +459,7 @@ class Actor:
                 api_key=self._config.model_api_key,
                 timeout=self._config.timeout_s,
                 tools=tools,
+                observer=OutboxObserver(outbox=outbox, agent_id=node_id),
             )
             try:
                 if attempt == 0:
@@ -582,4 +647,4 @@ def _event_content(event: Event) -> str:
     return ""
 
 
-__all__ = ["Outbox", "RecordingOutbox", "Trigger", "Actor"]
+__all__ = ["Outbox", "RecordingOutbox", "OutboxObserver", "Trigger", "Actor"]

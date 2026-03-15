@@ -11,13 +11,18 @@ from remora.core.events import (
     CursorFocusEvent,
     HumanInputRequestEvent,
     HumanInputResponseEvent,
+    ModelRequestEvent,
+    ModelResponseEvent,
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
+    RemoraToolCallEvent,
+    RemoraToolResultEvent,
     RewriteAcceptedEvent,
     RewriteProposalEvent,
     RewriteRejectedEvent,
     ToolResultEvent,
+    TurnCompleteEvent,
 )
 from remora.core.events.subscriptions import SubscriptionPattern
 
@@ -133,6 +138,29 @@ def test_all_event_types_instantiate() -> None:
             proposal_id="proposal-2",
             feedback="Please simplify",
         ),
+        ModelRequestEvent(agent_id="a", model="mock", tool_count=2, turn=1),
+        ModelResponseEvent(
+            agent_id="a",
+            response_preview="ok",
+            duration_ms=42,
+            tool_calls_count=1,
+            turn=1,
+        ),
+        RemoraToolCallEvent(
+            agent_id="a",
+            tool_name="send_message",
+            arguments_summary="{'to_node_id': 'user'}",
+            turn=1,
+        ),
+        RemoraToolResultEvent(
+            agent_id="a",
+            tool_name="send_message",
+            is_error=False,
+            duration_ms=3,
+            output_preview="sent",
+            turn=1,
+        ),
+        TurnCompleteEvent(agent_id="a", turn=1, tool_calls_count=1, errors_count=0),
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
         CursorFocusEvent(file_path="src/app.py", line=3, character=0, node_id="src/app.py::a"),
     ]

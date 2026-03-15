@@ -141,6 +141,54 @@ class RewriteRejectedEvent(Event):
     feedback: str = ""
 
 
+class ModelRequestEvent(Event):
+    """LLM request started for an agent turn."""
+
+    agent_id: str
+    model: str = ""
+    tool_count: int = 0
+    turn: int = 0
+
+
+class ModelResponseEvent(Event):
+    """LLM response received for an agent turn."""
+
+    agent_id: str
+    response_preview: str = ""
+    duration_ms: int = 0
+    tool_calls_count: int = 0
+    turn: int = 0
+
+
+class RemoraToolCallEvent(Event):
+    """Agent is about to call a tool."""
+
+    agent_id: str
+    tool_name: str
+    arguments_summary: str = ""
+    turn: int = 0
+
+
+class RemoraToolResultEvent(Event):
+    """Tool execution completed within a turn."""
+
+    agent_id: str
+    tool_name: str
+    is_error: bool = False
+    duration_ms: int = 0
+    output_preview: str = ""
+    turn: int = 0
+
+
+class TurnCompleteEvent(Event):
+    """One model/tool turn cycle completed."""
+
+    agent_id: str
+    turn: int = 0
+    tool_calls_count: int = 0
+    errors_count: int = 0
+
+
 class CustomEvent(Event):
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -183,6 +231,11 @@ __all__ = [
     "RewriteProposalEvent",
     "RewriteAcceptedEvent",
     "RewriteRejectedEvent",
+    "ModelRequestEvent",
+    "ModelResponseEvent",
+    "RemoraToolCallEvent",
+    "RemoraToolResultEvent",
+    "TurnCompleteEvent",
     "CustomEvent",
     "ToolResultEvent",
     "CursorFocusEvent",

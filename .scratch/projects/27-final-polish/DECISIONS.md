@@ -18,3 +18,6 @@
 - Decision 006: Keep panel state client-side using SSE-reduced `agentEventCache` and avoid new server aggregation endpoints.
   - Rationale: aligns with event-projection architecture and keeps UI updates low-latency and decoupled.
 
+- Decision 007: Kernel observer translation uses event class-name dispatch (string-based) instead of hard importing structured event classes.
+  - Rationale: keeps coupling loose and avoids version-fragile runtime dependencies while preserving structured telemetry.
+

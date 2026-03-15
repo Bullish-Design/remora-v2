@@ -500,7 +500,10 @@ async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) 
 
 
 @pytest.mark.asyncio
-async def test_actor_execute_turn_emits_error_event_on_kernel_failure(actor_env, monkeypatch) -> None:
+async def test_actor_execute_turn_emits_error_event_on_kernel_failure(
+    actor_env,
+    monkeypatch,
+) -> None:
     env = actor_env
     node = make_node("src/app.py::kernel-fail")
     await env["node_store"].upsert_node(node)
@@ -649,8 +652,16 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
         semaphore=shared_semaphore,
     )
 
-    outbox_a = Outbox(actor_id=node_a.node_id, event_store=env["event_store"], correlation_id="corr-sem-a")
-    outbox_b = Outbox(actor_id=node_b.node_id, event_store=env["event_store"], correlation_id="corr-sem-b")
+    outbox_a = Outbox(
+        actor_id=node_a.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-sem-a",
+    )
+    outbox_b = Outbox(
+        actor_id=node_b.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-sem-b",
+    )
     trigger_a = Trigger(
         node_id=node_a.node_id,
         correlation_id="corr-sem-a",
@@ -671,6 +682,96 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
     gate.set()
     await asyncio.gather(task_a, task_b)
     assert max_in_flight == 1
+
+
+@pytest.mark.asyncio
+async def test_actor_emits_kernel_observability_events(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::observed")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class ModelRequestEvent:
+        def __init__(self) -> None:
+            self.turn = 1
+            self.messages_count = 2
+            self.tools_count = 1
+            self.model = "mock"
+
+    class ModelResponseEvent:
+        def __init__(self) -> None:
+            self.turn = 1
+            self.duration_ms = 12
+            self.content = "hello"
+            self.tool_calls_count = 1
+            self.usage = None
+
+    class ToolCallEvent:
+        def __init__(self) -> None:
+            self.turn = 1
+            self.tool_name = "send_message"
+            self.call_id = "call-1"
+            self.arguments = {"to_node_id": "user"}
+
+    class ToolResultEvent:
+        def __init__(self) -> None:
+            self.turn = 1
+            self.tool_name = "send_message"
+            self.call_id = "call-1"
+            self.is_error = False
+            self.duration_ms = 3
+            self.output_preview = "sent"
+
+    class TurnCompleteEvent:
+        def __init__(self) -> None:
+            self.turn = 1
+            self.tool_calls_count = 1
+            self.tool_results_count = 1
+            self.errors_count = 0
+
+    class ObservedKernel:
+        def __init__(self, observer):
+            self._observer = observer
+
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            await self._observer.emit(ModelRequestEvent())
+            await self._observer.emit(ModelResponseEvent())
+            await self._observer.emit(ToolCallEvent())
+            await self._observer.emit(ToolResultEvent())
+            await self._observer.emit(TurnCompleteEvent())
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    def capture_kernel(**kwargs):  # noqa: ANN003, ANN202
+        return ObservedKernel(kwargs["observer"])
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", capture_kernel)
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-observe",
+    )
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-observe",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="observe"),
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=30)
+    event_types = [event["event_type"] for event in events]
+    assert "ModelRequestEvent" in event_types
+    assert "ModelResponseEvent" in event_types
+    assert "RemoraToolCallEvent" in event_types
+    assert "RemoraToolResultEvent" in event_types
+    assert "TurnCompleteEvent" in event_types
 
 
 @pytest.mark.asyncio
