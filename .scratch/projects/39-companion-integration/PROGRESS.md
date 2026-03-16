@@ -8,5 +8,5 @@
 | 2 | Create project template | done |
 | 3 | Write comparison analysis: Recommended vs Approach A | done |
 | 3b | Write CONCEPT.md: expanded A, C, and A+C designs | done |
-| 4 | Clarify approach with user | pending |
-| 5 | Write COMPANION_IMPLEMENTATION_PLAN.md | pending |
+| 4 | Clarify approach with user | done (A+C combined) |
+| 5 | Write IMPLEMENTATION_GUIDE.md (full A+C walkthrough) | done |
