@@ -9,7 +9,7 @@
 - [x] Phase 0 Preparation
 - [x] Phase 1 Correctness Fixes
 - [x] Phase 2 Delete Dead Weight
-- [ ] Phase 3 Type the Untyped
+- [x] Phase 3 Type the Untyped
 - [ ] Phase 4 Extract BundleConfig Model
 - [ ] Phase 5 Decompose actor.py
 - [ ] Phase 6 Refactor web/server.py
@@ -39,4 +39,4 @@
 - [x] Step 3.1 Create `SearchServiceProtocol`
 - [x] Step 3.2 Replace search_service `object|Any` usages with protocol typing
 - [x] Step 3.3 Replace search_service getattr duck-typing checks
-- [ ] Step 3.4 Type remaining `Any` parameters (externals/workspace/lifecycle)
+- [x] Step 3.4 Type remaining `Any` parameters (externals/workspace/lifecycle)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +34,7 @@ class RemoraLifecycle:
         no_web: bool,
         log_events: bool,
         lsp: bool,
-        configure_file_logging: Any,
+        configure_file_logging: Callable[[Path], None],
     ) -> None:
         self._config = config
         self._project_root = project_root.resolve()

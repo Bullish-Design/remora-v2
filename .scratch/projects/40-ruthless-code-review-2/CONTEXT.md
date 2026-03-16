@@ -93,3 +93,15 @@ Next action:
 
 Next action:
 - Step 3.4: type remaining `Any` parameters (`TurnContext.outbox`, lifecycle callable, workspace typing note).
+- Step 3.4 completed:
+  - typed `TurnContext.outbox` using `TYPE_CHECKING` import of `Outbox`
+  - typed `AgentWorkspace` raw workspace as `fsdantic.Workspace`
+  - typed lifecycle logging callback as `Callable[[Path], None]`
+  - verification:
+    - `tests/unit/test_externals.py`
+    - `tests/unit/test_workspace.py`
+    - `tests/unit/test_cli.py`
+    - `tests/integration/test_startup_shutdown.py`
+
+Next action:
+- Start Phase 4, Step 4.1 (`BundleConfig`/`SelfReflectConfig` model extraction in `core/config.py`).

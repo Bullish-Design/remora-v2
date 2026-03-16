@@ -7,7 +7,7 @@ import fnmatch
 import time
 import uuid
 from collections import deque
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from remora.core.events import (
     AgentMessageEvent,
@@ -24,6 +24,9 @@ from remora.core.search import SearchServiceProtocol
 from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace
 
+if TYPE_CHECKING:
+    from remora.core.actor import Outbox
+
 
 class TurnContext:
     """Per-turn context providing externals API for an agent's tools."""
@@ -35,7 +38,7 @@ class TurnContext:
         correlation_id: str | None,
         node_store: NodeStore,
         event_store: EventStore,
-        outbox: Any,
+        outbox: Outbox,
         human_input_timeout_s: float = 300.0,
         search_content_max_matches: int = 1000,
         broadcast_max_targets: int = 50,

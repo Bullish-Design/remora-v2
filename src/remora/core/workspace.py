@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 from cairn.runtime import workspace_manager as cairn_wm
-from fsdantic import ViewQuery
+from fsdantic import ViewQuery, Workspace
 
 from remora.core.config import Config
 from remora.core.metrics import Metrics
@@ -19,7 +19,7 @@ from remora.core.metrics import Metrics
 class AgentWorkspace:
     """Per-agent sandboxed filesystem backed by Cairn."""
 
-    def __init__(self, workspace: Any, agent_id: str):
+    def __init__(self, workspace: Workspace, agent_id: str):
         self._workspace = workspace
         self._agent_id = agent_id
         self._lock = asyncio.Lock()
@@ -107,7 +107,7 @@ class CairnWorkspaceService:
         self._workspace_root = self._project_root / config.workspace_root
         self._manager = cairn_wm.WorkspaceManager()
         self._agent_workspaces: dict[str, AgentWorkspace] = {}
-        self._raw_agent_workspaces: dict[str, Any] = {}
+        self._raw_agent_workspaces: dict[str, Workspace] = {}
         self._metrics = metrics
         self._lock = asyncio.Lock()
 
