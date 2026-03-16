@@ -85,9 +85,17 @@ Completed:
   - Added companion observer comments and example `virtual_agents` snippet to `remora.yaml.example`.
   - Manually validated YAML parse for `remora.yaml.example`.
   - Verification: `devenv shell -- python -c "import yaml; yaml.safe_load(open('remora.yaml.example'))"` (success).
+- Failure-analysis follow-up:
+  - Ran full suite with junit output:
+    - `devenv shell -- pytest tests/ -q --tb=short --junitxml=/tmp/pytest_full.xml`
+  - Produced `.scratch/projects/39-companion-integration/TEST_SUIDE_FAILURE_REPORT.md`.
+  - Report includes:
+    - full failure/error inventory and root-cause grouping
+    - concrete fix proposals per failure category
+    - explicit implementation overview for integration Steps 2 and 3 (tool runtime tests + companion E2E flow test)
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Project complete: all implementation-guide steps (1-13) are implemented, tested, committed, and pushed.
+- Await user direction on whether to execute the remediation plan from `TEST_SUIDE_FAILURE_REPORT.md`.
