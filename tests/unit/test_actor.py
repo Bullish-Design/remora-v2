@@ -413,6 +413,143 @@ def test_prompt_builder_reflection_tag_must_be_primary() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_companion_context_empty(actor_env) -> None:
+    from remora.core.actor import AgentTurnExecutor
+
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-empty")
+    result = await AgentTurnExecutor._build_companion_context(workspace)
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_build_companion_context_with_data(actor_env) -> None:
+    from remora.core.actor import AgentTurnExecutor
+
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-data")
+    await workspace.kv_set(
+        "companion/reflections",
+        [{"insight": "Regex does not handle Unicode domains", "timestamp": 1.0}],
+    )
+    await workspace.kv_set(
+        "companion/chat_index",
+        [{"summary": "Discussed email validation", "tags": ["bug"], "timestamp": 1.0}],
+    )
+    await workspace.kv_set(
+        "companion/links",
+        [{"target": "test_validate", "relationship": "tested_by", "timestamp": 1.0}],
+    )
+
+    result = await AgentTurnExecutor._build_companion_context(workspace)
+    assert "Companion Memory" in result
+    assert "Unicode domains" in result
+    assert "email validation" in result
+    assert "test_validate" in result
+
+
+@pytest.mark.asyncio
+async def test_companion_context_injected_for_primary_turn(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::companion-primary")
+    await env["node_store"].upsert_node(node)
+    workspace = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await workspace.write("_bundle/bundle.yaml", "system_prompt: base\nmodel: mock\nmax_turns: 1\n")
+    await workspace.kv_set(
+        "companion/reflections",
+        [{"insight": "Watch edge-case around unicode input"}],
+    )
+
+    captured_system_prompts: list[str] = []
+
+    class MockKernel:
+        async def run(self, messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            captured_system_prompts.append(messages[0].content)
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-companion-primary",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-companion-primary",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    assert captured_system_prompts
+    assert "## Companion Memory" in captured_system_prompts[0]
+    assert "unicode input" in captured_system_prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_companion_context_not_injected_for_reflection_turn(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::companion-reflection")
+    await env["node_store"].upsert_node(node)
+    workspace = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await workspace.write(
+        "_bundle/bundle.yaml",
+        (
+            "system_prompt: base\n"
+            "model: mock\n"
+            "max_turns: 1\n"
+            "self_reflect:\n"
+            "  enabled: true\n"
+            "  prompt: reflection-only\n"
+        ),
+    )
+    await workspace.kv_set(
+        "companion/reflections",
+        [{"insight": "This should not be appended on reflection turns"}],
+    )
+
+    captured_system_prompts: list[str] = []
+
+    class MockKernel:
+        async def run(self, messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            captured_system_prompts.append(messages[0].content)
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-companion-reflection",
+        event=AgentCompleteEvent(
+            agent_id=node.node_id,
+            result_summary="primary done",
+            full_response="primary done",
+            tags=("primary",),
+        ),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-companion-reflection",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    assert captured_system_prompts
+    assert captured_system_prompts[0] == "reflection-only"
+    assert "Companion Memory" not in captured_system_prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_actor_missing_node(actor_env) -> None:
     actor = _make_actor(actor_env, "missing-node")
     outbox = Outbox(actor_id="missing-node", event_store=actor_env["event_store"])

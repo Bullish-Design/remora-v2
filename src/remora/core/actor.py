@@ -358,6 +358,15 @@ class AgentTurnExecutor:
                     bundle_config,
                     trigger.event,
                 )
+                is_reflection_turn = (
+                    trigger.event is not None
+                    and trigger.event.event_type == "AgentCompleteEvent"
+                    and "primary" in getattr(trigger.event, "tags", ())
+                )
+                if not is_reflection_turn:
+                    companion_context = await self._build_companion_context(workspace)
+                    if companion_context:
+                        system_prompt = f"{system_prompt}\n{companion_context}"
 
                 _, tools = await self._prepare_turn_context(
                     node_id,
@@ -400,12 +409,7 @@ class AgentTurnExecutor:
 
                 response_text = extract_response_text(result)
                 self._history.append(Message(role="assistant", content=response_text))
-                is_reflection = (
-                    trigger.event is not None
-                    and trigger.event.event_type == "AgentCompleteEvent"
-                    and "primary" in getattr(trigger.event, "tags", ())
-                )
-                turn_tags = ("reflection",) if is_reflection else ("primary",)
+                turn_tags = ("reflection",) if is_reflection_turn else ("primary",)
                 await self._complete_agent_turn(
                     node_id,
                     response_text,
@@ -592,6 +596,66 @@ class AgentTurnExecutor:
         if asyncio.iscoroutine(value):
             return await value
         return value
+
+    @staticmethod
+    async def _build_companion_context(workspace: AgentWorkspace) -> str:
+        """Build a compact companion-memory context block from workspace KV."""
+        parts: list[str] = []
+
+        reflections = await workspace.kv_get("companion/reflections")
+        if isinstance(reflections, list) and reflections:
+            reflection_lines: list[str] = []
+            for entry in reflections[-5:]:
+                if not isinstance(entry, dict):
+                    continue
+                insight = entry.get("insight", "")
+                if isinstance(insight, str) and insight.strip():
+                    reflection_lines.append(f"- {insight.strip()}")
+            if reflection_lines:
+                parts.append("## Prior Reflections")
+                parts.extend(reflection_lines)
+
+        chat_index = await workspace.kv_get("companion/chat_index")
+        if isinstance(chat_index, list) and chat_index:
+            chat_lines: list[str] = []
+            for entry in chat_index[-5:]:
+                if not isinstance(entry, dict):
+                    continue
+                summary = entry.get("summary", "")
+                if not isinstance(summary, str) or not summary.strip():
+                    continue
+                raw_tags = entry.get("tags", [])
+                tags_source = raw_tags if isinstance(raw_tags, (list, tuple)) else []
+                tags = [str(tag).strip() for tag in tags_source if str(tag).strip()]
+                tag_suffix = f" [{', '.join(tags)}]" if tags else ""
+                chat_lines.append(f"- {summary.strip()}{tag_suffix}")
+            if chat_lines:
+                parts.append("## Recent Activity")
+                parts.extend(chat_lines)
+
+        links = await workspace.kv_get("companion/links")
+        if isinstance(links, list) and links:
+            link_lines: list[str] = []
+            for entry in links[-10:]:
+                if not isinstance(entry, dict):
+                    continue
+                target = entry.get("target", "")
+                if not isinstance(target, str) or not target.strip():
+                    continue
+                relationship = entry.get("relationship", "related")
+                relation_text = (
+                    relationship.strip()
+                    if isinstance(relationship, str) and relationship.strip()
+                    else "related"
+                )
+                link_lines.append(f"- {relation_text}: {target.strip()}")
+            if link_lines:
+                parts.append("## Known Relationships")
+                parts.extend(link_lines)
+
+        if not parts:
+            return ""
+        return "\n## Companion Memory\n" + "\n".join(parts)
 
     @staticmethod
     async def _read_bundle_config(workspace: AgentWorkspace) -> dict[str, Any]:

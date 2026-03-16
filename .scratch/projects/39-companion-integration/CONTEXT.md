@@ -61,9 +61,15 @@ Completed:
     - max_turns
   - Added prompt-builder tests for reflection override, normal behavior, and tag gating.
   - Verification: `devenv shell -- pytest tests/unit/test_actor.py -q` (37 passed)
+- Step 9: Companion context injection into system prompt.
+  - Added `AgentTurnExecutor._build_companion_context(workspace)` in `src/remora/core/actor.py`.
+  - Primary turns now append companion context from KV (`companion/reflections`, `companion/chat_index`, `companion/links`) to the system prompt.
+  - Reflection turns do not inject companion context.
+  - Added tests for context building and prompt injection behavior in `tests/unit/test_actor.py`.
+  - Verification: `devenv shell -- pytest tests/unit/test_actor.py -v -k companion_context` (4 passed).
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 9: Inject companion context from KV into the system prompt.
+- Step 10: Add `self_reflect` config to `bundles/code-agent/bundle.yaml` and add bundle config test coverage.
