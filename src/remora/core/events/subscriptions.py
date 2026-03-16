@@ -31,7 +31,8 @@ class SubscriptionPattern(BaseModel):
 
         if self.from_agents:
             from_agent = getattr(event, "from_agent", None)
-            if from_agent not in self.from_agents:
+            agent_id = getattr(event, "agent_id", None)
+            if from_agent not in self.from_agents and agent_id not in self.from_agents:
                 return False
 
         if self.not_from_agents:

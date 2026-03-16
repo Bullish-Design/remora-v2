@@ -36,9 +36,19 @@ Completed:
   - Verified Grail parsing compatibility with existing tool test suites.
   - Verification:
     - `devenv shell -- pytest tests/unit/test_companion_tools.py tests/unit/test_system_tools.py tests/unit/test_grail.py -q` (21 passed)
+- Step 6: Added self-reflect subscription registration.
+  - `FileReconciler._register_subscriptions()` now checks workspace KV `_system/self_reflect`.
+  - When enabled, it registers a self-subscription:
+    - `event_types=["AgentCompleteEvent"]`
+    - `from_agents=[node.node_id]`
+    - `tags=["primary"]`
+  - Updated `SubscriptionPattern.from_agents` matching to support both `from_agent` and `agent_id` event shapes.
+  - Added reconciler tests for self-reflect enabled/disabled subscription behavior.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_reconciler.py tests/unit/test_subscription_registry.py -q` (36 passed)
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 6: Add `self_reflect` config and self-subscription registration in reconciler.
+- Step 7: Parse and validate `self_reflect` settings in actor bundle config parser.

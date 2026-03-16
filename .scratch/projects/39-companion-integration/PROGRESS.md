@@ -15,7 +15,7 @@
 | 8 | Step 3: Enrich `AgentCompleteEvent` with `user_message` + tests | done |
 | 9 | Step 4: Add `not_from_agents` subscription filter + tests | done |
 | 10 | Step 5: Add KV-native companion Grail tools + tests | done |
-| 11 | Step 6: Add `self_reflect` config + self-subscription registration + tests | pending |
+| 11 | Step 6: Add `self_reflect` config + self-subscription registration + tests | done |
 | 12 | Step 7: Parse `self_reflect` in bundle config + tests | pending |
 | 13 | Step 8: Reflection model/prompt override in `PromptBuilder` + tests | pending |
 | 14 | Step 9: Companion context injection into system prompt + tests | pending |

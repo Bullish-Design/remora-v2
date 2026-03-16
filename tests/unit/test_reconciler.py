@@ -7,13 +7,19 @@ from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
-from tests.factories import write_bundle_templates, write_file
+from tests.factories import make_node, write_bundle_templates, write_file
 
 import remora.code.reconciler as reconciler_module
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
 from remora.core.db import open_database
-from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore, NodeChangedEvent
+from remora.core.events import (
+    AgentCompleteEvent,
+    AgentMessageEvent,
+    ContentChangedEvent,
+    EventStore,
+    NodeChangedEvent,
+)
 from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
@@ -444,6 +450,35 @@ async def test_reconciler_search_index_failures_do_not_break_reconcile(
     await reconciler.reconcile_cycle()
     node = await node_store.get_node(f"{source}::fail_index")
     assert node is not None
+
+
+@pytest.mark.asyncio
+async def test_self_reflect_subscription_registered(reconcile_env) -> None:
+    node_store, event_store, workspace_service, _config, reconciler = reconcile_env
+    node = make_node("src/validate.py::validate", file_path="src/validate.py")
+    await node_store.upsert_node(node)
+
+    workspace = await workspace_service.get_agent_workspace(node.node_id)
+    await workspace.kv_set("_system/self_reflect", {"enabled": True})
+
+    await reconciler._register_subscriptions(node)
+
+    event = AgentCompleteEvent(agent_id=node.node_id, tags=("primary",))
+    matches = await event_store.subscriptions.get_matching_agents(event)
+    assert node.node_id in matches
+
+
+@pytest.mark.asyncio
+async def test_no_self_reflect_subscription_when_disabled(reconcile_env) -> None:
+    node_store, event_store, _workspace_service, _config, reconciler = reconcile_env
+    node = make_node("src/validate.py::validate", file_path="src/validate.py")
+    await node_store.upsert_node(node)
+
+    await reconciler._register_subscriptions(node)
+
+    event = AgentCompleteEvent(agent_id=node.node_id, tags=("primary",))
+    matches = await event_store.subscriptions.get_matching_agents(event)
+    assert matches == []
 
 
 @pytest.mark.asyncio

@@ -530,6 +530,18 @@ class FileReconciler:
                 await self._event_store.subscriptions.register(node.node_id, pattern)
             return
 
+        workspace = await self._workspace_service.get_agent_workspace(node.node_id)
+        self_reflect_config = await workspace.kv_get("_system/self_reflect")
+        if isinstance(self_reflect_config, dict) and self_reflect_config.get("enabled"):
+            await self._event_store.subscriptions.register(
+                node.node_id,
+                SubscriptionPattern(
+                    event_types=["AgentCompleteEvent"],
+                    from_agents=[node.node_id],
+                    tags=["primary"],
+                ),
+            )
+
         if node.node_type == NodeType.DIRECTORY:
             subtree_glob = "**" if node.file_path == "." else f"**/{node.file_path}/**"
             await self._event_store.subscriptions.register(
