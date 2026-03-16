@@ -1483,3 +1483,817 @@ devenv shell -- pytest tests/unit/ -v
 # Run with coverage
 devenv shell -- pytest tests/unit/ --cov=remora.core.search -v
 ```
+
+---
+
+## 13. Real-World Integration & Acceptance Tests
+
+The unit tests in Section 12 verify that each component works in isolation with mock doubles. This section describes **real-world tests** that exercise the actual embeddy library against real data, covering the full integration path from ingesting real files through searching and retrieving meaningful results.
+
+These tests require a running embeddy server (or the full local embeddy installation). They are gated behind environment variables and pytest markers so they don't block normal development workflows.
+
+### 13.1 Test Infrastructure & Markers
+
+**Environment variables:**
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `REMORA_TEST_EMBEDDY_URL` | URL of a running embeddy server | `http://localhost:8585` |
+| `REMORA_TEST_EMBEDDY_MODE` | Override mode: `"remote"` or `"local"` | `remote` |
+
+**Pytest markers** — add to `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+markers = [
+  "acceptance: process-boundary end-to-end tests",
+  "real_llm: tests that require a live model endpoint (e.g. vLLM)",
+  "embeddy: tests that require a live embeddy server or full local install",
+]
+```
+
+**Skip logic** — use the same pattern as the existing `test_live_runtime_real_llm.py`:
+
+```python
+import os
+import pytest
+
+_EMBEDDY_ENV_MISSING = not os.getenv("REMORA_TEST_EMBEDDY_URL")
+_EMBEDDY_SKIP_REASON = "REMORA_TEST_EMBEDDY_URL not set — skipping real embeddy tests"
+```
+
+Apply to every test in the file:
+
+```python
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.embeddy,
+    pytest.mark.skipif(_EMBEDDY_ENV_MISSING, reason=_EMBEDDY_SKIP_REASON),
+]
+```
+
+**Test file location**: `tests/integration/test_search_real.py`
+
+This file contains all real-world search tests. They run against an actual embeddy server and exercise the complete ingest → embed → store → search pipeline with real data.
+
+### 13.2 Shared Fixtures
+
+The real-world tests need a `SearchService` connected to a live embeddy instance, and a temporary project tree with real Python/Markdown files to index.
+
+**Fixture: `real_search_service`**
+
+Creates a `SearchService` connected to the live embeddy server, verifies connectivity, and ensures cleanup after the test session.
+
+```python
+@pytest_asyncio.fixture
+async def real_search_service(tmp_path):
+    """SearchService connected to a real embeddy server."""
+    from remora.core.config import SearchConfig
+    from remora.core.search import SearchService
+
+    embeddy_url = os.environ["REMORA_TEST_EMBEDDY_URL"]
+    config = SearchConfig(
+        enabled=True,
+        mode="remote",
+        embeddy_url=embeddy_url,
+        timeout=60.0,
+        default_collection="test-code",
+        collection_map={
+            ".py": "test-code",
+            ".md": "test-docs",
+        },
+    )
+    service = SearchService(config, tmp_path)
+    await service.initialize()
+    assert service.available, (
+        f"Embeddy server not reachable at {embeddy_url}"
+    )
+    yield service
+    await service.close()
+```
+
+**Important**: Use unique collection names (e.g. `"test-code"`, `"test-docs"`) or names that incorporate the test session / tmp_path to avoid collision with production data. Even better, generate per-test-session collection names:
+
+```python
+import uuid
+
+_TEST_SESSION_ID = uuid.uuid4().hex[:8]
+
+def _test_collection(base: str) -> str:
+    return f"test-{base}-{_TEST_SESSION_ID}"
+```
+
+Then the fixture uses `_test_collection("code")` as the default collection. After all tests complete, a session-scoped finalizer can delete the test collections:
+
+```python
+@pytest_asyncio.fixture(scope="session")
+async def embeddy_cleanup():
+    """Delete test collections after the test session."""
+    yield
+    embeddy_url = os.environ.get("REMORA_TEST_EMBEDDY_URL")
+    if embeddy_url is None:
+        return
+    from embeddy.client import EmbeddyClient
+    async with EmbeddyClient(base_url=embeddy_url) as client:
+        collections = await client.list_collections()
+        for col in collections.get("collections", []):
+            name = col.get("name", "")
+            if name.startswith(f"test-") and name.endswith(f"-{_TEST_SESSION_ID}"):
+                await client.delete_collection(name)
+```
+
+**Fixture: `indexed_project`**
+
+Creates a temporary project directory with realistic Python and Markdown files, indexes them via the SearchService, and returns the paths and service for test assertions.
+
+```python
+@pytest_asyncio.fixture
+async def indexed_project(real_search_service, tmp_path):
+    """A temporary project with indexed Python and Markdown files."""
+    # Create realistic source files
+    src = tmp_path / "src"
+    src.mkdir()
+
+    (src / "auth.py").write_text(
+        '"""Authentication and authorization module."""\n\n'
+        'import hashlib\nimport secrets\n\n\n'
+        'def hash_password(password: str, salt: str | None = None) -> tuple[str, str]:\n'
+        '    """Hash a password using SHA-256 with a random salt."""\n'
+        '    if salt is None:\n'
+        '        salt = secrets.token_hex(16)\n'
+        '    hashed = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()\n'
+        '    return hashed, salt\n\n\n'
+        'def verify_password(password: str, hashed: str, salt: str) -> bool:\n'
+        '    """Verify a password against a stored hash."""\n'
+        '    computed, _ = hash_password(password, salt)\n'
+        '    return secrets.compare_digest(computed, hashed)\n\n\n'
+        'def create_session_token(user_id: str) -> str:\n'
+        '    """Generate a cryptographic session token for a user."""\n'
+        '    return f"{user_id}:{secrets.token_urlsafe(32)}"\n',
+        encoding="utf-8",
+    )
+
+    (src / "database.py").write_text(
+        '"""Database connection and query utilities."""\n\n'
+        'import sqlite3\nfrom pathlib import Path\n\n\n'
+        'class DatabaseConnection:\n'
+        '    """Manages SQLite database connections with context manager support."""\n\n'
+        '    def __init__(self, db_path: str) -> None:\n'
+        '        self._path = Path(db_path)\n'
+        '        self._conn: sqlite3.Connection | None = None\n\n'
+        '    def connect(self) -> None:\n'
+        '        """Open the database connection."""\n'
+        '        self._conn = sqlite3.connect(str(self._path))\n'
+        '        self._conn.execute("PRAGMA journal_mode=WAL")\n\n'
+        '    def close(self) -> None:\n'
+        '        """Close the database connection."""\n'
+        '        if self._conn is not None:\n'
+        '            self._conn.close()\n'
+        '            self._conn = None\n\n'
+        '    def execute_query(self, sql: str, params: tuple = ()) -> list[tuple]:\n'
+        '        """Execute a SQL query and return all rows."""\n'
+        '        if self._conn is None:\n'
+        '            raise RuntimeError("Database not connected")\n'
+        '        cursor = self._conn.execute(sql, params)\n'
+        '        return cursor.fetchall()\n',
+        encoding="utf-8",
+    )
+
+    (src / "utils.py").write_text(
+        '"""General utility functions."""\n\n'
+        'from pathlib import Path\n\n\n'
+        'def read_config_file(path: str) -> dict:\n'
+        '    """Read and parse a YAML configuration file."""\n'
+        '    import yaml\n'
+        '    return yaml.safe_load(Path(path).read_text())\n\n\n'
+        'def slugify(text: str) -> str:\n'
+        '    """Convert text to a URL-friendly slug."""\n'
+        '    import re\n'
+        '    text = text.lower().strip()\n'
+        '    text = re.sub(r"[^\\w\\s-]", "", text)\n'
+        '    return re.sub(r"[\\s-]+", "-", text)\n',
+        encoding="utf-8",
+    )
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+
+    (docs / "getting-started.md").write_text(
+        '# Getting Started\n\n'
+        '## Installation\n\n'
+        'Install the package using pip:\n\n'
+        '```bash\npip install myproject\n```\n\n'
+        '## Authentication Setup\n\n'
+        'Before using the API, you need to configure authentication.\n'
+        'Create a session token using `create_session_token(user_id)` and\n'
+        'include it in the `Authorization` header of your requests.\n\n'
+        '## Database Configuration\n\n'
+        'The system uses SQLite for persistence. Set the `DB_PATH`\n'
+        'environment variable to specify the database file location.\n',
+        encoding="utf-8",
+    )
+
+    # Index the files
+    code_stats = await real_search_service.index_directory(str(src))
+    docs_stats = await real_search_service.index_directory(
+        str(docs), collection="test-docs"
+    )
+
+    yield {
+        "service": real_search_service,
+        "src_path": src,
+        "docs_path": docs,
+        "tmp_path": tmp_path,
+        "code_stats": code_stats,
+        "docs_stats": docs_stats,
+    }
+```
+
+### 13.3 Test: Indexing Produces Real Chunks
+
+Verify that real files get chunked and stored — not just that the API returns 200, but that the stats reflect real work.
+
+```python
+async def test_index_directory_creates_chunks(indexed_project):
+    """Indexing real Python files should produce non-zero chunk counts."""
+    code_stats = indexed_project["code_stats"]
+    assert code_stats["files_processed"] >= 3, (
+        f"Expected at least 3 Python files indexed, got {code_stats}"
+    )
+    assert code_stats["chunks_created"] > 0, (
+        f"Expected chunks to be created, got {code_stats}"
+    )
+    assert not code_stats.get("errors"), (
+        f"Indexing should not produce errors: {code_stats.get('errors')}"
+    )
+
+async def test_index_markdown_creates_chunks(indexed_project):
+    """Indexing Markdown files should produce chunks in the docs collection."""
+    docs_stats = indexed_project["docs_stats"]
+    assert docs_stats["files_processed"] >= 1
+    assert docs_stats["chunks_created"] > 0
+```
+
+### 13.4 Test: Semantic Search Finds Relevant Code
+
+These tests verify that searching with natural language queries returns semantically relevant results — not just that the search API works, but that the **meaning** of results matches the query.
+
+```python
+async def test_search_for_password_hashing_finds_auth_module(indexed_project):
+    """Searching 'password hashing' should find the auth.py hash functions."""
+    service = indexed_project["service"]
+    results = await service.search("password hashing and verification")
+
+    assert len(results) > 0, "Expected at least one search result"
+
+    # At least one result should come from auth.py
+    source_paths = [r.get("source_path", "") for r in results]
+    auth_results = [p for p in source_paths if "auth.py" in p]
+    assert auth_results, (
+        f"Expected auth.py in results for 'password hashing', "
+        f"got source_paths: {source_paths}"
+    )
+
+    # The top result should have a meaningful score
+    top_score = results[0]["score"]
+    assert top_score > 0, f"Top result score should be positive, got {top_score}"
+
+
+async def test_search_for_database_finds_database_module(indexed_project):
+    """Searching 'database connection management' should find database.py."""
+    service = indexed_project["service"]
+    results = await service.search("database connection management")
+
+    assert len(results) > 0
+    source_paths = [r.get("source_path", "") for r in results]
+    db_results = [p for p in source_paths if "database.py" in p]
+    assert db_results, (
+        f"Expected database.py in results, got: {source_paths}"
+    )
+
+
+async def test_search_for_session_tokens_finds_auth_create_session(indexed_project):
+    """Searching 'generate session token for user' should find create_session_token."""
+    service = indexed_project["service"]
+    results = await service.search("generate session token for user")
+
+    assert len(results) > 0
+    # Look for the create_session_token function in results
+    names = [r.get("name", "") for r in results]
+    assert any("session" in name.lower() for name in names if name), (
+        f"Expected a session-related function in results, got names: {names}"
+    )
+
+
+async def test_search_across_query_variations(indexed_project):
+    """Different phrasings of the same intent should return overlapping results."""
+    service = indexed_project["service"]
+
+    results_a = await service.search("how to hash a password")
+    results_b = await service.search("password encryption function")
+    results_c = await service.search("secure password storage")
+
+    # All three queries are about the same concept — their result sets
+    # should overlap (at least one common source file).
+    paths_a = {r.get("source_path", "") for r in results_a}
+    paths_b = {r.get("source_path", "") for r in results_b}
+    paths_c = {r.get("source_path", "") for r in results_c}
+
+    assert paths_a & paths_b, (
+        f"Queries about password hashing should share results: "
+        f"a={paths_a}, b={paths_b}"
+    )
+    assert paths_a & paths_c, (
+        f"Queries about password storage should share results: "
+        f"a={paths_a}, c={paths_c}"
+    )
+```
+
+### 13.5 Test: Search Result Structure & Metadata
+
+Verify that results carry the metadata needed for downstream consumers (file paths, line numbers, chunk types, etc.).
+
+```python
+async def test_search_results_have_required_fields(indexed_project):
+    """Each search result should contain the expected metadata fields."""
+    service = indexed_project["service"]
+    results = await service.search("password")
+
+    assert len(results) > 0
+    for result in results:
+        # Required fields that every result must have
+        assert "chunk_id" in result, f"Missing chunk_id in {result}"
+        assert "content" in result, f"Missing content in {result}"
+        assert isinstance(result["content"], str), f"content should be str"
+        assert len(result["content"]) > 0, f"content should be non-empty"
+        assert "score" in result, f"Missing score in {result}"
+        assert isinstance(result["score"], (int, float)), f"score should be numeric"
+        assert "source_path" in result, f"Missing source_path in {result}"
+
+    # At least one Python result should have line numbers
+    py_results = [r for r in results if r.get("source_path", "").endswith(".py")]
+    if py_results:
+        has_lines = any(
+            r.get("start_line") is not None and r.get("end_line") is not None
+            for r in py_results
+        )
+        assert has_lines, (
+            "Python results should include start_line/end_line metadata"
+        )
+
+
+async def test_search_results_sorted_by_score_descending(indexed_project):
+    """Results should be returned in descending score order."""
+    service = indexed_project["service"]
+    results = await service.search("authentication")
+
+    if len(results) >= 2:
+        scores = [r["score"] for r in results]
+        for i in range(len(scores) - 1):
+            assert scores[i] >= scores[i + 1], (
+                f"Results not sorted by score: {scores}"
+            )
+```
+
+### 13.6 Test: Search Modes (Vector, Fulltext, Hybrid)
+
+Verify that each search mode produces results and that hybrid mode is not strictly worse than either single mode.
+
+```python
+async def test_vector_search_returns_results(indexed_project):
+    """Pure vector (semantic) search should return results."""
+    service = indexed_project["service"]
+    results = await service.search("password hashing", mode="vector")
+    assert len(results) > 0, "Vector search should return results"
+
+
+async def test_fulltext_search_returns_results(indexed_project):
+    """Pure fulltext (BM25) search should return results for keyword queries."""
+    service = indexed_project["service"]
+    results = await service.search("hash_password", mode="fulltext")
+    assert len(results) > 0, "Fulltext search should find 'hash_password'"
+
+
+async def test_hybrid_search_returns_results(indexed_project):
+    """Hybrid search (default) should return results."""
+    service = indexed_project["service"]
+    results = await service.search("password hashing", mode="hybrid")
+    assert len(results) > 0, "Hybrid search should return results"
+
+
+async def test_fulltext_search_finds_exact_identifiers(indexed_project):
+    """Fulltext search should excel at finding exact function/class names."""
+    service = indexed_project["service"]
+    results = await service.search("DatabaseConnection", mode="fulltext")
+    assert len(results) > 0
+    # At least one result should contain the exact class name
+    assert any(
+        "DatabaseConnection" in r.get("content", "")
+        for r in results
+    ), "Fulltext search should find exact identifier matches"
+```
+
+### 13.7 Test: Top-K & Collection Filtering
+
+```python
+async def test_top_k_limits_results(indexed_project):
+    """top_k parameter should cap the number of returned results."""
+    service = indexed_project["service"]
+    results_3 = await service.search("function", top_k=3)
+    results_1 = await service.search("function", top_k=1)
+
+    assert len(results_1) <= 1
+    assert len(results_3) <= 3
+
+
+async def test_search_respects_collection(indexed_project):
+    """Searching a specific collection should only return results from that collection."""
+    service = indexed_project["service"]
+
+    # Search docs collection — should not return Python code results
+    docs_results = await service.search(
+        "authentication", collection="test-docs"
+    )
+    code_results = await service.search(
+        "authentication", collection="test-code"
+    )
+
+    if docs_results:
+        docs_sources = [r.get("source_path", "") for r in docs_results]
+        assert all(
+            not s.endswith(".py") for s in docs_sources if s
+        ), f"Docs collection returned Python files: {docs_sources}"
+
+    if code_results:
+        code_sources = [r.get("source_path", "") for r in code_results]
+        assert all(
+            not s.endswith(".md") for s in code_sources if s
+        ), f"Code collection returned Markdown files: {code_sources}"
+```
+
+### 13.8 Test: Incremental Reindexing (File Change Simulation)
+
+Simulate the FileReconciler workflow: index a file, modify it, reindex, and verify search reflects the updated content.
+
+```python
+async def test_reindex_reflects_file_changes(indexed_project):
+    """After modifying and reindexing a file, search should reflect the new content."""
+    service = indexed_project["service"]
+    src_path = indexed_project["src_path"]
+
+    # Add a new function to auth.py
+    auth_file = src_path / "auth.py"
+    original_content = auth_file.read_text(encoding="utf-8")
+    new_content = original_content + (
+        '\n\ndef revoke_all_sessions(user_id: str) -> int:\n'
+        '    """Revoke every active session for a given user account.\n\n'
+        '    Invalidates all session tokens, forcing the user to re-authenticate.\n'
+        '    Returns the number of sessions revoked.\n'
+        '    """\n'
+        '    # In a real implementation, this would delete from a sessions table\n'
+        '    return 0\n'
+    )
+    auth_file.write_text(new_content, encoding="utf-8")
+
+    # Reindex the file (this is what the reconciler hook calls)
+    await service.index_file(str(auth_file))
+
+    # Search for the new function
+    results = await service.search("revoke user sessions")
+    assert len(results) > 0, "Search should find newly-indexed content"
+
+    contents = " ".join(r.get("content", "") for r in results)
+    assert "revoke" in contents.lower(), (
+        f"Expected 'revoke' in search results after reindex, "
+        f"got: {contents[:200]}"
+    )
+
+
+async def test_delete_source_removes_from_index(indexed_project):
+    """After deleting a source, its content should no longer appear in search."""
+    service = indexed_project["service"]
+    src_path = indexed_project["src_path"]
+
+    # Verify utils.py content is currently searchable
+    before = await service.search("slugify URL-friendly slug")
+    utils_before = [
+        r for r in before if "utils" in r.get("source_path", "")
+    ]
+
+    # Delete utils.py from the index
+    await service.delete_source(str(src_path / "utils.py"))
+
+    # Search again — utils.py content should be gone
+    after = await service.search("slugify URL-friendly slug")
+    utils_after = [
+        r for r in after if "utils" in r.get("source_path", "")
+    ]
+
+    assert len(utils_after) < len(utils_before) or len(utils_after) == 0, (
+        f"Deleted source should not appear in search. "
+        f"Before: {len(utils_before)}, After: {len(utils_after)}"
+    )
+```
+
+### 13.9 Test: Collection-to-File-Type Routing
+
+Verify that `collection_for_file()` correctly routes files and that the reconciler hook uses the right collection.
+
+```python
+async def test_collection_for_file_routes_correctly(real_search_service):
+    """collection_for_file should map extensions to configured collections."""
+    service = real_search_service
+    assert service.collection_for_file("src/auth.py") == "test-code"
+    assert service.collection_for_file("docs/README.md") == "test-docs"
+    # Unmapped extension falls back to default_collection
+    assert service.collection_for_file("data/file.csv") == "test-code"
+```
+
+### 13.10 Test: Graceful Degradation With Live Server
+
+```python
+async def test_search_returns_empty_for_nonexistent_collection(real_search_service):
+    """Searching a collection that doesn't exist should return empty, not crash."""
+    results = await real_search_service.search(
+        "anything", collection="nonexistent-collection-xyz"
+    )
+    # Depending on embeddy's behavior, this either returns [] or raises.
+    # The SearchService should handle both and return [].
+    assert isinstance(results, list)
+```
+
+### 13.11 Test: Web API Endpoint Against Real Embeddy
+
+These tests spin up the Starlette web app with a real SearchService and verify the `/api/search` endpoint end-to-end.
+
+```python
+async def test_web_api_search_with_real_embeddy(indexed_project):
+    """POST /api/search should return real search results from embeddy."""
+    import httpx
+    from remora.core.db import open_database
+    from remora.core.events import EventBus, EventStore
+    from remora.core.graph import NodeStore
+    from remora.web.server import create_app
+
+    service = indexed_project["service"]
+    tmp_path = indexed_project["tmp_path"]
+
+    db = await open_database(tmp_path / "web-search.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db, event_bus=EventBus())
+    await event_store.create_tables()
+
+    app = create_app(
+        event_store, node_store, EventBus(),
+        search_service=service,
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as client:
+        # Happy path
+        response = await client.post(
+            "/api/search",
+            json={"query": "password hashing", "top_k": 5},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert "results" in payload
+        assert payload["total_results"] > 0
+        assert payload["query"] == "password hashing"
+        assert isinstance(payload["elapsed_ms"], (int, float))
+        assert payload["elapsed_ms"] > 0
+
+        # Verify result structure from real embeddy
+        for result in payload["results"]:
+            assert "content" in result
+            assert "score" in result
+            assert "source_path" in result
+
+    await db.close()
+```
+
+### 13.12 Test: Full Runtime Integration (Startup → Index → Search → Shutdown)
+
+The most comprehensive test: starts the full remora runtime with search enabled, verifies the reconciler indexes files, and that the web search endpoint returns real results. This follows the pattern of the existing `test_live_runtime_real_llm.py` acceptance tests.
+
+```python
+async def test_full_runtime_with_search_enabled(tmp_path):
+    """Start remora with search enabled, verify indexing and search work end-to-end."""
+    from tests.factories import write_file
+    from remora.__main__ import _start
+
+    embeddy_url = os.environ["REMORA_TEST_EMBEDDY_URL"]
+
+    # Write source files
+    write_file(
+        tmp_path / "src" / "app.py",
+        "def calculate_total(prices: list[float]) -> float:\n"
+        '    """Sum a list of prices and return the total."""\n'
+        "    return sum(prices)\n",
+    )
+
+    # Write minimal bundles
+    bundles = tmp_path / "bundles"
+    (bundles / "system" / "tools").mkdir(parents=True)
+    (bundles / "code-agent" / "tools").mkdir(parents=True)
+    write_file(bundles / "system" / "bundle.yaml", "name: system\nmax_turns: 4\n")
+    write_file(bundles / "code-agent" / "bundle.yaml", "name: code-agent\nmax_turns: 4\n")
+
+    # Write config with search enabled
+    config_path = tmp_path / "remora.yaml"
+    config_path.write_text(
+        "discovery_paths:\n"
+        "  - src\n"
+        "discovery_languages:\n"
+        "  - python\n"
+        "language_map:\n"
+        "  .py: python\n"
+        "query_paths: []\n"
+        "workspace_root: .remora-search-test\n"
+        f"bundle_root: {bundles}\n"
+        "search:\n"
+        "  enabled: true\n"
+        "  mode: remote\n"
+        f"  embeddy_url: \"{embeddy_url}\"\n"
+        "  default_collection: runtime-test\n",
+        encoding="utf-8",
+    )
+
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = int(sock.getsockname()[1])
+
+    # Start runtime for a few seconds — enough for discovery + indexing
+    task = asyncio.create_task(
+        _start(
+            project_root=tmp_path,
+            config_path=config_path,
+            port=port,
+            no_web=False,
+            bind="127.0.0.1",
+            run_seconds=0.0,
+            log_events=False,
+            lsp=False,
+        ),
+        name="search-runtime",
+    )
+
+    base_url = f"http://127.0.0.1:{port}"
+    # Wait for health
+    deadline = time.monotonic() + 20.0
+    async with httpx.AsyncClient(base_url=base_url, timeout=2.0) as client:
+        while time.monotonic() < deadline:
+            try:
+                r = await client.get("/api/health")
+                if r.status_code == 200:
+                    break
+            except httpx.HTTPError:
+                pass
+            await asyncio.sleep(0.2)
+        else:
+            pytest.fail("Runtime did not become healthy")
+
+        # Give the reconciler time to index files
+        await asyncio.sleep(3.0)
+
+        # Search via the web API
+        response = await client.post(
+            "/api/search",
+            json={"query": "calculate total price"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total_results"] > 0, (
+            f"Expected search results after indexing, got: {payload}"
+        )
+
+        # Verify the result content is from our test file
+        contents = " ".join(r.get("content", "") for r in payload["results"])
+        assert "calculate_total" in contents or "prices" in contents, (
+            f"Expected test file content in results, got: {contents[:300]}"
+        )
+
+    # Shut down
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=15.0)
+```
+
+### 13.13 Test: Bootstrap CLI Command Against Real Server
+
+Run the `remora index` CLI entrypoint against a real embeddy server and verify it completes with meaningful stats.
+
+```python
+async def test_cli_index_command_with_real_server(tmp_path):
+    """The 'remora index' command should index real files and report stats."""
+    from tests.factories import write_file
+    from remora.__main__ import _index
+
+    embeddy_url = os.environ["REMORA_TEST_EMBEDDY_URL"]
+
+    write_file(
+        tmp_path / "src" / "main.py",
+        "def hello():\n    return 'world'\n",
+    )
+    write_file(
+        tmp_path / "src" / "helpers.py",
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+    )
+
+    config_path = tmp_path / "remora.yaml"
+    config_path.write_text(
+        "discovery_paths:\n"
+        "  - src\n"
+        "language_map:\n"
+        "  .py: python\n"
+        "query_paths: []\n"
+        "search:\n"
+        "  enabled: true\n"
+        "  mode: remote\n"
+        f"  embeddy_url: \"{embeddy_url}\"\n"
+        "  default_collection: cli-test\n",
+        encoding="utf-8",
+    )
+
+    from remora.core.config import load_config
+    config = load_config(config_path)
+
+    from remora.core.search import SearchService
+    service = SearchService(config.search, tmp_path)
+    await service.initialize()
+    assert service.available
+
+    # Index via the same logic the CLI command uses
+    from remora.code.paths import resolve_discovery_paths
+    paths = resolve_discovery_paths(config, tmp_path)
+
+    for path in paths:
+        stats = await service.index_directory(str(path))
+        assert stats["files_processed"] >= 2, f"Expected >= 2 files, got {stats}"
+        assert stats["chunks_created"] > 0, f"Expected chunks, got {stats}"
+
+    # Verify search works after CLI-style indexing
+    results = await service.search("add two numbers")
+    assert len(results) > 0
+    assert any("helpers" in r.get("source_path", "") for r in results)
+
+    await service.close()
+```
+
+### 13.14 Running the Real-World Tests
+
+**Prerequisites:**
+
+1. Start an embeddy server:
+   ```bash
+   embeddy serve --port 8585
+   ```
+
+2. Set the environment variable:
+   ```bash
+   export REMORA_TEST_EMBEDDY_URL=http://localhost:8585
+   ```
+
+**Run only the real-world search tests:**
+
+```bash
+devenv shell -- pytest tests/integration/test_search_real.py -v
+```
+
+**Run with the embeddy marker:**
+
+```bash
+devenv shell -- pytest -m embeddy -v
+```
+
+**Run all tests except embeddy (for CI without a GPU):**
+
+```bash
+devenv shell -- pytest -m "not embeddy" -v
+```
+
+**Timeout tuning:** Real embeddy operations (especially first-time embedding on CPU) can be slow. Set generous timeouts:
+
+```bash
+devenv shell -- pytest tests/integration/test_search_real.py -v --timeout=120
+```
+
+### 13.15 What These Tests Catch That Mocks Don't
+
+| Failure mode | Caught by mocks? | Caught by real tests? |
+|---|---|---|
+| EmbeddyClient API signature mismatch | No — mocks match whatever you wrote | **Yes** — real server rejects bad requests |
+| Embeddy returns unexpected response shape | No — mocks return expected shapes | **Yes** — real responses may differ |
+| Chunking produces zero chunks for real code | No — mocks return `chunks_created: 5` | **Yes** — real chunker processes real files |
+| Embedding model returns poor quality vectors | No — not exercised | **Yes** — semantic search returns irrelevant results |
+| Content-hash deduplication skips reindexing | No — mocks always succeed | **Yes** — reindex with identical content should still work |
+| Collection auto-creation on first ingest | No — mocks don't track state | **Yes** — first ingest into a new collection must create it |
+| FTS5 tokenization misses code identifiers | No — mocks don't tokenize | **Yes** — fulltext search for `hash_password` must find it |
+| Hybrid fusion produces degenerate rankings | No — mocks return ordered results | **Yes** — real RRF/weighted fusion may have edge cases |
+| SQLite-vec dimension mismatch | No — mocks don't store vectors | **Yes** — misconfigured dimension causes store errors |
+| Large file chunking OOM or timeout | No — mocks are instant | **Yes** — real chunker processes real file sizes |
+| HTTP timeout on slow embedding | No — mocks are instant | **Yes** — `timeout: 30.0` may be too short for large batches |
