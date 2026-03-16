@@ -60,3 +60,10 @@ Next action:
 
 Next action:
 - Start Phase 3, Step 3.1 (add `SearchServiceProtocol` and begin typing migration).
+- Step 3.1 completed:
+  - added `SearchServiceProtocol` in `core/search.py`
+  - exported protocol in module `__all__`
+  - verification: `tests/unit/test_search.py` passed
+
+Next action:
+- Step 3.2: replace `search_service` `object|Any` types with `SearchServiceProtocol` across core/reconciler/web.

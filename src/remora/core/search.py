@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from remora.core.config import SearchConfig
 
@@ -14,6 +14,31 @@ try:
     from embeddy.client import EmbeddyClient
 except ImportError:
     EmbeddyClient = None  # type: ignore[assignment,misc]
+
+
+@runtime_checkable
+class SearchServiceProtocol(Protocol):
+    @property
+    def available(self) -> bool: ...
+
+    async def search(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int = 10,
+        mode: str = "hybrid",
+    ) -> list[dict[str, Any]]: ...
+
+    async def find_similar(
+        self,
+        chunk_id: str,
+        collection: str | None = None,
+        top_k: int = 10,
+    ) -> list[dict[str, Any]]: ...
+
+    async def index_file(self, path: str, collection: str | None = None) -> None: ...
+
+    async def delete_source(self, path: str, collection: str | None = None) -> None: ...
 
 
 class SearchService:
@@ -242,4 +267,4 @@ class SearchService:
         return self._config.collection_map.get(ext, self._config.default_collection)
 
 
-__all__ = ["SearchService"]
+__all__ = ["SearchService", "SearchServiceProtocol"]

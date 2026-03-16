@@ -34,3 +34,9 @@
 - [x] Step 2.2 Delete Actor compatibility property shims
 - [x] Step 2.3 Update tests for deleted Actor compatibility APIs
 - [x] Step 2.4 Fix reconciler `_normalize_dir_id` no-op
+
+### Phase 3
+- [x] Step 3.1 Create `SearchServiceProtocol`
+- [ ] Step 3.2 Replace search_service `object|Any` usages with protocol typing
+- [ ] Step 3.3 Replace search_service getattr duck-typing checks
+- [ ] Step 3.4 Type remaining `Any` parameters (externals/workspace/lifecycle)
