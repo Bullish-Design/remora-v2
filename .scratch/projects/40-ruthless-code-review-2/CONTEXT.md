@@ -150,3 +150,13 @@ Next action:
 
 Next action:
 - Step 5.3: extract `PromptBuilder` and related prompt helpers/constants into `core/prompt.py`.
+- Step 5.3 completed:
+  - created `core/prompt.py` containing `PromptBuilder`, `_event_content`, and reflection prompt constant
+  - removed in-file prompt builder implementation from `core/actor.py`
+  - imported `PromptBuilder` into `core/actor.py` to preserve existing public imports
+  - verification:
+    - `tests/unit/test_actor.py`
+    - `tests/unit/test_runner.py`
+
+Next action:
+- Step 5.4: extract `AgentTurnExecutor` and `_turn_logger` into `core/turn_executor.py`.
