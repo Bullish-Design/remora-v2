@@ -13,7 +13,7 @@ from structured_agents import Message
 from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
-from remora.core.actor import Actor, Outbox, Trigger
+from remora.core.actor import Actor, Outbox, PromptBuilder, Trigger
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import (
@@ -356,6 +356,60 @@ async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) ->
     events = await env["event_store"].get_events(limit=20)
     complete = next(event for event in events if event["event_type"] == "AgentCompleteEvent")
     assert "hello world" in complete["payload"]["user_message"]
+
+
+def test_prompt_builder_reflection_override() -> None:
+    config = Config()
+    prompt_builder = PromptBuilder(config)
+    bundle_config = {
+        "system_prompt": "Normal prompt",
+        "model": "big-model",
+        "max_turns": 8,
+        "self_reflect": {
+            "enabled": True,
+            "model": "Qwen/Qwen3-1.7B",
+            "max_turns": 2,
+            "prompt": "Reflect on this turn.",
+        },
+    }
+    trigger = AgentCompleteEvent(agent_id="agent-a", tags=("primary",))
+    prompt, model, max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
+    assert prompt == "Reflect on this turn."
+    assert model == "Qwen/Qwen3-1.7B"
+    assert max_turns == 2
+
+
+def test_prompt_builder_normal_turn_unaffected_by_self_reflect() -> None:
+    config = Config()
+    prompt_builder = PromptBuilder(config)
+    bundle_config = {
+        "system_prompt": "Normal prompt",
+        "model": "big-model",
+        "max_turns": 8,
+        "self_reflect": {
+            "enabled": True,
+            "model": "Qwen/Qwen3-1.7B",
+        },
+    }
+    trigger = ContentChangedEvent(path="src/foo.py")
+    prompt, model, max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
+    assert "Normal prompt" in prompt
+    assert model == "big-model"
+    assert max_turns == 8
+
+
+def test_prompt_builder_reflection_tag_must_be_primary() -> None:
+    config = Config()
+    prompt_builder = PromptBuilder(config)
+    bundle_config = {
+        "system_prompt": "Normal prompt",
+        "model": "big-model",
+        "self_reflect": {"enabled": True, "model": "cheap-model"},
+    }
+    trigger = AgentCompleteEvent(agent_id="agent-a", tags=("reflection",))
+    prompt, model, _max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
+    assert "Normal prompt" in prompt
+    assert model == "big-model"
 
 
 @pytest.mark.asyncio

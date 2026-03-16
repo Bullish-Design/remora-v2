@@ -53,9 +53,17 @@ Completed:
   - Added reconciler tests for KV persistence/clearing of self_reflect config.
   - Verification:
     - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_reconciler.py -q` (56 passed)
+- Step 8: Reflection override in `PromptBuilder`.
+  - Added `_DEFAULT_REFLECTION_PROMPT` in `src/remora/core/actor.py`.
+  - `PromptBuilder.build_system_prompt()` now detects reflection triggers (`AgentCompleteEvent` with `primary` tag and enabled `self_reflect`) and overrides:
+    - system prompt
+    - model
+    - max_turns
+  - Added prompt-builder tests for reflection override, normal behavior, and tag gating.
+  - Verification: `devenv shell -- pytest tests/unit/test_actor.py -q` (37 passed)
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 8: Apply reflection-turn prompt/model override behavior in `PromptBuilder`.
+- Step 9: Inject companion context from KV into the system prompt.

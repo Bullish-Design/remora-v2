@@ -37,6 +37,17 @@ logger = logging.getLogger(__name__)
 
 _DEPTH_TTL_MS = 5 * 60 * 1000
 _DEPTH_CLEANUP_INTERVAL = 100
+_DEFAULT_REFLECTION_PROMPT = """\
+You just completed a conversation turn. Reflect on the exchange and record metadata.
+
+Use your companion tools:
+- companion_summarize: Write a one-sentence summary and 1-3 tags
+- companion_reflect: Record one key insight or observation
+- companion_link: If you referenced another code element, record the link
+
+Tag vocabulary: bug, question, refactor, explanation, test, performance, design, insight, todo, review
+
+Be specific. Skip trivial exchanges."""
 
 
 def _turn_logger(node_id: str, correlation_id: str, turn_number: int) -> logging.LoggerAdapter:
@@ -220,6 +231,23 @@ class PromptBuilder:
         bundle_config: dict[str, Any],
         trigger_event: Event | None,
     ) -> tuple[str, str, int]:
+        self_reflect = bundle_config.get("self_reflect", {})
+        is_reflection = (
+            isinstance(self_reflect, dict)
+            and self_reflect.get("enabled")
+            and trigger_event is not None
+            and trigger_event.event_type == "AgentCompleteEvent"
+            and "primary" in getattr(trigger_event, "tags", ())
+        )
+        if is_reflection:
+            reflection_prompt = self_reflect.get("prompt", _DEFAULT_REFLECTION_PROMPT)
+            model_name = self_reflect.get("model", bundle_config.get("model", self._config.model_default))
+            try:
+                max_turns = max(1, int(self_reflect.get("max_turns", 2)))
+            except (TypeError, ValueError):
+                max_turns = 2
+            return reflection_prompt, model_name, max_turns
+
         system_prompt = bundle_config.get(
             "system_prompt",
             "You are an autonomous code agent.",
