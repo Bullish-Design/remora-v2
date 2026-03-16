@@ -71,3 +71,7 @@ log_cli = false
 log_level = "WARNING"
 log_format = "%(levelname)s: %(message)s"
 log_date_format = "%H:%M:%S"
+markers = [
+  "acceptance: process-boundary end-to-end tests",
+  "real_llm: tests that require a live model endpoint (e.g. vLLM)",
+]

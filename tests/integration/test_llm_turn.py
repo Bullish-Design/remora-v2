@@ -19,6 +19,7 @@ from remora.core.workspace import CairnWorkspaceService
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
 _REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")
 _REAL_LLM_SKIP_REASON = "REMORA_TEST_MODEL_URL not set - skipping real LLM integration test"
+pytestmark = pytest.mark.real_llm
 
 
 def _write_llm_test_bundles(root: Path, model_name: str) -> None:
