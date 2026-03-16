@@ -12,6 +12,7 @@
 - Completed item `4.5` by replacing `_remora_handlers` monkey-patched dict with explicit `RemoraLSPHandlers` and `RemoraLanguageServer.remora_handlers`.
 - Completed item `5.1` by running Ruff autofix on `src/remora/` and confirming lint-clean state.
 - Completed item `5.2` by making lifespan typing explicit in web app setup and adding a regression test that verifies shutdown event signaling through Starlette lifespan context.
+- Completed item `5.3` by adding a regression test that enforces zero `assert` statements in production code under `src/remora/`.
 - Verification run for 4.1:
   - `devenv shell -- uv sync --extra dev`
   - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_runner.py -q`
@@ -31,4 +32,6 @@
 - Verification run for 5.2:
   - `devenv shell -- pytest tests/unit/test_web_server.py -q`
   - `devenv shell -- ruff check src/remora/`
-- Next action: commit+push item 5.2, then implement item `5.3` (replace production asserts).
+- Verification run for 5.3:
+  - `devenv shell -- pytest tests/unit/test_no_production_asserts.py -q`
+- Next action: commit+push item 5.3, then implement item `5.4` (type checking config).

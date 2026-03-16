@@ -8,3 +8,4 @@
 - `2026-03-16`: Replaced dynamic `server._remora_handlers` monkey patch with typed `RemoraLSPHandlers` attached to a dedicated `RemoraLanguageServer` subclass to formalize testing abstraction and reduce hidden attributes.
 - `2026-03-16`: Treated item `5.1` as mandatory hygiene even after architecture work by running Ruff autofix immediately, then re-running lint and a focused regression test before moving on.
 - `2026-03-16`: Since Starlette lifespan migration was already present, item `5.2` was completed by strengthening correctness signals: explicit lifespan return typing and a dedicated test asserting shutdown-event behavior via lifespan context.
+- `2026-03-16`: Since production had no `assert` statements, item `5.3` was implemented as a regression guard test scanning `src/remora` AST for `ast.Assert` nodes to prevent future reintroduction.
