@@ -57,11 +57,7 @@ devenv shell -- ruff check src/
 
 Record any existing violations. You will not introduce new ones.
 
-### Step 0.4: Create a Feature Branch
-
-```bash
-git checkout -b refactor/code-review-cleanup
-```
+### Step 0.4: Initial Commit
 
 Commit after each phase completes. Use descriptive commit messages like `refactor(core): fix TurnContext class-level mutable state`.
 
