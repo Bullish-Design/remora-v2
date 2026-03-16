@@ -5,23 +5,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Annotated
 
 import typer
-import uvicorn
 
 from remora.code.discovery import CSTNode
 from remora.code.discovery import discover as discover_nodes
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.core.config import load_config
-from remora.core.db import open_database
-from remora.core.events import Event
-from remora.core.services import RuntimeServices
-from remora.lsp import create_lsp_server, create_lsp_server_standalone
-from remora.web.server import create_app
+from remora.core.lifecycle import RemoraLifecycle
+from remora.lsp import create_lsp_server_standalone
 
 app = typer.Typer(
     name="remora",
@@ -151,128 +146,24 @@ async def _start(
     log_events: bool = False,
     lsp: bool = False,
 ) -> None:
-    logger = logging.getLogger(__name__)
     project_root = project_root.resolve()
     config = load_config(config_path)
-
-    db_path = project_root / config.workspace_root / "remora.db"
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path = db_path.parent / "remora.log"
-    _configure_file_logging(log_path)
-    db = await open_database(db_path)
-    services = RuntimeServices(config, project_root, db)
-    logger.info("Logging to %s", log_path)
-    logger.info("Initializing runtime services")
-    await services.initialize()
-    if services.reconciler is None:
-        raise RuntimeError("RuntimeServices.initialize() did not set reconciler")
-    if services.runner is None:
-        raise RuntimeError("RuntimeServices.initialize() did not set runner")
-
-    if log_events:
-        event_logger = logging.getLogger("remora.events")
-
-        def log_event(event: Event) -> None:
-            event_logger.info(
-                "event=%s corr=%s agent=%s from=%s to=%s path=%s",
-                event.event_type,
-                event.correlation_id or "-",
-                getattr(event, "agent_id", "-"),
-                getattr(event, "from_agent", "-"),
-                getattr(event, "to_agent", "-"),
-                getattr(event, "path", None) or getattr(event, "file_path", "-"),
-            )
-
-        services.event_bus.subscribe_all(log_event)
-        logger.info("Event activity logging enabled")
-
-    logger.info("Starting full discovery scan")
-    scan_started = time.perf_counter()
-    scanned_nodes = await services.reconciler.full_scan()
-    logger.info(
-        "Discovery complete: nodes=%d duration=%.2fs",
-        len(scanned_nodes),
-        time.perf_counter() - scan_started,
+    lifecycle = RemoraLifecycle(
+        config=config,
+        project_root=project_root,
+        bind=bind,
+        port=port,
+        no_web=no_web,
+        log_events=log_events,
+        lsp=lsp,
+        configure_file_logging=_configure_file_logging,
     )
-
-    runner_task = asyncio.create_task(services.runner.run_forever(), name="remora-runner")
-    reconciler_task = asyncio.create_task(
-        services.reconciler.run_forever(),
-        name="remora-reconciler",
-    )
-    tasks: list[asyncio.Task] = [runner_task, reconciler_task]
-    web_server: uvicorn.Server | None = None
-    lsp_server = None
-    lsp_task: asyncio.Task | None = None
-
-    if not no_web:
-        web_app = create_app(
-            services.event_store,
-            services.node_store,
-            services.event_bus,
-            metrics=services.metrics,
-            actor_pool=services.runner,
-            workspace_service=services.workspace_service,
-        )
-        logger.info("Starting web server on %s:%d", bind, port)
-        web_config = uvicorn.Config(
-            web_app,
-            host=bind,
-            port=port,
-            log_level="warning",
-            access_log=False,
-        )
-        web_server = uvicorn.Server(web_config)
-        tasks.append(asyncio.create_task(web_server.serve(), name="remora-web"))
-    else:
-        logger.info("Web server disabled (--no-web)")
-
-    if lsp:
-        lsp_server = create_lsp_server(services.node_store, services.event_store)
-        logger.info("Starting LSP server on stdin/stdout")
-        lsp_task = asyncio.create_task(
-            asyncio.to_thread(lsp_server.start_io),
-            name="remora-lsp",
-        )
-        tasks.append(lsp_task)
+    await lifecycle.start()
 
     try:
-        if run_seconds > 0:
-            await asyncio.sleep(run_seconds)
-        else:
-            await asyncio.gather(*tasks)
+        await lifecycle.run(run_seconds=run_seconds)
     finally:
-        if services.reconciler is not None:
-            services.reconciler.stop()
-        if services.runner is not None:
-            try:
-                await asyncio.wait_for(services.runner.stop_and_wait(), timeout=10.0)
-            except TimeoutError:
-                logger.warning("Actor pool did not drain within 10s, forcing shutdown")
-
-        reconciler_stop_task = (
-            services.reconciler.stop_task
-            if services.reconciler is not None
-            else None
-        )
-        if web_server is not None:
-            web_server.should_exit = True
-        await services.close()
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        if lsp_server is not None:
-            try:
-                await asyncio.to_thread(lsp_server.shutdown)
-            except Exception as exc:  # pragma: no cover - best effort
-                logger.warning("LSP shutdown failed: %s", exc)
-            try:
-                await asyncio.to_thread(lsp_server.exit)
-            except Exception:
-                pass
-        if reconciler_stop_task is not None and reconciler_stop_task not in tasks:
-            tasks.append(reconciler_stop_task)
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await lifecycle.shutdown()
 
 
 async def _discover(
