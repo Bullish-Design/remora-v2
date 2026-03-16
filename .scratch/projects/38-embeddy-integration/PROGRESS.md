@@ -13,7 +13,7 @@
 | 7 | Step 1: Add embeddy optional deps (`search`, `search-local`, dev update) | done |
 | 8 | Step 2: Add `SearchConfig` and config wiring/tests | done |
 | 9 | Step 3: Add `core/search.py` `SearchService` and tests | done |
-| 10 | Step 4: Wire `SearchService` into runtime services/lifecycle | pending |
+| 10 | Step 4: Wire `SearchService` into runtime services/lifecycle | done |
 | 11 | Step 5: Add search methods to `TurnContext` and actor/runner plumbing | pending |
 | 12 | Step 6: Add `semantic_search.pym` Grail tool | pending |
 | 13 | Step 7: Add reconciler indexing/deindexing hooks and tests | pending |

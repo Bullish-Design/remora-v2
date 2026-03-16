@@ -14,6 +14,7 @@ from remora.core.events import EventBus, EventStore, SubscriptionRegistry, Trigg
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 from remora.core.runner import ActorPool
+from remora.core.search import SearchService
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -41,6 +42,7 @@ class RuntimeServices:
         self.workspace_service = CairnWorkspaceService(config, project_root, metrics=self.metrics)
         self.language_registry = LanguageRegistry()
 
+        self.search_service: SearchService | None = None
         self.reconciler: FileReconciler | None = None
         self.runner: ActorPool | None = None
 
@@ -51,12 +53,17 @@ class RuntimeServices:
         await self.event_store.create_tables()
         await self.workspace_service.initialize()
 
+        if self.config.search.enabled:
+            self.search_service = SearchService(self.config.search, self.project_root)
+            await self.search_service.initialize()
+
         self.reconciler = FileReconciler(
             self.config,
             self.node_store,
             self.event_store,
             self.workspace_service,
             self.project_root,
+            search_service=self.search_service,
         )
         await self.reconciler.start(self.event_bus)
 
@@ -67,6 +74,7 @@ class RuntimeServices:
             self.config,
             dispatcher=self.dispatcher,
             metrics=self.metrics,
+            search_service=self.search_service,
         )
 
     async def close(self) -> None:
@@ -81,6 +89,8 @@ class RuntimeServices:
                     pass
         if self.runner is not None:
             await self.runner.stop_and_wait()
+        if self.search_service is not None:
+            await self.search_service.close()
         await self.workspace_service.close()
         await self.db.close()
 

@@ -32,6 +32,7 @@ class ActorPool:
         config: Config,
         dispatcher: TriggerDispatcher | None = None,
         metrics: Metrics | None = None,
+        search_service: object | None = None,
     ):
         self._event_store = event_store
         self._dispatcher = dispatcher or event_store.dispatcher
@@ -39,6 +40,7 @@ class ActorPool:
         self._workspace_service = workspace_service
         self._config = config
         self._metrics = metrics
+        self._search_service = search_service
         self._running = False
         self._accepting_events = True
         self._semaphore = asyncio.Semaphore(config.max_concurrency)

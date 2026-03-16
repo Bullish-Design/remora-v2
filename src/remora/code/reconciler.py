@@ -39,12 +39,15 @@ class FileReconciler:
         event_store: EventStore,
         workspace_service: CairnWorkspaceService,
         project_root: Path,
+        *,
+        search_service: object | None = None,
     ):
         self._config = config
         self._node_store = node_store
         self._event_store = event_store
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
+        self._search_service = search_service
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
         self._file_lock_generations: dict[str, int] = {}

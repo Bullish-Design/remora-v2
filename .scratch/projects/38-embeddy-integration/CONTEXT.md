@@ -26,6 +26,16 @@ Completed:
   - Implemented: `initialize`, `close`, `search`, `find_similar`, `index_file`, `delete_source`, `index_directory`, `collection_for_file`.
   - Added `tests/unit/test_search.py` with remote-mode and graceful-degradation coverage.
   - Verification: `devenv shell -- pytest tests/unit/test_config.py tests/unit/test_search.py -q` (21 passed).
+- Step 4 runtime wiring:
+  - Updated `src/remora/core/services.py` to own optional `search_service`.
+  - `RuntimeServices.initialize()` now initializes `SearchService` when `config.search.enabled`.
+  - Passed `search_service` into `FileReconciler` and `ActorPool` constructors.
+  - `RuntimeServices.close()` now closes `search_service`.
+  - Updated constructor signatures in `src/remora/code/reconciler.py` and `src/remora/core/runner.py` to accept `search_service`.
+  - Added `tests/unit/test_services.py` for search disabled/enabled and cleanup behavior.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_services.py -q` (2 passed)
+    - `devenv shell -- pytest tests/unit/test_runner.py tests/unit/test_reconciler.py -q` (24 passed)
 
 ## Deliverable Summary
 
@@ -51,4 +61,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 4: Wire `SearchService` into `RuntimeServices` and lifecycle web app plumbing.
+- Step 5: Add `semantic_search`/`find_similar_code` to `TurnContext` and wire actor runner plumbing.
