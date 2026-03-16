@@ -101,6 +101,10 @@ class Config(BaseSettings):
     max_trigger_depth: int = 5
     trigger_cooldown_ms: int = 1000
     human_input_timeout_s: float = 300.0
+    search_content_max_matches: int = 1000
+    broadcast_max_targets: int = 50
+    send_message_rate_limit: int = 10
+    send_message_rate_window_s: float = 1.0
 
     # Workspace
     workspace_ignore_patterns: tuple[str, ...] = (

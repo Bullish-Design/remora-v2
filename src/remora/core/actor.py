@@ -449,6 +449,10 @@ class Actor:
             event_store=self._event_store,
             outbox=outbox,
             human_input_timeout_s=self._config.human_input_timeout_s,
+            search_content_max_matches=self._config.search_content_max_matches,
+            broadcast_max_targets=self._config.broadcast_max_targets,
+            send_message_rate_limit=self._config.send_message_rate_limit,
+            send_message_rate_window_s=self._config.send_message_rate_window_s,
         )
         capabilities = context.to_capabilities_dict()
         tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))

@@ -35,3 +35,7 @@
 ## 2026-03-15 - Subscription cache mutation strategy
 - Decision: Maintain cache entries incrementally for register/unregister/unregister_by_agent, keyed by subscription id and event type.
 - Rationale: Avoid full cache rebuilds on each write while preserving matching correctness.
+
+## 2026-03-15 - Tool action guardrails
+- Decision: Enforce configurable limits in `TurnContext` for search result volume, broadcast fan-out, and send_message rate.
+- Rationale: Bound worst-case tool side effects and prevent abuse loops while preserving default behavior for normal workloads.

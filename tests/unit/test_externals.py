@@ -44,6 +44,10 @@ async def _context(
     correlation_id: str = "corr-1",
     outbox=None,
     human_input_timeout_s: float = 300.0,
+    search_content_max_matches: int = 1000,
+    broadcast_max_targets: int = 50,
+    send_message_rate_limit: int = 10,
+    send_message_rate_window_s: float = 1.0,
 ) -> TurnContext:
     if outbox is None:
         outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
@@ -55,6 +59,10 @@ async def _context(
         event_store=event_store,
         outbox=outbox,
         human_input_timeout_s=human_input_timeout_s,
+        search_content_max_matches=search_content_max_matches,
+        broadcast_max_targets=broadcast_max_targets,
+        send_message_rate_limit=send_message_rate_limit,
+        send_message_rate_window_s=send_message_rate_window_s,
     )
 
 
@@ -74,6 +82,27 @@ async def test_externals_workspace_ops(context_env) -> None:
     assert "notes/a.txt" in await externals["search_files"]("a.txt")
     matches = await externals["search_content"]("hello", "notes")
     assert matches and matches[0]["file"] == "notes/a.txt"
+
+
+@pytest.mark.asyncio
+async def test_externals_search_content_caps_results(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::alpha")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    lines = "\n".join(f"needle-{idx}" for idx in range(1500))
+    await ws.write("notes/huge.txt", lines)
+    context = await _context(
+        node.node_id,
+        ws,
+        node_store,
+        event_store,
+        search_content_max_matches=1000,
+    )
+    externals = context.to_capabilities_dict()
+
+    matches = await externals["search_content"]("needle-", "notes")
+    assert len(matches) == 1000
 
 
 @pytest.mark.asyncio
@@ -322,6 +351,30 @@ async def test_externals_broadcast_siblings_and_file_patterns(context_env) -> No
 
 
 @pytest.mark.asyncio
+async def test_externals_broadcast_caps_target_count(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    sender = make_node("src/app.py::sender")
+    await node_store.upsert_node(sender)
+    for idx in range(60):
+        await node_store.upsert_node(make_node(f"src/app.py::target_{idx:02d}"))
+    ws = await workspace_service.get_agent_workspace(sender.node_id)
+    context = await _context(
+        sender.node_id,
+        ws,
+        node_store,
+        event_store,
+        broadcast_max_targets=50,
+    )
+    externals = context.to_capabilities_dict()
+
+    summary = await externals["broadcast"]("*", "all")
+    assert "50 agents" in summary
+    events = await event_store.get_events(limit=200)
+    sent = [event for event in events if event["event_type"] == "AgentMessageEvent"]
+    assert len(sent) == 50
+
+
+@pytest.mark.asyncio
 async def test_externals_code_ops(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     source_path = workspace_service._project_root / "src" / "app.py"
@@ -447,3 +500,27 @@ async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
 
     stored = await event_store.get_events(limit=10)
     assert not any(event["event_type"] == "CustomEvent" for event in stored)
+
+
+@pytest.mark.asyncio
+async def test_externals_send_message_rate_limit(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    TurnContext._send_message_timestamps.clear()
+    sender = make_node("src/app.py::sender")
+    target = make_node("src/app.py::target")
+    await node_store.upsert_node(sender)
+    await node_store.upsert_node(target)
+    ws = await workspace_service.get_agent_workspace(sender.node_id)
+    context = await _context(
+        sender.node_id,
+        ws,
+        node_store,
+        event_store,
+        send_message_rate_limit=2,
+        send_message_rate_window_s=60.0,
+    )
+    externals = context.to_capabilities_dict()
+
+    assert await externals["send_message"](target.node_id, "one")
+    assert await externals["send_message"](target.node_id, "two")
+    assert not await externals["send_message"](target.node_id, "three")

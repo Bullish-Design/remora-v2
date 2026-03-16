@@ -22,7 +22,9 @@ Current status:
 - Added test proving grouped node writes issue a single commit.
 - Item 9 complete: subscription registry cache now updates incrementally on register/unregister operations.
 - Added tests ensuring cache updates without forcing full rebuild.
+- Item 10 complete: action limits added for search_content (max matches), broadcast (max targets), and send_message (per-agent rate limit).
+- Added tests for each limit behavior.
 
 Next:
-- Implement item 10: Agent action limits (search_content, broadcast, send_message rate limit).
+- Implement item 11: Ruff violations.
 - Keep one-item-per-commit and push after each item.

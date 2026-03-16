@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import time
 import uuid
+from collections import deque
 from typing import Any
 
 from remora.core.events import (
@@ -25,6 +27,8 @@ from remora.core.workspace import AgentWorkspace
 class TurnContext:
     """Per-turn context providing externals API for an agent's tools."""
 
+    _send_message_timestamps: dict[str, deque[float]] = {}
+
     def __init__(
         self,
         node_id: str,
@@ -34,6 +38,10 @@ class TurnContext:
         event_store: EventStore,
         outbox: Any,
         human_input_timeout_s: float = 300.0,
+        search_content_max_matches: int = 1000,
+        broadcast_max_targets: int = 50,
+        send_message_rate_limit: int = 10,
+        send_message_rate_window_s: float = 1.0,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace
@@ -42,6 +50,10 @@ class TurnContext:
         self._event_store = event_store
         self._outbox = outbox
         self._human_input_timeout_s = human_input_timeout_s
+        self._search_content_max_matches = max(1, int(search_content_max_matches))
+        self._broadcast_max_targets = max(1, int(broadcast_max_targets))
+        self._send_message_rate_limit = max(1, int(send_message_rate_limit))
+        self._send_message_rate_window_s = max(0.001, float(send_message_rate_window_s))
 
     async def _emit(self, event: Event) -> int:
         """Emit an event through the outbox."""
@@ -78,6 +90,8 @@ class TurnContext:
             for index, line in enumerate(content.splitlines(), start=1):
                 if pattern in line:
                     matches.append({"file": normalized, "line": index, "text": line})
+                    if len(matches) >= self._search_content_max_matches:
+                        return matches
         return matches
 
     async def kv_get(self, key: str) -> Any | None:
@@ -183,6 +197,8 @@ class TurnContext:
         return await self._event_store.get_events_for_agent(target_id, limit=limit)
 
     async def send_message(self, to_node_id: str, content: str) -> bool:
+        if not self._allow_send_message():
+            return False
         await self._emit(
             AgentMessageEvent(
                 from_agent=self.node_id,
@@ -196,7 +212,8 @@ class TurnContext:
     async def broadcast(self, pattern: str, content: str) -> str:
         nodes = await self._node_store.list_nodes()
         target_ids = _resolve_broadcast_targets(self.node_id, pattern, nodes)
-        for target_id in target_ids:
+        limited_targets = target_ids[: self._broadcast_max_targets]
+        for target_id in limited_targets:
             await self._emit(
                 AgentMessageEvent(
                     from_agent=self.node_id,
@@ -205,7 +222,18 @@ class TurnContext:
                     correlation_id=self.correlation_id,
                 )
             )
-        return f"Broadcast sent to {len(target_ids)} agents"
+        return f"Broadcast sent to {len(limited_targets)} agents"
+
+    def _allow_send_message(self) -> bool:
+        now = time.time()
+        timestamps = self._send_message_timestamps.setdefault(self.node_id, deque())
+        cutoff = now - self._send_message_rate_window_s
+        while timestamps and timestamps[0] <= cutoff:
+            timestamps.popleft()
+        if len(timestamps) >= self._send_message_rate_limit:
+            return False
+        timestamps.append(now)
+        return True
 
     async def request_human_input(
         self,
