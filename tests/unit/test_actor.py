@@ -10,9 +10,10 @@ from types import SimpleNamespace
 import pytest
 import pytest_asyncio
 from structured_agents import Message
+from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
-from remora.core.actor import Actor, Outbox, RecordingOutbox, Trigger
+from remora.core.actor import Actor, Outbox, Trigger
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import (

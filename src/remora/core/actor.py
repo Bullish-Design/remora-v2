@@ -93,43 +93,6 @@ class Outbox:
         return await self._event_store.append(event)
 
 
-class RecordingOutbox:
-    """Test double that records emitted events without persisting.
-
-    Drop-in replacement for Outbox in unit tests.
-    """
-
-    def __init__(self, actor_id: str = "test") -> None:
-        self._actor_id = actor_id
-        self._correlation_id: str | None = None
-        self._sequence = 0
-        self.events: list[Event] = []
-
-    @property
-    def actor_id(self) -> str:
-        return self._actor_id
-
-    @property
-    def correlation_id(self) -> str | None:
-        return self._correlation_id
-
-    @correlation_id.setter
-    def correlation_id(self, value: str | None) -> None:
-        self._correlation_id = value
-
-    @property
-    def sequence(self) -> int:
-        return self._sequence
-
-    async def emit(self, event: Event) -> int:
-        """Record event without persisting."""
-        self._sequence += 1
-        if not event.correlation_id and self._correlation_id:
-            event.correlation_id = self._correlation_id
-        self.events.append(event)
-        return self._sequence
-
-
 class OutboxObserver:
     """Bridge structured-agents kernel observer events into Remora events."""
 
@@ -843,7 +806,6 @@ def _event_content(event: Event) -> str:
 
 __all__ = [
     "Outbox",
-    "RecordingOutbox",
     "OutboxObserver",
     "Trigger",
     "TriggerPolicy",

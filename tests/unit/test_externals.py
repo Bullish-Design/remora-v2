@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from tests.factories import make_node
+from tests.doubles import RecordingOutbox
 
-from remora.core.actor import Outbox, RecordingOutbox
+from remora.core.actor import Outbox
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore
