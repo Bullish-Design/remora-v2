@@ -7,6 +7,7 @@ import hashlib
 import json
 import time
 from collections import deque
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -504,7 +505,7 @@ def create_app(
         return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
     @asynccontextmanager
-    async def lifespan(_app: Starlette):  # noqa: ANN202
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
         try:
             yield
         finally:

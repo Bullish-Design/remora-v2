@@ -675,6 +675,18 @@ async def test_sse_stream_stops_on_shutdown(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_app_lifespan_sets_shutdown_event(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+    app = create_app(event_store, node_store, EventBus())
+    assert not app.state.sse_shutdown_event.is_set()
+
+    async with app.router.lifespan_context(app):
+        assert not app.state.sse_shutdown_event.is_set()
+
+    assert app.state.sse_shutdown_event.is_set()
+
+
+@pytest.mark.asyncio
 async def test_conversation_endpoint_returns_history(web_env) -> None:
     _client, node_store, event_store, _source_path = web_env
 
