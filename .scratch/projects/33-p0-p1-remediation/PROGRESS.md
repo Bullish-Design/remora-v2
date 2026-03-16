@@ -1,0 +1,15 @@
+# Progress
+
+- [x] 1. Path traversal fix (P0)
+- [ ] 2. CSRF middleware (P0)
+- [ ] 3. Actor `_depths` TTL cleanup (P0)
+- [ ] 4. FileReconciler `_file_locks` eviction (P0)
+- [ ] 5. Event bus dispatch fix (P0)
+- [ ] 6. Atomic `transition_status` (P0)
+- [ ] 7. `graph_set_status` transition validation (P1)
+- [ ] 8. Batch SQLite commits (P1)
+- [ ] 9. Subscription cache incremental update (P1)
+- [ ] 10. Agent action limits (P1)
+- [ ] 11. Ruff violations (P1)
+- [ ] 12. Starlette lifespan migration (P1)
+- [ ] 13. Replace production asserts (P1)

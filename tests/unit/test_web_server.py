@@ -314,6 +314,44 @@ async def test_api_proposal_reject_emits_rejected_event(proposal_web_env) -> Non
 
 
 @pytest.mark.asyncio
+async def test_api_proposal_diff_rejects_path_traversal(proposal_web_env) -> None:
+    client, _node_store, event_store, workspace_service, _source_path = proposal_web_env
+    workspace = await workspace_service.get_agent_workspace("src/app.py::a")
+    await workspace.write("source/../../escape.py", "print('oops')\n")
+    await event_store.append(
+        RewriteProposalEvent(
+            agent_id="src/app.py::a",
+            proposal_id="proposal-traversal",
+            files=("source/../../escape.py",),
+            reason="malicious",
+        )
+    )
+
+    response = await client.get("/api/proposals/src/app.py::a/diff")
+    assert response.status_code == 400
+    assert "Path traversal attempt" in response.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_api_proposal_accept_rejects_path_traversal(proposal_web_env) -> None:
+    client, _node_store, event_store, workspace_service, _source_path = proposal_web_env
+    workspace = await workspace_service.get_agent_workspace("src/app.py::a")
+    await workspace.write("source/../../escape.py", "print('oops')\n")
+    await event_store.append(
+        RewriteProposalEvent(
+            agent_id="src/app.py::a",
+            proposal_id="proposal-traversal",
+            files=("source/../../escape.py",),
+            reason="malicious",
+        )
+    )
+
+    response = await client.post("/api/proposals/src/app.py::a/accept", json={})
+    assert response.status_code == 400
+    assert "Path traversal attempt" in response.json()["error"]
+
+
+@pytest.mark.asyncio
 async def test_chat_rate_limit_allows_within_limit(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
     statuses = []

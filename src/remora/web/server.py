@@ -68,24 +68,37 @@ def create_app(
     shutdown_event = asyncio.Event()
     chat_limiter = RateLimiter(max_requests=10, window_seconds=60.0)
 
+    def _resolve_within_project_root(path: Path, workspace_path: str) -> Path:
+        candidate = path
+        if workspace_service is not None and not candidate.is_absolute():
+            candidate = workspace_service._project_root / candidate
+        resolved = candidate.resolve()
+        if workspace_service is None:
+            return resolved
+        project_root = workspace_service._project_root.resolve()
+        try:
+            resolved.relative_to(project_root)
+        except ValueError as exc:
+            raise ValueError(f"Path traversal attempt: {workspace_path}") from exc
+        return resolved
+
     def _workspace_path_to_disk_path(
         node_id: str,
         node_file_path: str,
         workspace_path: str,
     ) -> Path:
         normalized = workspace_path.strip("/")
+        result = Path(node_file_path)
         if normalized.startswith("source/"):
             source_path = normalized.removeprefix("source/")
             if source_path:
                 if source_path.startswith("/"):
-                    return Path(source_path)
-                if source_path == node_id:
-                    return Path(node_file_path)
-                if source_path == node_file_path:
-                    return Path(node_file_path)
-                if workspace_service is not None:
-                    return workspace_service._project_root / source_path
-        return Path(node_file_path)
+                    result = Path(source_path)
+                elif source_path in {node_id, node_file_path}:
+                    result = Path(node_file_path)
+                else:
+                    result = Path(source_path)
+        return _resolve_within_project_root(result, workspace_path)
 
     async def _latest_rewrite_proposal(node_id: str) -> dict | None:
         rows = await event_store.get_events_for_agent(node_id, limit=200)
@@ -209,7 +222,14 @@ def create_app(
                 new_source = await workspace.read(workspace_path)
             except FileNotFoundError:
                 continue
-            disk_path = _workspace_path_to_disk_path(node.node_id, node.file_path, workspace_path)
+            try:
+                disk_path = _workspace_path_to_disk_path(
+                    node.node_id,
+                    node.file_path,
+                    workspace_path,
+                )
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
             if disk_path.exists():
                 old_source = disk_path.read_text(encoding="utf-8")
             else:
@@ -259,7 +279,14 @@ def create_app(
             except FileNotFoundError:
                 continue
 
-            disk_path = _workspace_path_to_disk_path(node.node_id, node.file_path, workspace_path)
+            try:
+                disk_path = _workspace_path_to_disk_path(
+                    node.node_id,
+                    node.file_path,
+                    workspace_path,
+                )
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
             old_bytes = disk_path.read_bytes() if disk_path.exists() else b""
             new_bytes = new_source.encode("utf-8")
             if old_bytes == new_bytes:
