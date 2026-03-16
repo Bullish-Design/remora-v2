@@ -113,6 +113,31 @@ def discover_command(
         typer.echo(f"{node.node_type:8} {node.file_path}::{node.full_name}")
 
 
+@app.command("index")
+def index_command(
+    project_root: Annotated[Path, PROJECT_ROOT_ARG] = Path("."),
+    config_path: Annotated[Path | None, CONFIG_ARG] = None,
+    collection: Annotated[str | None, typer.Option("--collection", "-c")] = None,
+    include: Annotated[list[str] | None, typer.Option("--include", "-i")] = None,
+    exclude: Annotated[list[str] | None, typer.Option("--exclude", "-e")] = None,
+    log_level: Annotated[str, LOG_LEVEL_ARG] = "INFO",
+) -> None:
+    """Index project files for semantic search via embeddy."""
+    _configure_logging(log_level)
+    try:
+        asyncio.run(
+            _index(
+                project_root=project_root,
+                config_path=config_path,
+                collection=collection,
+                include=include,
+                exclude=exclude,
+            )
+        )
+    except KeyboardInterrupt:
+        pass
+
+
 @app.command("lsp")
 def lsp_command(
     project_root: Annotated[Path, PROJECT_ROOT_ARG] = Path("."),
@@ -182,6 +207,66 @@ async def _discover(
         query_paths=query_paths,
         languages=list(config.discovery_languages) if config.discovery_languages else None,
         ignore_patterns=config.workspace_ignore_patterns,
+    )
+
+
+async def _index(
+    *,
+    project_root: Path,
+    config_path: Path | None,
+    collection: str | None,
+    include: list[str] | None,
+    exclude: list[str] | None,
+) -> None:
+    project_root = project_root.resolve()
+    config = load_config(config_path)
+
+    if not config.search.enabled:
+        typer.echo("Error: search is not enabled in remora.yaml", err=True)
+        typer.echo("Add 'search: { enabled: true }' to your config.", err=True)
+        raise typer.Exit(code=1)
+
+    from remora.core.search import SearchService
+
+    service = SearchService(config.search, project_root)
+    await service.initialize()
+    if not service.available:
+        await service.close()
+        typer.echo("Error: search service is not available.", err=True)
+        typer.echo("Check that embeddy is installed and the server is running.", err=True)
+        raise typer.Exit(code=1)
+
+    paths = resolve_discovery_paths(config, project_root)
+    total_stats = {"files_processed": 0, "chunks_created": 0, "errors": []}
+
+    try:
+        for path in paths:
+            if not path.exists():
+                typer.echo(f"Skipping non-existent path: {path}")
+                continue
+            typer.echo(f"Indexing {path}...")
+            stats = await service.index_directory(
+                str(path),
+                collection=collection,
+                include=include,
+                exclude=exclude,
+            )
+            files = int(stats.get("files_processed", 0))
+            chunks = int(stats.get("chunks_created", 0))
+            errors = list(stats.get("errors", []))
+            total_stats["files_processed"] += files
+            total_stats["chunks_created"] += chunks
+            total_stats["errors"].extend(errors)
+            typer.echo(f"  {files} files -> {chunks} chunks")
+            for error in errors:
+                typer.echo(f"  Error: {error}", err=True)
+    finally:
+        await service.close()
+
+    typer.echo(
+        f"\nDone: {total_stats['files_processed']} files, "
+        f"{total_stats['chunks_created']} chunks, "
+        f"{len(total_stats['errors'])} errors"
     )
 
 

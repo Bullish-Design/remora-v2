@@ -66,6 +66,17 @@ Completed:
   - Verification:
     - `devenv shell -- pytest tests/unit/test_web_server.py -q` (43 passed)
     - `devenv shell -- pytest tests/unit/test_services.py tests/unit/test_web_server.py -q` (45 passed)
+- Step 9 CLI bootstrap indexing:
+  - Added `remora index` command in `src/remora/__main__.py` with options for collection/include/exclude.
+  - Added async `_index(...)` implementation:
+    - validates search config enabled
+    - initializes standalone `SearchService`
+    - iterates configured discovery paths and calls `index_directory(...)`
+    - prints aggregate stats and closes service
+  - Extended `tests/unit/test_cli.py` with `_index` disabled/happy-path tests.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_cli.py -q` (9 passed)
+    - `devenv shell -- pytest tests/unit/test_config.py tests/unit/test_search.py tests/unit/test_services.py tests/unit/test_externals.py tests/unit/test_runner.py tests/unit/test_reconciler.py tests/unit/test_web_server.py tests/unit/test_cli.py tests/unit/test_grail.py tests/unit/test_system_tools.py -q` (145 passed)
 
 ## Deliverable Summary
 
@@ -91,4 +102,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 9: Add CLI `remora index` command and tests.
+- All planned implementation steps (1-9) are complete.

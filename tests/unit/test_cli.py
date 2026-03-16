@@ -5,9 +5,12 @@ import logging
 import sys
 from pathlib import Path
 
+import pytest
+import typer
 from typer.testing import CliRunner
 
-from remora.__main__ import _configure_logging, app
+from remora.__main__ import _configure_logging, _index, app
+from remora.core.config import Config
 
 
 def test_cli_help() -> None:
@@ -120,3 +123,75 @@ def test_configure_logging_lsp_mode_uses_stderr() -> None:
             handler.close()
         for handler in original_handlers:
             root_logger.addHandler(handler)
+
+
+@pytest.mark.asyncio
+async def test_index_exits_when_search_disabled(tmp_path: Path) -> None:
+    with pytest.raises(typer.Exit):
+        await _index(
+            project_root=tmp_path,
+            config_path=None,
+            collection=None,
+            include=None,
+            exclude=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_happy_path_calls_index_directory_for_each_discovery_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import remora.__main__ as main_module
+
+    class FakeService:
+        last_instance = None
+
+        def __init__(self, config, project_root):  # noqa: ANN001, ANN204
+            self.available = True
+            self.calls: list[tuple[str, str | None, list[str] | None, list[str] | None]] = []
+            self.closed = False
+            type(self).last_instance = self
+
+        async def initialize(self) -> None:
+            return None
+
+        async def index_directory(
+            self,
+            path: str,
+            collection: str | None = None,
+            include: list[str] | None = None,
+            exclude: list[str] | None = None,
+        ) -> dict:
+            self.calls.append((path, collection, include, exclude))
+            return {"files_processed": 1, "chunks_created": 2, "errors": []}
+
+        async def close(self) -> None:
+            self.closed = True
+
+    path_a = tmp_path / "src"
+    path_b = tmp_path / "docs"
+    path_a.mkdir(parents=True)
+    path_b.mkdir(parents=True)
+
+    config = Config(search={"enabled": True, "mode": "remote"}, discovery_paths=("src", "docs"))
+
+    monkeypatch.setattr(main_module, "load_config", lambda _path: config)
+    monkeypatch.setattr(main_module, "resolve_discovery_paths", lambda *_args, **_kwargs: [path_a, path_b])
+    monkeypatch.setattr("remora.core.search.SearchService", FakeService)
+
+    await _index(
+        project_root=tmp_path,
+        config_path=None,
+        collection="code",
+        include=["*.py"],
+        exclude=["*.tmp"],
+    )
+
+    service = FakeService.last_instance
+    assert service is not None
+    assert service.calls == [
+        (str(path_a), "code", ["*.py"], ["*.tmp"]),
+        (str(path_b), "code", ["*.py"], ["*.tmp"]),
+    ]
+    assert service.closed is True

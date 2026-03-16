@@ -18,4 +18,4 @@
 | 12 | Step 6: Add `semantic_search.pym` Grail tool | done |
 | 13 | Step 7: Add reconciler indexing/deindexing hooks and tests | done |
 | 14 | Step 8: Add web `POST /api/search` endpoint and tests | done |
-| 15 | Step 9: Add `remora index` CLI command and tests | pending |
+| 15 | Step 9: Add `remora index` CLI command and tests | done |
