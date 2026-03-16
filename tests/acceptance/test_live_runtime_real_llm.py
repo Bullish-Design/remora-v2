@@ -90,7 +90,76 @@ def _write_send_message_project(
             "  .py: python\n"
             "query_paths: []\n"
             "workspace_root: .remora-acceptance\n"
-            "bundle_root: bundles\n"
+            f"bundle_root: {bundles_root}\n"
+            f"model_base_url: {model_url}\n"
+            f"model_default: {model_name}\n"
+            f"model_api_key: {model_api_key}\n"
+            "timeout_s: 60\n"
+            "max_turns: 8\n"
+        ),
+        encoding="utf-8",
+    )
+    return RuntimeProject(config_path=config_path, source_path=source_path)
+
+
+def _write_proposal_project(
+    root: Path,
+    *,
+    model_url: str,
+    model_name: str,
+    model_api_key: str,
+) -> RuntimeProject:
+    source_path = root / "src" / "app.py"
+    write_file(source_path, "def alpha():\n    return 1\n")
+
+    bundles_root = root / "bundles"
+    system = bundles_root / "system"
+    code = bundles_root / "code-agent"
+    (system / "tools").mkdir(parents=True, exist_ok=True)
+    (code / "tools").mkdir(parents=True, exist_ok=True)
+
+    write_file(
+        system / "bundle.yaml",
+        (
+            "name: system\n"
+            "system_prompt: >-\n"
+            "  You are a deterministic acceptance-test agent.\n"
+            "  If the user asks for rewrite_to_magic, call rewrite_to_magic exactly once,\n"
+            "  then respond in one sentence.\n"
+            f"model: {model_name}\n"
+            "max_turns: 8\n"
+        ),
+    )
+    write_file(code / "bundle.yaml", f"name: code-agent\nmodel: {model_name}\nmax_turns: 8\n")
+    write_file(
+        code / "tools" / "rewrite_to_magic.pym",
+        (
+            "from grail import external\n\n"
+            "@external\n"
+            "async def write_file(path: str, content: str) -> bool: ...\n"
+            "@external\n"
+            "async def propose_changes(reason: str = '') -> str: ...\n"
+            "@external\n"
+            "async def my_node_id() -> str: ...\n\n"
+            "node_id = await my_node_id()\n"
+            "await write_file(f\"source/{node_id}\", \"def alpha():\\n    return 99\\n\")\n"
+            "proposal_id = await propose_changes(\"acceptance rewrite\")\n"
+            "proposal_id\n"
+        ),
+    )
+
+    config_path = root / "remora.yaml"
+    config_path.write_text(
+        (
+            "discovery_paths:\n"
+            "  - src\n"
+            "discovery_languages:\n"
+            "  - python\n"
+            "language_map:\n"
+            "  .py: python\n"
+            "query_paths: []\n"
+            "workspace_root: .remora-acceptance\n"
+            f"bundle_root: {bundles_root}\n"
             f"model_base_url: {model_url}\n"
             f"model_default: {model_name}\n"
             f"model_api_key: {model_api_key}\n"
@@ -153,6 +222,25 @@ async def _wait_for_function_node_id(client: httpx.AsyncClient) -> str:
                     return node_id
         await asyncio.sleep(0.2)
     raise AssertionError("Timed out waiting for discovered function node")
+
+
+async def _wait_for_pending_proposal(
+    client: httpx.AsyncClient,
+    *,
+    node_id: str,
+    timeout_s: float = _EVENT_TIMEOUT_S,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        response = await client.get("/api/proposals")
+        assert response.status_code == 200
+        payload = response.json()
+        assert isinstance(payload, list)
+        for proposal in payload:
+            if proposal.get("node_id") == node_id and proposal.get("proposal_id"):
+                return proposal
+        await asyncio.sleep(0.2)
+    raise AssertionError(f"Timed out waiting for pending proposal on node {node_id}")
 
 
 @contextlib.asynccontextmanager
@@ -248,3 +336,76 @@ async def test_acceptance_live_web_chat_routes_through_dispatcher_actorpool_and_
                 and event.get("correlation_id") == correlation_id
             ]
             assert errors == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
+@pytest.mark.real_llm
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_acceptance_proposal_flow_generates_diff_and_accept_materializes_file(
+    tmp_path: Path,
+) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+
+    runtime_project = _write_proposal_project(
+        tmp_path,
+        model_url=model_url,
+        model_name=model_name,
+        model_api_key=model_api_key,
+    )
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=runtime_project.config_path,
+        port=port,
+    ) as base_url:
+        async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+            node_id = await _wait_for_function_node_id(client)
+
+            response = await client.post(
+                "/api/chat",
+                json={
+                    "node_id": node_id,
+                    "message": "Call rewrite_to_magic exactly once, then confirm completion.",
+                },
+            )
+            assert response.status_code == 200
+
+            proposal = await _wait_for_pending_proposal(client, node_id=node_id)
+            proposal_id = str(proposal["proposal_id"])
+
+            diff_response = await client.get(f"/api/proposals/{node_id}/diff")
+            assert diff_response.status_code == 200
+            diff_payload = diff_response.json()
+            assert diff_payload["proposal_id"] == proposal_id
+            assert diff_payload["diffs"]
+            assert diff_payload["diffs"][0]["new"] == "def alpha():\n    return 99\n"
+
+            accept_response = await client.post(f"/api/proposals/{node_id}/accept", json={})
+            assert accept_response.status_code == 200
+            accept_payload = accept_response.json()
+            assert accept_payload["status"] == "accepted"
+            assert accept_payload["proposal_id"] == proposal_id
+            materialized_files = accept_payload.get("files", [])
+            assert isinstance(materialized_files, list)
+            assert materialized_files
+            materialized_path = Path(str(materialized_files[0]))
+            assert materialized_path.read_text(encoding="utf-8") == "def alpha():\n    return 99\n"
+
+            await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "RewriteAcceptedEvent"
+                    and event.get("payload", {}).get("proposal_id") == proposal_id
+                ),
+            )
+            await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "ContentChangedEvent"
+                    and event.get("payload", {}).get("path") == str(materialized_path)
+                ),
+            )
