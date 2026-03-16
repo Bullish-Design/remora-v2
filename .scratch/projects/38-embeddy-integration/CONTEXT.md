@@ -2,7 +2,16 @@
 
 ## Current State
 
-EMBEDDY_IMPLEMENTATION_PLAN.md is complete. It covers 9 implementation steps across 13 files, with ~350 lines of new/modified code plus tests.
+Implementation has started from `EMBEDDY_IMPLEMENTATION_PLAN.md`.
+
+Completed:
+- Step 1 dependency changes in `pyproject.toml`:
+  - Added optional extras: `search`, `search-local`
+  - Added embeddy to `dev` extras
+- Ran verification commands from plan:
+  - `devenv shell -- uv sync --extra search`
+  - `devenv shell -- python -c "from embeddy.client import EmbeddyClient; print('OK')"`
+  - Result: import check passes.
 
 ## Deliverable Summary
 
@@ -25,3 +34,7 @@ The plan covers:
 - Include Grail tool as core functionality
 - Include bootstrap indexing CLI command
 - Detailed but not copy-pasteable test guidance
+- Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
+
+## Next Step
+- Step 2: Add `SearchConfig` to `src/remora/core/config.py`, wire into root `Config`, update `remora.yaml.example`, and add unit tests in `tests/unit/test_config.py`.

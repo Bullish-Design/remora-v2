@@ -14,3 +14,6 @@ Create a separate callable method for initial directory indexing (not just incre
 
 ## D5: Test depth — detailed but not copy-pasteable
 Include plenty of detail about what to test, test structure, mocking strategy, etc. but the intern writes the actual test code.
+
+## D6: Use `embeddy[server]` in `search` and `dev` extras
+While implementing Step 1, `from embeddy.client import EmbeddyClient` failed with `ModuleNotFoundError: fastapi` when only `embeddy` was installed. The current embeddy package executes `embeddy.__init__` and imports `embeddy.server`, which needs FastAPI. To preserve a working remote-mode import path and keep plan verification green, use `embeddy[server]` in `search` and `dev`.
