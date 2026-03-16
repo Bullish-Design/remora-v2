@@ -183,9 +183,8 @@ async def _start(
         lsp=lsp,
         configure_file_logging=_configure_file_logging,
     )
-    await lifecycle.start()
-
     try:
+        await lifecycle.start()
         await lifecycle.run(run_seconds=run_seconds)
     finally:
         await lifecycle.shutdown()
@@ -300,14 +299,23 @@ def _configure_logging(level_name: str, *, lsp_mode: bool = False) -> None:
 def _configure_file_logging(log_path: Path) -> None:
     root_logger = logging.getLogger()
     resolved_path = log_path.resolve()
-    for handler in root_logger.handlers:
+    existing_handler_for_path = False
+    for handler in list(root_logger.handlers):
         if isinstance(handler, logging.FileHandler):
             try:
-                if Path(handler.baseFilename).resolve() == resolved_path:
-                    return
+                handler_path = Path(handler.baseFilename).resolve()
             except OSError:
+                handler_path = None
+            if handler_path == resolved_path:
+                existing_handler_for_path = True
                 continue
+            root_logger.removeHandler(handler)
+            handler.close()
 
+    if existing_handler_for_path:
+        return
+
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
     file_handler = RotatingFileHandler(
         filename=log_path,
         maxBytes=5 * 1024 * 1024,

@@ -93,9 +93,25 @@ Completed:
     - full failure/error inventory and root-cause grouping
     - concrete fix proposals per failure category
     - explicit implementation overview for integration Steps 2 and 3 (tool runtime tests + companion E2E flow test)
+- FD leak remediation:
+  - Updated `src/remora/__main__.py`:
+    - `_configure_file_logging()` now removes and closes stale `FileHandler`s when switching log paths.
+    - `_start()` now always executes `lifecycle.shutdown()` even if `lifecycle.start()` raises.
+  - Updated `src/remora/core/lifecycle.py`:
+    - Tracks runtime log path and closes matching file handlers in `shutdown()` finally block.
+    - Clears runtime references (`_services`, `_tasks`) during shutdown finalization.
+  - Added regression tests in `tests/unit/test_cli.py`:
+    - stale file handler replacement test
+    - `_start()` shutdown-on-start-failure test
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_cli.py tests/unit/test_grail.py tests/integration/test_startup_shutdown.py -q` (28 passed)
+    - Full-suite snapshot after fix:
+      - `devenv shell -- pytest tests/ -q --tb=short --junitxml=/tmp/pytest_post_fix2.xml`
+      - Result: `20 failed, 329 passed, 8 skipped, 0 errors`
+      - `Too many open files` signatures removed (0), sqlite-open cascade reduced from 139 to 1.
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Await user direction on whether to execute the remediation plan from `TEST_SUIDE_FAILURE_REPORT.md`.
+- Remaining failures are primarily `WORKSPACE_OPEN_FAILED` in actor/perf/startup tests plus stale `test_companion_bundle_removed`; continue with workspace-open stabilization and stale test update.

@@ -49,12 +49,14 @@ class RemoraLifecycle:
         self._web_server: uvicorn.Server | None = None
         self._lsp_server: Any | None = None
         self._started = False
+        self._log_path: Path | None = None
 
     async def start(self) -> None:
         """Initialize services and launch background runtime tasks."""
         db_path = self._project_root / self._config.workspace_root / "remora.db"
         db_path.parent.mkdir(parents=True, exist_ok=True)
         log_path = db_path.parent / "remora.log"
+        self._log_path = log_path.resolve()
         self._configure_file_logging(log_path)
 
         db = await open_database(db_path)
@@ -149,11 +151,11 @@ class RemoraLifecycle:
     async def shutdown(self) -> None:
         """Stop tasks and close services in a deterministic order."""
         services = self._services
-        if services is None:
-            self._started = False
-            return
 
         try:
+            if services is None:
+                return
+
             if services.reconciler is not None:
                 services.reconciler.stop()
             if services.runner is not None:
@@ -190,7 +192,28 @@ class RemoraLifecycle:
                 self._tasks.append(reconciler_stop_task)
             await asyncio.gather(*self._tasks, return_exceptions=True)
         finally:
+            self._release_file_log_handlers()
             self._started = False
+            self._services = None
+            self._tasks = []
+
+    def _release_file_log_handlers(self) -> None:
+        """Release lifecycle-owned file handlers to avoid FD leaks across starts."""
+        if self._log_path is None:
+            return
+        root_logger = logging.getLogger()
+        for handler in list(root_logger.handlers):
+            if not isinstance(handler, logging.FileHandler):
+                continue
+            try:
+                handler_path = Path(handler.baseFilename).resolve()
+            except OSError:
+                handler_path = None
+            if handler_path != self._log_path:
+                continue
+            root_logger.removeHandler(handler)
+            handler.close()
+        self._log_path = None
 
 
 __all__ = ["RemoraLifecycle"]

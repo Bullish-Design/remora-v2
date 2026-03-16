@@ -9,7 +9,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from remora.__main__ import _configure_logging, _index, app
+from remora.__main__ import _configure_file_logging, _configure_logging, _index, _start, app
 from remora.core.config import Config
 
 
@@ -123,6 +123,84 @@ def test_configure_logging_lsp_mode_uses_stderr() -> None:
             handler.close()
         for handler in original_handlers:
             root_logger.addHandler(handler)
+
+
+def test_configure_file_logging_replaces_stale_file_handlers(tmp_path: Path) -> None:
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    original_level = root_logger.level
+    root_logger.setLevel(logging.INFO)
+
+    try:
+        # Start from a clean logger so this test is deterministic.
+        for handler in list(root_logger.handlers):
+            root_logger.removeHandler(handler)
+
+        log_a = tmp_path / "a" / "remora.log"
+        log_b = tmp_path / "b" / "remora.log"
+        _configure_file_logging(log_a)
+        file_handlers = [
+            handler for handler in root_logger.handlers if isinstance(handler, logging.FileHandler)
+        ]
+        assert len(file_handlers) == 1
+        first_handler = file_handlers[0]
+        assert Path(first_handler.baseFilename).resolve() == log_a.resolve()
+
+        _configure_file_logging(log_b)
+        file_handlers = [
+            handler for handler in root_logger.handlers if isinstance(handler, logging.FileHandler)
+        ]
+        assert len(file_handlers) == 1
+        assert Path(file_handlers[0].baseFilename).resolve() == log_b.resolve()
+        # The previous handler should be closed when it is replaced.
+        assert first_handler.stream is None or first_handler.stream.closed
+    finally:
+        for handler in list(root_logger.handlers):
+            root_logger.removeHandler(handler)
+            if handler not in original_handlers:
+                handler.close()
+        root_logger.setLevel(original_level)
+        for handler in original_handlers:
+            root_logger.addHandler(handler)
+
+
+@pytest.mark.asyncio
+async def test_start_calls_shutdown_when_lifecycle_start_fails(tmp_path: Path, monkeypatch) -> None:
+    import remora.__main__ as main_module
+
+    calls: list[str] = []
+
+    class FakeLifecycle:
+        def __init__(self, **_kwargs):  # noqa: ANN003, D401
+            calls.append("init")
+
+        async def start(self) -> None:
+            calls.append("start")
+            raise RuntimeError("boom")
+
+        async def run(self, *, run_seconds: float = 0.0) -> None:
+            del run_seconds
+            calls.append("run")
+
+        async def shutdown(self) -> None:
+            calls.append("shutdown")
+
+    monkeypatch.setattr(main_module, "RemoraLifecycle", FakeLifecycle)
+    monkeypatch.setattr(main_module, "load_config", lambda _path: Config())
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await _start(
+            project_root=tmp_path,
+            config_path=None,
+            port=8080,
+            no_web=True,
+            bind="127.0.0.1",
+            run_seconds=0.0,
+            log_events=False,
+            lsp=False,
+        )
+
+    assert calls == ["init", "start", "shutdown"]
 
 
 @pytest.mark.asyncio
