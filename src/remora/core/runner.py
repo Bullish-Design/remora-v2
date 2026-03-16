@@ -131,7 +131,9 @@ class ActorPool:
     def _refresh_pending_inbox_items(self) -> None:
         if self._metrics is None:
             return
-        self._metrics.pending_inbox_items = sum(actor.inbox.qsize() for actor in self._actors.values())
+        self._metrics.pending_inbox_items = sum(
+            actor.inbox.qsize() for actor in self._actors.values()
+        )
 
 
 __all__ = ["ActorPool"]

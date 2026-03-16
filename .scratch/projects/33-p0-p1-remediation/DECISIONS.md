@@ -39,3 +39,7 @@
 ## 2026-03-15 - Tool action guardrails
 - Decision: Enforce configurable limits in `TurnContext` for search result volume, broadcast fan-out, and send_message rate.
 - Rationale: Bound worst-case tool side effects and prevent abuse loops while preserving default behavior for normal workloads.
+
+## 2026-03-15 - Ruff scope for P1 lint cleanup
+- Decision: Treat the P1 Ruff item as `src/remora` scope (per recommendation text) and make manual style fixes after auto-fix.
+- Rationale: Aligns with documented command and avoids expanding this item into unrelated test-only lint churn.

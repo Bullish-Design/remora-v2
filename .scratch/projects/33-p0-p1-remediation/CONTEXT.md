@@ -24,7 +24,9 @@ Current status:
 - Added tests ensuring cache updates without forcing full rebuild.
 - Item 10 complete: action limits added for search_content (max matches), broadcast (max targets), and send_message (per-agent rate limit).
 - Added tests for each limit behavior.
+- Item 11 complete: Ruff issues in `src/remora` resolved (auto-fix + manual long-line cleanups).
+- Verified with `devenv shell -- ruff check src/remora` passing clean.
 
 Next:
-- Implement item 11: Ruff violations.
+- Implement item 12: Starlette lifespan migration.
 - Keep one-item-per-commit and push after each item.

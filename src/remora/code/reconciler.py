@@ -354,7 +354,9 @@ class FileReconciler:
         generation: int | None = None,
         sync_existing_bundles: bool = False,
     ) -> None:
-        lock_generation = generation if generation is not None else self._next_reconcile_generation()
+        lock_generation = (
+            generation if generation is not None else self._next_reconcile_generation()
+        )
         async with self._file_lock(file_path, lock_generation):
             await self._do_reconcile_file(
                 file_path,

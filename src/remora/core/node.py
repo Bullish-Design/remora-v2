@@ -35,11 +35,15 @@ class Node(BaseModel):
         data["node_type"] = (
             data["node_type"].value if hasattr(data["node_type"], "value") else data["node_type"]
         )
-        data["status"] = data["status"].value if hasattr(data["status"], "value") else data["status"]
+        data["status"] = (
+            data["status"].value
+            if hasattr(data["status"], "value")
+            else data["status"]
+        )
         return data
 
     @classmethod
-    def from_row(cls, row: dict[str, Any]) -> "Node":
+    def from_row(cls, row: dict[str, Any]) -> Node:
         """Hydrate a model from a sqlite row representation."""
         data = dict(row)
         return cls(**data)

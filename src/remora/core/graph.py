@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import aiosqlite
+
 from remora.core.node import Node
 from remora.core.types import STATUS_TRANSITIONS, NodeStatus, NodeType
 
@@ -160,7 +161,11 @@ class NodeStore:
 
     async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
         """Transition node status atomically when the transition is valid."""
-        valid_sources = [state for state, targets in STATUS_TRANSITIONS.items() if target in targets]
+        valid_sources = [
+            state
+            for state, targets in STATUS_TRANSITIONS.items()
+            if target in targets
+        ]
         if not valid_sources:
             return False
 

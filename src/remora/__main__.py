@@ -245,7 +245,7 @@ async def _start(
         if services.runner is not None:
             try:
                 await asyncio.wait_for(services.runner.stop_and_wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Actor pool did not drain within 10s, forcing shutdown")
 
         reconciler_stop_task = (
@@ -309,10 +309,12 @@ def _configure_logging(level_name: str, *, lsp_mode: bool = False) -> None:
     stream = sys.stderr if lsp_mode else sys.stdout
     stream_handler = logging.StreamHandler(stream)
     stream_handler.addFilter(_ContextFilter())
+    log_format = (
+        "%(asctime)s %(levelname)s %(name)s "
+        "[%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
+    )
     stream_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s %(levelname)s %(name)s [%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
-        )
+        logging.Formatter(log_format)
     )
     root_logger.addHandler(stream_handler)
 
@@ -336,10 +338,12 @@ def _configure_file_logging(log_path: Path) -> None:
     )
     file_handler.addFilter(_ContextFilter())
     file_handler.setLevel(root_logger.level)
+    log_format = (
+        "%(asctime)s %(levelname)s %(name)s "
+        "[%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
+    )
     file_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s %(levelname)s %(name)s [%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
-        )
+        logging.Formatter(log_format)
     )
     root_logger.addHandler(file_handler)
 

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import aiosqlite
 
-
 Connection = aiosqlite.Connection
 
 
