@@ -43,3 +43,7 @@
 ## 2026-03-15 - Ruff scope for P1 lint cleanup
 - Decision: Treat the P1 Ruff item as `src/remora` scope (per recommendation text) and make manual style fixes after auto-fix.
 - Rationale: Aligns with documented command and avoids expanding this item into unrelated test-only lint churn.
+
+## 2026-03-15 - Starlette lifecycle API
+- Decision: Use `lifespan` context manager in `create_app` and set the SSE shutdown event in the lifespan teardown.
+- Rationale: Removes deprecation warnings and keeps shutdown signaling behavior equivalent.

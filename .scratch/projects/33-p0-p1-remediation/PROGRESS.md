@@ -11,5 +11,5 @@
 - [x] 9. Subscription cache incremental update (P1)
 - [x] 10. Agent action limits (P1)
 - [x] 11. Ruff violations (P1)
-- [ ] 12. Starlette lifespan migration (P1)
+- [x] 12. Starlette lifespan migration (P1)
 - [ ] 13. Replace production asserts (P1)

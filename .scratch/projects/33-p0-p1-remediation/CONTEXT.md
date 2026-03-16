@@ -26,7 +26,9 @@ Current status:
 - Added tests for each limit behavior.
 - Item 11 complete: Ruff issues in `src/remora` resolved (auto-fix + manual long-line cleanups).
 - Verified with `devenv shell -- ruff check src/remora` passing clean.
+- Item 12 complete: web server startup/shutdown hooks migrated from `on_shutdown` to `lifespan`.
+- Verified by running full `tests/unit/test_web_server.py` (all passing).
 
 Next:
-- Implement item 12: Starlette lifespan migration.
+- Implement item 13: Replace production asserts.
 - Keep one-item-per-commit and push after each item.

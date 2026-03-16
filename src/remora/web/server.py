@@ -7,6 +7,7 @@ import hashlib
 import json
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -504,8 +505,12 @@ def create_app(
         }
         return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
-    async def on_shutdown() -> None:
-        shutdown_event.set()
+    @asynccontextmanager
+    async def lifespan(_app: Starlette):  # noqa: ANN202
+        try:
+            yield
+        finally:
+            shutdown_event.set()
 
     routes = [
         Route("/", endpoint=index),
@@ -533,7 +538,7 @@ def create_app(
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),
         Route("/sse", endpoint=sse_stream),
     ]
-    app = Starlette(routes=routes, on_shutdown=[on_shutdown])
+    app = Starlette(routes=routes, lifespan=lifespan)
     app.add_middleware(CSRFMiddleware)
     app.state.sse_shutdown_event = shutdown_event
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
