@@ -230,40 +230,33 @@ class PromptBuilder:
 
     def build_system_prompt(
         self,
-        bundle_config: dict[str, Any],
+        bundle_config: BundleConfig,
         trigger_event: Event | None,
     ) -> tuple[str, str, int]:
-        self_reflect = bundle_config.get("self_reflect", {})
+        self_reflect = bundle_config.self_reflect
         is_reflection = (
-            isinstance(self_reflect, dict)
-            and self_reflect.get("enabled")
+            self_reflect is not None
+            and self_reflect.enabled
             and trigger_event is not None
             and trigger_event.event_type == "AgentCompleteEvent"
             and "primary" in getattr(trigger_event, "tags", ())
         )
         if is_reflection:
-            reflection_prompt = self_reflect.get("prompt", _DEFAULT_REFLECTION_PROMPT)
-            model_name = self_reflect.get("model", bundle_config.get("model", self._config.model_default))
-            try:
-                max_turns = max(1, int(self_reflect.get("max_turns", 2)))
-            except (TypeError, ValueError):
-                max_turns = 2
+            reflection_prompt = self_reflect.prompt or _DEFAULT_REFLECTION_PROMPT
+            model_name = self_reflect.model or bundle_config.model or self._config.model_default
+            max_turns = self_reflect.max_turns
             return reflection_prompt, model_name, max_turns
 
-        system_prompt = bundle_config.get(
-            "system_prompt",
-            "You are an autonomous code agent.",
-        )
-        prompt_extension = bundle_config.get("system_prompt_extension", "")
+        system_prompt = bundle_config.system_prompt
+        prompt_extension = bundle_config.system_prompt_extension
         if prompt_extension:
             system_prompt = f"{system_prompt}\n\n{prompt_extension}"
         mode = self.turn_mode(trigger_event)
-        prompts = bundle_config.get("prompts")
-        mode_prompt = prompts.get(mode, "") if isinstance(prompts, dict) else ""
+        mode_prompt = bundle_config.prompts.get(mode, "")
         if mode_prompt:
             system_prompt = f"{system_prompt}\n\n{mode_prompt}"
-        model_name = bundle_config.get("model", self._config.model_default)
-        max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
+        model_name = bundle_config.model or self._config.model_default
+        max_turns = bundle_config.max_turns
         return system_prompt, model_name, max_turns
 
     @staticmethod
@@ -444,7 +437,7 @@ class AgentTurnExecutor:
         trigger: Trigger,
         outbox: Outbox,
         turn_log: logging.LoggerAdapter,
-    ) -> tuple[Node, AgentWorkspace, dict[str, Any]] | None:
+    ) -> tuple[Node, AgentWorkspace, BundleConfig] | None:
         node = await self._node_store.get_node(node_id)
         if node is None:
             turn_log.warning("Trigger for unknown node")
@@ -660,22 +653,22 @@ class AgentTurnExecutor:
         return "\n## Companion Memory\n" + "\n".join(parts)
 
     @staticmethod
-    async def _read_bundle_config(workspace: AgentWorkspace) -> dict[str, Any]:
+    async def _read_bundle_config(workspace: AgentWorkspace) -> BundleConfig:
         try:
             text = await workspace.read("_bundle/bundle.yaml")
         except (FileNotFoundError, FsdFileNotFoundError):
-            return {}
+            return BundleConfig()
         try:
             loaded = yaml.safe_load(text) or {}
         except yaml.YAMLError:
             logger.warning("Ignoring malformed _bundle/bundle.yaml")
-            return {}
+            return BundleConfig()
         if not isinstance(loaded, dict):
-            return {}
+            return BundleConfig()
 
         expanded = _expand_env_vars(loaded)
         if not isinstance(expanded, dict):
-            return {}
+            return BundleConfig()
 
         # Preserve previous behavior: disabled self-reflect should be treated as absent.
         self_reflect = expanded.get("self_reflect")
@@ -684,12 +677,10 @@ class AgentTurnExecutor:
             expanded.pop("self_reflect", None)
 
         try:
-            bundle = BundleConfig.model_validate(expanded)
+            return BundleConfig.model_validate(expanded)
         except ValidationError:
-            logger.warning("Ignoring invalid _bundle/bundle.yaml")
-            return {}
-
-        return bundle.model_dump(exclude_none=True, exclude_unset=True)
+            logger.warning("Invalid bundle config, using defaults")
+            return BundleConfig()
 
 
 class Actor:

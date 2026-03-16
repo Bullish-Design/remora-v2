@@ -10,7 +10,7 @@
 - [x] Phase 1 Correctness Fixes
 - [x] Phase 2 Delete Dead Weight
 - [x] Phase 3 Type the Untyped
-- [ ] Phase 4 Extract BundleConfig Model
+- [x] Phase 4 Extract BundleConfig Model
 - [ ] Phase 5 Decompose actor.py
 - [ ] Phase 6 Refactor web/server.py
 - [ ] Phase 7 Fix Event System Issues
@@ -44,4 +44,4 @@
 ### Phase 4
 - [x] Step 4.1 Create `BundleConfig` and `SelfReflectConfig` models
 - [x] Step 4.2 Replace `AgentTurnExecutor._read_bundle_config` manual validation
-- [ ] Step 4.3 Update bundle config callers/types
+- [x] Step 4.3 Update bundle config callers/types

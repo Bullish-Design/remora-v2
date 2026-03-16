@@ -120,3 +120,14 @@ Next action:
 
 Next action:
 - Step 4.3: update bundle config caller typing so prompt/build paths use typed config shape.
+- Step 4.3 completed:
+  - changed `_read_bundle_config` to return `BundleConfig`
+  - changed `_start_agent_turn` and `PromptBuilder.build_system_prompt` to use typed `BundleConfig`
+  - replaced dict `.get(...)` prompt logic with direct typed attribute access
+  - updated actor unit tests to validate typed bundle config behavior
+  - verification:
+    - `tests/unit/test_actor.py`
+    - `tests/unit/test_bundle_configs.py`
+
+Next action:
+- Start Phase 5 decomposition of `core/actor.py` (Step 5.1 outbox module extraction).

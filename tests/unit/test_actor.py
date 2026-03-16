@@ -21,7 +21,7 @@ from remora.core.actor import (
     Trigger,
     TriggerPolicy,
 )
-from remora.core.config import Config
+from remora.core.config import BundleConfig, Config
 from remora.core.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
@@ -368,17 +368,19 @@ async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) ->
 def test_prompt_builder_reflection_override() -> None:
     config = Config()
     prompt_builder = PromptBuilder(config)
-    bundle_config = {
-        "system_prompt": "Normal prompt",
-        "model": "big-model",
-        "max_turns": 8,
-        "self_reflect": {
-            "enabled": True,
-            "model": "Qwen/Qwen3-1.7B",
-            "max_turns": 2,
-            "prompt": "Reflect on this turn.",
-        },
-    }
+    bundle_config = BundleConfig.model_validate(
+        {
+            "system_prompt": "Normal prompt",
+            "model": "big-model",
+            "max_turns": 8,
+            "self_reflect": {
+                "enabled": True,
+                "model": "Qwen/Qwen3-1.7B",
+                "max_turns": 2,
+                "prompt": "Reflect on this turn.",
+            },
+        }
+    )
     trigger = AgentCompleteEvent(agent_id="agent-a", tags=("primary",))
     prompt, model, max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
     assert prompt == "Reflect on this turn."
@@ -389,15 +391,17 @@ def test_prompt_builder_reflection_override() -> None:
 def test_prompt_builder_normal_turn_unaffected_by_self_reflect() -> None:
     config = Config()
     prompt_builder = PromptBuilder(config)
-    bundle_config = {
-        "system_prompt": "Normal prompt",
-        "model": "big-model",
-        "max_turns": 8,
-        "self_reflect": {
-            "enabled": True,
-            "model": "Qwen/Qwen3-1.7B",
-        },
-    }
+    bundle_config = BundleConfig.model_validate(
+        {
+            "system_prompt": "Normal prompt",
+            "model": "big-model",
+            "max_turns": 8,
+            "self_reflect": {
+                "enabled": True,
+                "model": "Qwen/Qwen3-1.7B",
+            },
+        }
+    )
     trigger = ContentChangedEvent(path="src/foo.py")
     prompt, model, max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
     assert "Normal prompt" in prompt
@@ -408,11 +412,13 @@ def test_prompt_builder_normal_turn_unaffected_by_self_reflect() -> None:
 def test_prompt_builder_reflection_tag_must_be_primary() -> None:
     config = Config()
     prompt_builder = PromptBuilder(config)
-    bundle_config = {
-        "system_prompt": "Normal prompt",
-        "model": "big-model",
-        "self_reflect": {"enabled": True, "model": "cheap-model"},
-    }
+    bundle_config = BundleConfig.model_validate(
+        {
+            "system_prompt": "Normal prompt",
+            "model": "big-model",
+            "self_reflect": {"enabled": True, "model": "cheap-model"},
+        }
+    )
     trigger = AgentCompleteEvent(agent_id="agent-a", tags=("reflection",))
     prompt, model, _max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
     assert "Normal prompt" in prompt
@@ -572,7 +578,7 @@ async def test_read_bundle_config_expands_model_from_env_default(actor_env, monk
     )
 
     bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
-    assert bundle_config["model"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+    assert bundle_config.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
 
 
 @pytest.mark.asyncio
@@ -585,7 +591,7 @@ async def test_read_bundle_config_allows_env_override_for_placeholder(
     await workspace.write("_bundle/bundle.yaml", 'model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"\n')
 
     bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
-    assert bundle_config["model"] == "my-org/custom-model"
+    assert bundle_config.model == "my-org/custom-model"
 
 
 @pytest.mark.asyncio
@@ -595,7 +601,7 @@ async def test_read_bundle_config_literal_model_overrides_env(actor_env, monkeyp
     await workspace.write("_bundle/bundle.yaml", "model: pinned/model\n")
 
     bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
-    assert bundle_config["model"] == "pinned/model"
+    assert bundle_config.model == "pinned/model"
 
 
 @pytest.mark.asyncio
@@ -604,7 +610,7 @@ async def test_read_bundle_config_malformed_yaml_returns_empty(actor_env) -> Non
     await workspace.write("_bundle/bundle.yaml", "system_prompt: [oops\n")
 
     bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
-    assert bundle_config == {}
+    assert bundle_config == BundleConfig()
 
 
 @pytest.mark.asyncio
@@ -623,10 +629,11 @@ async def test_read_bundle_config_parses_self_reflect(actor_env) -> None:
     )
 
     bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
-    assert bundle_config["self_reflect"]["enabled"] is True
-    assert bundle_config["self_reflect"]["model"] == "Qwen/Qwen3-1.7B"
-    assert bundle_config["self_reflect"]["max_turns"] == 2
-    assert bundle_config["self_reflect"]["prompt"] == "Reflect on your last turn."
+    assert bundle_config.self_reflect is not None
+    assert bundle_config.self_reflect.enabled is True
+    assert bundle_config.self_reflect.model == "Qwen/Qwen3-1.7B"
+    assert bundle_config.self_reflect.max_turns == 2
+    assert bundle_config.self_reflect.prompt == "Reflect on your last turn."
 
 
 @pytest.mark.asyncio
@@ -644,7 +651,7 @@ async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> No
     )
 
     bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
-    assert "self_reflect" not in bundle_config
+    assert bundle_config.self_reflect is None
 
 
 @pytest.mark.asyncio
