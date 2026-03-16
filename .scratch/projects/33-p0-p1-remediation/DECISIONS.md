@@ -51,3 +51,7 @@
 ## 2026-03-15 - Startup invariant enforcement
 - Decision: Replace startup `assert` statements with explicit `RuntimeError` guards after service initialization.
 - Rationale: Ensure invariant checks remain active in optimized/runtime environments and fail with clear errors.
+
+## 2026-03-15 - Health endpoint node count query
+- Decision: Query node count with `SELECT COUNT(*)` directly instead of loading all nodes.
+- Rationale: Avoid unnecessary row materialization for O(1) health checks under larger graphs.

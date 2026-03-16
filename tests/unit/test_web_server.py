@@ -445,6 +445,21 @@ async def test_health_endpoint_includes_metrics(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_endpoint_uses_count_query_not_list_nodes(web_env, monkeypatch) -> None:
+    client, node_store, _event_store, _source_path = web_env
+
+    async def fail_list_nodes(*_args, **_kwargs):  # noqa: ANN202
+        raise AssertionError("health endpoint should use COUNT(*) query")
+
+    monkeypatch.setattr(node_store, "list_nodes", fail_list_nodes)
+
+    response = await client.get("/api/health")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["nodes"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_api_cursor_resolves_node(web_env) -> None:
     client, _node_store, _event_store, source_path = web_env
     response = await client.post(

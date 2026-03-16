@@ -375,7 +375,9 @@ def create_app(
         return JSONResponse(await event_store.get_events(limit=limit))
 
     async def api_health(_request: Request) -> JSONResponse:
-        node_count = len(await node_store.list_nodes())
+        cursor = await node_store._db.execute("SELECT COUNT(*) FROM nodes")
+        row = await cursor.fetchone()
+        node_count = int(row[0]) if row is not None else 0
         health: dict[str, object] = {
             "status": "ok",
             "version": "0.5.0",
