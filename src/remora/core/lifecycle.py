@@ -47,6 +47,7 @@ class RemoraLifecycle:
         self._services: RuntimeServices | None = None
         self._tasks: list[asyncio.Task] = []
         self._web_server: uvicorn.Server | None = None
+        self._web_task: asyncio.Task | None = None
         self._lsp_server: Any | None = None
         self._started = False
         self._log_path: Path | None = None
@@ -123,7 +124,8 @@ class RemoraLifecycle:
                 access_log=False,
             )
             self._web_server = uvicorn.Server(web_config)
-            self._tasks.append(asyncio.create_task(self._web_server.serve(), name="remora-web"))
+            self._web_task = asyncio.create_task(self._web_server.serve(), name="remora-web")
+            self._tasks.append(self._web_task)
         else:
             logger.info("Web server disabled (--no-web)")
 
@@ -174,10 +176,6 @@ class RemoraLifecycle:
 
             await services.close()
 
-            for task in self._tasks:
-                if not task.done():
-                    task.cancel()
-
             if self._lsp_server is not None:
                 try:
                     await asyncio.to_thread(self._lsp_server.shutdown)
@@ -190,12 +188,39 @@ class RemoraLifecycle:
 
             if reconciler_stop_task is not None and reconciler_stop_task not in self._tasks:
                 self._tasks.append(reconciler_stop_task)
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+
+            # Let tasks finish cooperatively first (especially uvicorn lifespan).
+            pending = [task for task in self._tasks if not task.done()]
+            if pending:
+                done, still_pending = await asyncio.wait(pending, timeout=10.0)
+                if still_pending:
+                    task_names = sorted(task.get_name() for task in still_pending)
+                    logger.warning(
+                        "Forcing cancellation of %d lingering tasks after graceful shutdown: %s",
+                        len(still_pending),
+                        ", ".join(task_names),
+                    )
+                    for task in still_pending:
+                        task.cancel()
+                    await asyncio.gather(*still_pending, return_exceptions=True)
+
+                task_failures = [
+                    task.exception()
+                    for task in done
+                    if not task.cancelled() and task.exception() is not None
+                ]
+                if task_failures:
+                    logger.warning(
+                        "Runtime task(s) ended with exceptions during shutdown: %s",
+                        "; ".join(str(exc) for exc in task_failures),
+                    )
         finally:
             self._release_file_log_handlers()
             self._started = False
             self._services = None
             self._tasks = []
+            self._web_server = None
+            self._web_task = None
 
     def _release_file_log_handlers(self) -> None:
         """Release lifecycle-owned file handlers to avoid FD leaks across starts."""
