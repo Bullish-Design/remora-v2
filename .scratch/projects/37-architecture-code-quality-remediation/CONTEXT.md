@@ -10,6 +10,7 @@
 - Completed item `4.3` by introducing `serialize_enum(...)` in `src/remora/core/types.py` and replacing all production `hasattr(x, "value")` enum serialization checks in actor/config/node/lsp/web modules.
 - Completed item `4.4` by moving `RecordingOutbox` from `src/remora/core/actor.py` into `tests/doubles.py` and updating tests to import from test-only code.
 - Completed item `4.5` by replacing `_remora_handlers` monkey-patched dict with explicit `RemoraLSPHandlers` and `RemoraLanguageServer.remora_handlers`.
+- Completed item `5.1` by running Ruff autofix on `src/remora/` and confirming lint-clean state.
 - Verification run for 4.1:
   - `devenv shell -- uv sync --extra dev`
   - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_runner.py -q`
@@ -22,4 +23,8 @@
   - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_externals.py -q`
 - Verification run for 4.5:
   - `devenv shell -- pytest tests/unit/test_lsp_server.py tests/unit/test_cli.py -q`
-- Next action: commit+push item 4.5, then implement code-quality item `5.1` (Ruff cleanup).
+- Verification run for 5.1:
+  - `devenv shell -- ruff check --fix src/remora/`
+  - `devenv shell -- ruff check src/remora/`
+  - `devenv shell -- pytest tests/unit/test_lsp_server.py -q`
+- Next action: commit+push item 5.1, then implement item `5.2` (Starlette deprecation migration).

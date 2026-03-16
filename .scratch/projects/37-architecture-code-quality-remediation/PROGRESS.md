@@ -6,7 +6,7 @@
 - [x] 4.3 Eliminate `hasattr(x, "value")` pattern
 - [x] 4.4 Move `RecordingOutbox` to tests
 - [x] 4.5 Proper abstraction for LSP handlers
-- [ ] 5.1 Fix Ruff violations
+- [x] 5.1 Fix Ruff violations
 - [ ] 5.2 Starlette lifespan migration
 - [ ] 5.3 Replace production `assert`
 - [ ] 5.4 Add type checking config to CI/project config
@@ -18,4 +18,5 @@
 - [x] `e7f8705` 4.2 Extract startup/shutdown orchestration into `RemoraLifecycle`
 - [x] `9100da5` 4.3 Add `serialize_enum` boundary helper and remove `hasattr(..., "value")` usage
 - [x] `8fee526` 4.4 Move `RecordingOutbox` from production module into `tests/doubles.py`
-- [pending push] 4.5 Replace `_remora_handlers` monkey patch with `RemoraLSPHandlers` abstraction
+- [x] `d34fcc9` 4.5 Replace `_remora_handlers` monkey patch with `RemoraLSPHandlers` abstraction
+- [pending push] 5.1 Run Ruff autofix and clear remaining lint violations
