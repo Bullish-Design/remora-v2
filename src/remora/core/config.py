@@ -59,6 +59,37 @@ class BundleOverlayRule(BaseModel):
         return cleaned
 
 
+class SearchConfig(BaseModel):
+    """Configuration for semantic search via embeddy."""
+
+    enabled: bool = False
+    mode: str = "remote"
+    embeddy_url: str = "http://localhost:8585"
+    timeout: float = 30.0
+    default_collection: str = "code"
+    collection_map: dict[str, str] = Field(
+        default_factory=lambda: {
+            ".py": "code",
+            ".md": "docs",
+            ".toml": "config",
+            ".yaml": "config",
+            ".yml": "config",
+            ".json": "config",
+        }
+    )
+    # Local mode settings
+    db_path: str = ".remora/embeddy.db"
+    model_name: str = "Qwen/Qwen3-VL-Embedding-2B"
+    embedding_dimension: int = 2048
+
+    @field_validator("mode")
+    @classmethod
+    def _validate_mode(cls, value: str) -> str:
+        if value not in {"remote", "local"}:
+            raise ValueError("search mode must be 'remote' or 'local'")
+        return value
+
+
 class Config(BaseSettings):
     """Remora configuration loaded from remora.yaml and environment variables."""
 
@@ -107,6 +138,9 @@ class Config(BaseSettings):
     broadcast_max_targets: int = 50
     send_message_rate_limit: int = 10
     send_message_rate_window_s: float = 1.0
+
+    # Search (optional embeddy integration)
+    search: SearchConfig = Field(default_factory=SearchConfig)
 
     # Workspace
     workspace_ignore_patterns: tuple[str, ...] = (
@@ -224,6 +258,7 @@ def load_config(path: Path | None = None) -> Config:
 
 __all__ = [
     "BundleOverlayRule",
+    "SearchConfig",
     "VirtualSubscriptionConfig",
     "VirtualAgentConfig",
     "Config",

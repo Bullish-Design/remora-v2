@@ -12,6 +12,13 @@ Completed:
   - `devenv shell -- uv sync --extra search`
   - `devenv shell -- python -c "from embeddy.client import EmbeddyClient; print('OK')"`
   - Result: import check passes.
+- Step 2 config changes:
+  - Added `SearchConfig` model in `src/remora/core/config.py` with remote/local settings and `mode` validation.
+  - Added `Config.search` field wired via `Field(default_factory=SearchConfig)`.
+  - Added `SearchConfig` to module exports.
+  - Updated `remora.yaml.example` with commented `search:` configuration block.
+  - Added/ran config tests for defaults, invalid mode, dict parsing, and YAML loading.
+  - Verification: `devenv shell -- pytest tests/unit/test_config.py -q` (13 passed).
 
 ## Deliverable Summary
 
@@ -37,4 +44,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 2: Add `SearchConfig` to `src/remora/core/config.py`, wire into root `Config`, update `remora.yaml.example`, and add unit tests in `tests/unit/test_config.py`.
+- Step 3: Add `src/remora/core/search.py` `SearchService` with remote/local modes and graceful degradation, plus unit tests in `tests/unit/test_search.py`.

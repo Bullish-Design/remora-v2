@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from remora.core.config import Config, _expand_env_vars, _find_config_file, load_config
+from remora.core.config import Config, SearchConfig, _expand_env_vars, _find_config_file, load_config
 
 
 def test_default_config(monkeypatch) -> None:
@@ -112,3 +112,60 @@ def test_bundle_rules_override_type_overlays() -> None:
     )
     assert config.resolve_bundle("function", "test_alpha") == "test-agent"
     assert config.resolve_bundle("function", "alpha") == "code-agent"
+
+
+def test_search_config_defaults() -> None:
+    search = SearchConfig()
+    assert search.enabled is False
+    assert search.mode == "remote"
+    assert search.embeddy_url == "http://localhost:8585"
+    assert search.timeout == 30.0
+    assert search.default_collection == "code"
+    assert search.collection_map[".py"] == "code"
+    assert search.db_path == ".remora/embeddy.db"
+    assert search.model_name == "Qwen/Qwen3-VL-Embedding-2B"
+    assert search.embedding_dimension == 2048
+
+
+def test_search_config_invalid_mode_rejected() -> None:
+    with pytest.raises(ValidationError):
+        SearchConfig(mode="invalid")
+
+
+def test_config_parses_search_dict() -> None:
+    config = Config(
+        search={
+            "enabled": True,
+            "mode": "remote",
+            "embeddy_url": "http://localhost:8585",
+            "timeout": 45.0,
+            "default_collection": "code",
+            "collection_map": {".py": "python-code", ".md": "docs"},
+        }
+    )
+    assert config.search.enabled is True
+    assert config.search.mode == "remote"
+    assert config.search.timeout == 45.0
+    assert config.search.collection_map[".py"] == "python-code"
+
+
+def test_load_from_yaml_with_search_section(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "remora.yaml"
+    yaml_path.write_text(
+        "search:\n"
+        "  enabled: true\n"
+        "  mode: remote\n"
+        "  embeddy_url: http://localhost:9595\n"
+        "  timeout: 60.0\n"
+        "  default_collection: code\n"
+        "  collection_map:\n"
+        "    .py: code\n"
+        "    .md: docs\n",
+        encoding="utf-8",
+    )
+    config = load_config(yaml_path)
+    assert config.search.enabled is True
+    assert config.search.mode == "remote"
+    assert config.search.embeddy_url == "http://localhost:9595"
+    assert config.search.timeout == 60.0
+    assert config.search.collection_map[".md"] == "docs"

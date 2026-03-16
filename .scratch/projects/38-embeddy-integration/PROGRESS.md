@@ -11,7 +11,7 @@
 | 5 | Clarify open questions with user | done |
 | 6 | Write EMBEDDY_IMPLEMENTATION_PLAN.md | done |
 | 7 | Step 1: Add embeddy optional deps (`search`, `search-local`, dev update) | done |
-| 8 | Step 2: Add `SearchConfig` and config wiring/tests | pending |
+| 8 | Step 2: Add `SearchConfig` and config wiring/tests | done |
 | 9 | Step 3: Add `core/search.py` `SearchService` and tests | pending |
 | 10 | Step 4: Wire `SearchService` into runtime services/lifecycle | pending |
 | 11 | Step 5: Add search methods to `TurnContext` and actor/runner plumbing | pending |
