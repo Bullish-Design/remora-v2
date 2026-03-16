@@ -17,7 +17,9 @@ import httpx
 import pytest
 from tests.factories import write_file
 
-from remora.__main__ import _start
+from remora.__main__ import _configure_file_logging
+from remora.core.config import load_config
+from remora.core.lifecycle import RemoraLifecycle
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
 _REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")
@@ -500,27 +502,27 @@ async def _send_lsp_notification(
 
 @contextlib.asynccontextmanager
 async def _running_runtime(*, project_root: Path, config_path: Path, port: int):
-    task = asyncio.create_task(
-        _start(
-            project_root=project_root,
-            config_path=config_path,
-            port=port,
-            no_web=False,
-            bind="127.0.0.1",
-            run_seconds=0.0,
-            log_events=False,
-            lsp=False,
-        ),
-        name="acceptance-runtime",
+    config = load_config(config_path)
+    lifecycle = RemoraLifecycle(
+        config=config,
+        project_root=project_root,
+        bind="127.0.0.1",
+        port=port,
+        no_web=False,
+        log_events=False,
+        lsp=False,
+        configure_file_logging=_configure_file_logging,
     )
     base_url = f"http://127.0.0.1:{port}"
+    started = False
+    await lifecycle.start()
+    started = True
     await _wait_for_health(base_url)
     try:
         yield base_url
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.wait_for(task, timeout=15.0)
+        if started:
+            await asyncio.wait_for(lifecycle.shutdown(), timeout=20.0)
 
 
 @pytest.mark.asyncio
