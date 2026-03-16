@@ -254,3 +254,18 @@ async def test_nodestore_batch_commits_once_for_grouped_writes(db, monkeypatch) 
         await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
 
     assert commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_rolls_back_on_exception(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    sample_node = make_node("src/app.py::rollback")
+
+    with pytest.raises(ValueError, match="deliberate failure"):
+        async with store.batch():
+            await store.upsert_node(sample_node)
+            raise ValueError("deliberate failure")
+
+    result = await store.get_node(sample_node.node_id)
+    assert result is None

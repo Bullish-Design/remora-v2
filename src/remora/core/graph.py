@@ -40,11 +40,17 @@ class NodeStore:
     async def batch(self):  # noqa: ANN201
         """Group multiple node mutations into a single commit."""
         self._batch_depth += 1
+        failed = False
         try:
             yield
+        except BaseException:
+            failed = True
+            if self._batch_depth == 1:
+                await self._db.execute("ROLLBACK")
+            raise
         finally:
             self._batch_depth -= 1
-            if self._batch_depth == 0:
+            if self._batch_depth == 0 and not failed:
                 await self._db.commit()
 
     async def _maybe_commit(self) -> None:

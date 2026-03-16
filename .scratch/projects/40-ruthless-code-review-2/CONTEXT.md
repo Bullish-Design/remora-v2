@@ -13,6 +13,10 @@ Next action:
   - moved `TurnContext._send_message_timestamps` from class state to instance state
   - added regression test: `test_externals_send_message_rate_limit_isolated_per_context_instance`
   - verification: `tests/unit/test_externals.py` passed
+- Step 1.2 completed:
+  - updated `NodeStore.batch()` to rollback on exception at outer batch boundary
+  - added regression test: `test_batch_rolls_back_on_exception`
+  - verification: `tests/unit/test_graph.py` passed
 
 Next action:
-- Implement Step 1.2 (`NodeStore.batch()` rollback semantics + test).
+- Implement Step 1.3 (remove `NodeStore.set_status` and migrate all callers/tests).
