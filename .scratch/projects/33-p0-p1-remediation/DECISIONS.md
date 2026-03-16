@@ -47,3 +47,7 @@
 ## 2026-03-15 - Starlette lifecycle API
 - Decision: Use `lifespan` context manager in `create_app` and set the SSE shutdown event in the lifespan teardown.
 - Rationale: Removes deprecation warnings and keeps shutdown signaling behavior equivalent.
+
+## 2026-03-15 - Startup invariant enforcement
+- Decision: Replace startup `assert` statements with explicit `RuntimeError` guards after service initialization.
+- Rationale: Ensure invariant checks remain active in optimized/runtime environments and fail with clear errors.

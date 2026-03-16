@@ -12,4 +12,4 @@
 - [x] 10. Agent action limits (P1)
 - [x] 11. Ruff violations (P1)
 - [x] 12. Starlette lifespan migration (P1)
-- [ ] 13. Replace production asserts (P1)
+- [x] 13. Replace production asserts (P1)

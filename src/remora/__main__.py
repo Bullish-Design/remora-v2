@@ -164,8 +164,10 @@ async def _start(
     logger.info("Logging to %s", log_path)
     logger.info("Initializing runtime services")
     await services.initialize()
-    assert services.reconciler is not None
-    assert services.runner is not None
+    if services.reconciler is None:
+        raise RuntimeError("RuntimeServices.initialize() did not set reconciler")
+    if services.runner is None:
+        raise RuntimeError("RuntimeServices.initialize() did not set runner")
 
     if log_events:
         event_logger = logging.getLogger("remora.events")

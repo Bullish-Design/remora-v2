@@ -28,7 +28,8 @@ Current status:
 - Verified with `devenv shell -- ruff check src/remora` passing clean.
 - Item 12 complete: web server startup/shutdown hooks migrated from `on_shutdown` to `lifespan`.
 - Verified by running full `tests/unit/test_web_server.py` (all passing).
+- Item 13 complete: production `assert` usage replaced with explicit runtime checks in startup path.
+- Verified lint state remains clean with `devenv shell -- ruff check src/remora`.
 
 Next:
-- Implement item 13: Replace production asserts.
-- Keep one-item-per-commit and push after each item.
+- All P0 and P1 items from recommendations are complete.
