@@ -141,3 +141,12 @@ Next action:
 
 Next action:
 - Step 5.2: extract `Trigger` and `TriggerPolicy` into `core/trigger.py`.
+- Step 5.2 completed:
+  - created `core/trigger.py` with `Trigger`, `TriggerPolicy`, and depth constants
+  - removed trigger primitives from `core/actor.py` and imported from new module
+  - verification:
+    - `tests/unit/test_actor.py`
+    - `tests/unit/test_runner.py`
+
+Next action:
+- Step 5.3: extract `PromptBuilder` and related prompt helpers/constants into `core/prompt.py`.

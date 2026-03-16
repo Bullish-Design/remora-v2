@@ -6,7 +6,6 @@ import asyncio
 import logging
 import time
 import uuid
-from dataclasses import dataclass
 from typing import Any
 
 import yaml
@@ -28,13 +27,12 @@ from remora.core.metrics import Metrics
 from remora.core.node import Node
 from remora.core.outbox import Outbox, OutboxObserver
 from remora.core.search import SearchServiceProtocol
+from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
 
-_DEPTH_TTL_MS = 5 * 60 * 1000
-_DEPTH_CLEANUP_INTERVAL = 100
 _DEFAULT_REFLECTION_PROMPT = """\
 You just completed a conversation turn. Reflect on the exchange and record metadata.
 
@@ -58,68 +56,6 @@ def _turn_logger(node_id: str, correlation_id: str, turn_number: int) -> logging
             "turn": turn_number,
         },
     )
-
-
-@dataclass
-class Trigger:
-    """A trigger waiting to be executed."""
-
-    node_id: str
-    correlation_id: str
-    event: Event | None = None
-
-
-class TriggerPolicy:
-    """Cooldown/depth trigger policy with bounded state cleanup."""
-
-    def __init__(self, config: Config) -> None:
-        self._config = config
-        self.last_trigger_ms: float = 0.0
-        self.depths: dict[str, int] = {}
-        self.depth_timestamps: dict[str, float] = {}
-        self.trigger_checks = 0
-
-    def should_trigger(self, correlation_id: str) -> bool:
-        """Return True when cooldown and depth constraints allow triggering."""
-        now_ms = time.time() * 1000.0
-        self.trigger_checks += 1
-        if self.trigger_checks >= _DEPTH_CLEANUP_INTERVAL:
-            self.cleanup_depth_state(now_ms)
-            self.trigger_checks = 0
-
-        if now_ms - self.last_trigger_ms < self._config.trigger_cooldown_ms:
-            return False
-        self.last_trigger_ms = now_ms
-
-        depth = self.depths.get(correlation_id, 0)
-        if depth >= self._config.max_trigger_depth:
-            return False
-        self.depths[correlation_id] = depth + 1
-        self.depth_timestamps[correlation_id] = now_ms
-        return True
-
-    def cleanup_depth_state(self, now_ms: float) -> None:
-        cutoff = now_ms - _DEPTH_TTL_MS
-        stale_ids = [
-            correlation_id
-            for correlation_id, timestamp_ms in self.depth_timestamps.items()
-            if timestamp_ms < cutoff
-        ]
-        for correlation_id in stale_ids:
-            self.depth_timestamps.pop(correlation_id, None)
-            self.depths.pop(correlation_id, None)
-
-    def release_depth(self, correlation_id: str | None) -> None:
-        if correlation_id is None:
-            return
-        remaining = self.depths.get(correlation_id, 1) - 1
-        if remaining <= 0:
-            self.depths.pop(correlation_id, None)
-            self.depth_timestamps.pop(correlation_id, None)
-        else:
-            self.depths[correlation_id] = remaining
-            self.depth_timestamps[correlation_id] = time.time() * 1000.0
-
 
 class PromptBuilder:
     """Build system/user prompts from bundle config, node state, and trigger context."""
