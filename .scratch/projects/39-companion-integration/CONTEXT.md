@@ -76,9 +76,14 @@ Completed:
   - Endpoint returns workspace KV data for `companion/chat_index`, `companion/reflections`, `companion/links`.
   - Added web tests in `tests/unit/test_web_server.py` for empty and populated companion data responses.
   - Verification: `devenv shell -- pytest tests/unit/test_web_server.py -v -k companion` (2 passed).
+- Step 12: Added Layer 2 companion observer bundle.
+  - Added `bundles/companion/bundle.yaml` with project-level observer prompt and reactive trigger handling for `TurnDigestedEvent`.
+  - Added `bundles/companion/tools/aggregate_digest.pym` to maintain project activity/tag/agent/insight KV keys.
+  - Extended `tests/unit/test_companion_tools.py` with bundle/tool existence and content checks.
+  - Verification: `devenv shell -- pytest tests/unit/test_companion_tools.py -v` (5 passed).
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 12: Add Layer 2 companion observer bundle and aggregate digest tool with tests.
+- Step 13: Add companion system Layer 2 example config comments to `remora.yaml.example` and validate YAML.

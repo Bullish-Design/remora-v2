@@ -1,0 +1,64 @@
+# Record project-level activity digest in observer KV storage.
+from grail import Input, external
+
+agent_id: str = Input("agent_id")
+summary: str = Input("summary")
+tags: str = Input("tags")  # comma-separated
+insight: str = Input("insight", default="")
+
+
+@external
+async def kv_get(key: str) -> object: ...
+
+
+@external
+async def kv_set(key: str, value: object) -> bool: ...
+
+@external
+async def my_correlation_id() -> str | None: ...
+
+tag_list = [item.strip() for item in tags.split(",") if item.strip()]
+correlation_id = await my_correlation_id()
+
+activity_log = await kv_get("project/activity_log") or []
+activity_log.append(
+    {
+        "agent_id": agent_id,
+        "summary": summary,
+        "tags": tag_list,
+        "correlation_id": correlation_id,
+    }
+)
+activity_log = activity_log[-200:]
+await kv_set("project/activity_log", activity_log)
+
+tag_frequency = await kv_get("project/tag_frequency") or {}
+for tag in tag_list:
+    tag_frequency[tag] = tag_frequency.get(tag, 0) + 1
+await kv_set("project/tag_frequency", tag_frequency)
+
+agent_activity = await kv_get("project/agent_activity") or {}
+agent_activity[agent_id] = {
+    "last_summary": summary,
+    "last_tags": tag_list,
+    "last_correlation_id": correlation_id,
+}
+await kv_set("project/agent_activity", agent_activity)
+
+if insight:
+    insights = await kv_get("project/insights") or []
+    insights.append(
+        {
+            "insight": insight,
+            "related_agent": agent_id,
+            "correlation_id": correlation_id,
+        }
+    )
+    insights = insights[-50:]
+    await kv_set("project/insights", insights)
+
+parts = [f"Recorded activity for {agent_id}"]
+if insight:
+    parts.append(f"Insight: {insight[:80]}")
+result = ". ".join(parts)
+result
