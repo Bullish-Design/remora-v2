@@ -19,6 +19,13 @@ Completed:
   - Updated `remora.yaml.example` with commented `search:` configuration block.
   - Added/ran config tests for defaults, invalid mode, dict parsing, and YAML loading.
   - Verification: `devenv shell -- pytest tests/unit/test_config.py -q` (13 passed).
+- Step 3 search service:
+  - Added `src/remora/core/search.py` with `SearchService`.
+  - Supports remote mode via `EmbeddyClient` and local mode via lazy embeddy imports.
+  - Added graceful degradation (`available` flag, no-op/empty responses when unavailable).
+  - Implemented: `initialize`, `close`, `search`, `find_similar`, `index_file`, `delete_source`, `index_directory`, `collection_for_file`.
+  - Added `tests/unit/test_search.py` with remote-mode and graceful-degradation coverage.
+  - Verification: `devenv shell -- pytest tests/unit/test_config.py tests/unit/test_search.py -q` (21 passed).
 
 ## Deliverable Summary
 
@@ -44,4 +51,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 3: Add `src/remora/core/search.py` `SearchService` with remote/local modes and graceful degradation, plus unit tests in `tests/unit/test_search.py`.
+- Step 4: Wire `SearchService` into `RuntimeServices` and lifecycle web app plumbing.
