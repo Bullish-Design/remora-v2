@@ -131,3 +131,13 @@ Next action:
 
 Next action:
 - Start Phase 5 decomposition of `core/actor.py` (Step 5.1 outbox module extraction).
+- Step 5.1 completed:
+  - created `core/outbox.py` with `Outbox` and `OutboxObserver`
+  - removed in-file outbox class definitions from `core/actor.py`
+  - imported outbox classes into `core/actor.py` to preserve existing imports/re-exports
+  - verification:
+    - `tests/unit/test_actor.py`
+    - `tests/unit/test_externals.py`
+
+Next action:
+- Step 5.2: extract `Trigger` and `TriggerPolicy` into `core/trigger.py`.
