@@ -67,9 +67,13 @@ Completed:
   - Reflection turns do not inject companion context.
   - Added tests for context building and prompt injection behavior in `tests/unit/test_actor.py`.
   - Verification: `devenv shell -- pytest tests/unit/test_actor.py -v -k companion_context` (4 passed).
+- Step 10: Added self-reflect config to code-agent bundle.
+  - Updated `bundles/code-agent/bundle.yaml` with a `self_reflect` section (`enabled`, `model`, `max_turns`, `prompt`).
+  - Added `tests/unit/test_bundle_configs.py` for bundle self-reflect config validation.
+  - Verification: `devenv shell -- pytest tests/unit/test_bundle_configs.py -v` (1 passed).
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 10: Add `self_reflect` config to `bundles/code-agent/bundle.yaml` and add bundle config test coverage.
+- Step 11: Add web API endpoint for node companion data and endpoint tests.
