@@ -8,7 +8,7 @@
 - [x] 6. Atomic `transition_status` (P0)
 - [x] 7. `graph_set_status` transition validation (P1)
 - [x] 8. Batch SQLite commits (P1)
-- [ ] 9. Subscription cache incremental update (P1)
+- [x] 9. Subscription cache incremental update (P1)
 - [ ] 10. Agent action limits (P1)
 - [ ] 11. Ruff violations (P1)
 - [ ] 12. Starlette lifespan migration (P1)

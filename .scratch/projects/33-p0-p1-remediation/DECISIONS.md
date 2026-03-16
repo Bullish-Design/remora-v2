@@ -31,3 +31,7 @@
 ## 2026-03-15 - Batched graph writes
 - Decision: Add `NodeStore.batch()` with deferred commit behavior and apply it around reconciler mutation bursts.
 - Rationale: Reduce commit frequency during reconciliation while keeping single-operation call sites unchanged.
+
+## 2026-03-15 - Subscription cache mutation strategy
+- Decision: Maintain cache entries incrementally for register/unregister/unregister_by_agent, keyed by subscription id and event type.
+- Rationale: Avoid full cache rebuilds on each write while preserving matching correctness.

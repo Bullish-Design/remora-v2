@@ -56,7 +56,7 @@ class SubscriptionRegistry:
 
     def __init__(self, db: aiosqlite.Connection):
         self._db = db
-        self._cache: dict[str, list[tuple[str, SubscriptionPattern]]] | None = None
+        self._cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] | None = None
 
     async def create_tables(self) -> None:
         """Create subscription storage tables."""
@@ -83,8 +83,10 @@ class SubscriptionRegistry:
             (agent_id, json.dumps(pattern.model_dump()), time.time()),
         )
         await self._db.commit()
-        self._cache = None
-        return int(cursor.lastrowid)
+        sub_id = int(cursor.lastrowid)
+        if self._cache is not None:
+            self._cache_add(sub_id, agent_id, pattern)
+        return sub_id
 
     async def unregister(self, subscription_id: int) -> bool:
         """Remove a subscription by ID. Returns True when a row was deleted."""
@@ -94,7 +96,7 @@ class SubscriptionRegistry:
         )
         await self._db.commit()
         if cursor.rowcount > 0:
-            self._cache = None
+            self._cache_remove_subscription(subscription_id)
         return cursor.rowcount > 0
 
     async def unregister_by_agent(self, agent_id: str) -> int:
@@ -105,7 +107,7 @@ class SubscriptionRegistry:
         )
         await self._db.commit()
         if cursor.rowcount > 0:
-            self._cache = None
+            self._cache_remove_agent(agent_id)
         return cursor.rowcount
 
     async def get_matching_agents(self, event: Event) -> list[str]:
@@ -117,7 +119,7 @@ class SubscriptionRegistry:
         candidates = [*cache.get(_ANY_EVENT_KEY, []), *cache.get(event.event_type, [])]
         seen: set[str] = set()
         result: list[str] = []
-        for agent_id, pattern in candidates:
+        for _subscription_id, agent_id, pattern in candidates:
             if agent_id in seen:
                 continue
             if pattern.matches(event):
@@ -128,18 +130,53 @@ class SubscriptionRegistry:
     async def _rebuild_cache(self) -> None:
         """Load all subscriptions and rebuild event_type-indexed cache."""
         cursor = await self._db.execute(
-            "SELECT agent_id, pattern_json FROM subscriptions ORDER BY id ASC"
+            "SELECT id, agent_id, pattern_json FROM subscriptions ORDER BY id ASC"
         )
         rows = await cursor.fetchall()
 
-        cache: dict[str, list[tuple[str, SubscriptionPattern]]] = {}
+        cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] = {}
         for row in rows:
             pattern_data = json.loads(row["pattern_json"])
             pattern = SubscriptionPattern.model_validate(pattern_data)
             key_types = pattern.event_types or [_ANY_EVENT_KEY]
             for event_type in key_types:
-                cache.setdefault(event_type, []).append((row["agent_id"], pattern))
+                cache.setdefault(event_type, []).append((int(row["id"]), row["agent_id"], pattern))
         self._cache = cache
+
+    def _cache_add(self, sub_id: int, agent_id: str, pattern: SubscriptionPattern) -> None:
+        if self._cache is None:
+            return
+        key_types = pattern.event_types or [_ANY_EVENT_KEY]
+        for event_type in key_types:
+            self._cache.setdefault(event_type, []).append((sub_id, agent_id, pattern))
+
+    def _cache_remove_subscription(self, subscription_id: int) -> None:
+        if self._cache is None:
+            return
+        for event_type, entries in list(self._cache.items()):
+            filtered = [
+                entry
+                for entry in entries
+                if entry[0] != subscription_id
+            ]
+            if filtered:
+                self._cache[event_type] = filtered
+            else:
+                self._cache.pop(event_type, None)
+
+    def _cache_remove_agent(self, agent_id: str) -> None:
+        if self._cache is None:
+            return
+        for event_type, entries in list(self._cache.items()):
+            filtered = [
+                entry
+                for entry in entries
+                if entry[1] != agent_id
+            ]
+            if filtered:
+                self._cache[event_type] = filtered
+            else:
+                self._cache.pop(event_type, None)
 
 
 __all__ = ["SubscriptionPattern", "SubscriptionRegistry"]

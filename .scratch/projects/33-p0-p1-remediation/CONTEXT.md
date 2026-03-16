@@ -20,7 +20,9 @@ Current status:
 - Added tests for invalid status values and invalid transitions.
 - Item 8 complete: `NodeStore.batch()` added and integrated into reconciler write-heavy paths.
 - Added test proving grouped node writes issue a single commit.
+- Item 9 complete: subscription registry cache now updates incrementally on register/unregister operations.
+- Added tests ensuring cache updates without forcing full rebuild.
 
 Next:
-- Implement item 9: Subscription cache incremental update.
+- Implement item 10: Agent action limits (search_content, broadcast, send_message rate limit).
 - Keep one-item-per-commit and push after each item.
