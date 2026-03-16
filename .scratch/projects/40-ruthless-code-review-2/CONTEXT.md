@@ -26,3 +26,11 @@ Next action:
 
 Next action:
 - Start Phase 2, Step 2.1 (delete Actor delegation wrappers).
+- Step 2.1 completed:
+  - removed Actor delegation wrappers forwarding into `AgentTurnExecutor`/`PromptBuilder`
+  - verified basic actor loop behavior with:
+    - `tests/unit/test_actor.py::test_actor_start_stop`
+    - `tests/unit/test_actor.py::test_actor_processes_inbox_message`
+
+Next action:
+- Step 2.2: remove Actor compatibility property shims and compatibility trigger wrappers.
