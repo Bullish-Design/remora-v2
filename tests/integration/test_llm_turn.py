@@ -17,10 +17,8 @@ from remora.core.graph import NodeStore
 from remora.core.workspace import CairnWorkspaceService
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
-_REQUIRES_REAL_LLM = pytest.mark.skipif(
-    not os.getenv("REMORA_TEST_MODEL_URL"),
-    reason="REMORA_TEST_MODEL_URL not set - skipping real LLM integration test",
-)
+_REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")
+_REAL_LLM_SKIP_REASON = "REMORA_TEST_MODEL_URL not set - skipping real LLM integration test"
 
 
 def _write_llm_test_bundles(root: Path, model_name: str) -> None:
@@ -273,7 +271,7 @@ async def _setup_llm_runtime(
 
 
 @pytest.mark.asyncio
-@_REQUIRES_REAL_LLM
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
 async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
     model_url = os.environ["REMORA_TEST_MODEL_URL"]
     model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
@@ -356,7 +354,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-@_REQUIRES_REAL_LLM
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
 async def test_real_llm_turn_kv_roundtrip_and_message(tmp_path: Path) -> None:
     model_url = os.environ["REMORA_TEST_MODEL_URL"]
     model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
@@ -412,7 +410,7 @@ async def test_real_llm_turn_kv_roundtrip_and_message(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-@_REQUIRES_REAL_LLM
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
 async def test_real_llm_turn_reload_uses_runtime_bundle_mutation(tmp_path: Path) -> None:
     model_url = os.environ["REMORA_TEST_MODEL_URL"]
     model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
@@ -483,7 +481,7 @@ async def test_real_llm_turn_reload_uses_runtime_bundle_mutation(tmp_path: Path)
 
 
 @pytest.mark.asyncio
-@_REQUIRES_REAL_LLM
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
 async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> None:
     model_url = os.environ["REMORA_TEST_MODEL_URL"]
     model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
@@ -583,7 +581,7 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-@_REQUIRES_REAL_LLM
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
 async def test_real_llm_reactive_trigger_uses_reactive_mode_prompt(tmp_path: Path) -> None:
     model_url = os.environ["REMORA_TEST_MODEL_URL"]
     model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)

@@ -182,7 +182,7 @@ async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, mo
         yield {(1, str(source))}
         yield {(1, str(source))}
 
-    async def flaky_reconcile(_file_path: str, _mtime_ns: int) -> None:
+    async def flaky_reconcile(_file_path: str, _mtime_ns: int, **_kwargs) -> None:
         nonlocal call_count
         call_count += 1
         if call_count == 1:

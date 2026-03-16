@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-import asyncio
 import time
+import tracemalloc
 from pathlib import Path
 
 import pytest
+from tests.factories import make_node
 
 from remora.code.discovery import discover
+from remora.code.reconciler import FileReconciler
+from remora.core.config import Config
 from remora.core.db import open_database
-from remora.core.events import AgentMessageEvent, SubscriptionPattern, SubscriptionRegistry
+from remora.core.events import (
+    AgentMessageEvent,
+    EventStore,
+    SubscriptionPattern,
+    SubscriptionRegistry,
+)
 from remora.core.graph import NodeStore
-from tests.factories import make_node
+from remora.core.workspace import CairnWorkspaceService
 
 
 def make_perf_node(idx: int):
@@ -76,3 +84,66 @@ async def test_perf_subscription_matching(tmp_path: Path) -> None:
     assert "agent-42" in matched
     assert elapsed < 1.0
     await db.close()
+
+
+@pytest.mark.asyncio
+async def test_perf_reconciler_load_1000_files_10_nodes_each(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src_root = tmp_path / "src"
+    src_root.mkdir(parents=True, exist_ok=True)
+    for file_idx in range(1000):
+        lines = [
+            f"def f_{file_idx}_{fn_idx}():\n    return {file_idx + fn_idx}\n"
+            for fn_idx in range(10)
+        ]
+        (src_root / f"module_{file_idx:04d}.py").write_text(
+            "\n".join(lines),
+            encoding="utf-8",
+        )
+
+    db = await open_database(tmp_path / "perf-reconciler.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    config = Config(
+        discovery_paths=("src",),
+        discovery_languages=("python",),
+        language_map={".py": "python"},
+        query_paths=(),
+        workspace_root=".remora-perf-reconciler",
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+
+    async def _noop_provision_bundle(_node_id: str, _template_dirs: list[Path]) -> None:
+        return None
+
+    # Keep the load test focused on reconcile projection/storage behavior.
+    monkeypatch.setattr(workspace_service, "provision_bundle", _noop_provision_bundle)
+
+    reconciler = FileReconciler(
+        config,
+        node_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+    )
+
+    try:
+        tracemalloc.start()
+        started = time.perf_counter()
+        nodes = await reconciler.full_scan()
+        elapsed = time.perf_counter() - started
+        _current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        functions = [node for node in nodes if node.node_type == "function"]
+        assert len(functions) >= 10_000
+        assert elapsed < 90.0
+        assert peak < 1_000_000_000
+    finally:
+        await workspace_service.close()
+        await db.close()

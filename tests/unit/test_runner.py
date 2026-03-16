@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -26,7 +28,11 @@ async def runner_env(tmp_path: Path):
     await node_store.create_tables()
     event_store = EventStore(db=db)
     await event_store.create_tables()
-    config = Config(workspace_root=".remora-runner-test", trigger_cooldown_ms=1000, max_trigger_depth=2)
+    config = Config(
+        workspace_root=".remora-runner-test",
+        trigger_cooldown_ms=1000,
+        max_trigger_depth=2,
+    )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
     runner = ActorPool(event_store, node_store, workspace_service, config)
@@ -156,3 +162,55 @@ async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
     assert "Type: virtual | File: " in prompt
     assert "## Role" in prompt
     assert "test-agent agent" in prompt
+
+
+@pytest.mark.asyncio
+async def test_runner_handles_concurrent_triggers_across_agents(runner_env, monkeypatch) -> None:
+    runner, node_store, event_store, _workspace_service = runner_env
+    agent_ids = [f"src/app.py::agent_{idx}" for idx in range(5)]
+    for agent_id in agent_ids:
+        await node_store.upsert_node(make_node(agent_id))
+        await event_store.subscriptions.register(
+            agent_id,
+            SubscriptionPattern(to_agent=agent_id),
+        )
+
+    processed: list[str] = []
+    done = asyncio.Event()
+    lock = asyncio.Lock()
+    in_flight = 0
+    max_in_flight = 0
+
+    monkeypatch.setattr(Actor, "_should_trigger", lambda _self, _corr: True)
+
+    async def fake_execute_turn(self, trigger, outbox):  # noqa: ANN001, ANN202
+        del trigger, outbox
+        nonlocal in_flight, max_in_flight
+        async with lock:
+            in_flight += 1
+            max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0.02)
+        processed.append(self.node_id)
+        async with lock:
+            in_flight -= 1
+        if len(processed) == 20:
+            done.set()
+
+    monkeypatch.setattr(Actor, "_execute_turn", fake_execute_turn)
+
+    for idx in range(20):
+        target_id = agent_ids[idx % len(agent_ids)]
+        await event_store.append(
+            AgentMessageEvent(
+                from_agent="load-test",
+                to_agent=target_id,
+                content=f"msg-{idx}",
+                correlation_id=f"corr-{idx}",
+            )
+        )
+
+    await asyncio.wait_for(done.wait(), timeout=5.0)
+    counts = Counter(processed)
+    assert len(processed) == 20
+    assert set(counts.values()) == {4}
+    assert max_in_flight >= 2

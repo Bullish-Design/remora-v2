@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import pytest
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
 
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
+    Event,
     SubscriptionPattern,
     SubscriptionRegistry,
 )
+
+
+class _PathEvent(Event):
+    path: str | None = None
 
 
 def test_subscription_pattern_matches_exact() -> None:
@@ -101,7 +108,7 @@ async def test_registry_register_updates_cache_incrementally(db, monkeypatch) ->
 async def test_registry_unregister_updates_cache_incrementally(db, monkeypatch) -> None:
     registry = SubscriptionRegistry(db)
     await registry.create_tables()
-    sub_b = await registry.register("agent-b", SubscriptionPattern(to_agent="b"))
+    await registry.register("agent-b", SubscriptionPattern(to_agent="b"))
     sub_c = await registry.register("agent-c", SubscriptionPattern(to_agent="b"))
 
     baseline = await registry.get_matching_agents(
@@ -125,3 +132,35 @@ async def test_registry_unregister_updates_cache_incrementally(db, monkeypatch) 
         AgentMessageEvent(from_agent="a", to_agent="b", content="hello")
     )
     assert after_agent_remove == []
+
+
+@settings(max_examples=100)
+@given(st.text(min_size=1, max_size=40))
+def test_property_subscription_pattern_matches_same_event_type(event_type: str) -> None:
+    pattern = SubscriptionPattern(event_types=[event_type])
+    event = Event(event_type=event_type)
+    assert pattern.matches(event)
+
+
+@settings(max_examples=100)
+@given(st.text(min_size=1, max_size=40), st.text(min_size=1, max_size=40))
+def test_property_subscription_pattern_rejects_different_event_types(
+    expected_type: str,
+    actual_type: str,
+) -> None:
+    assume(expected_type != actual_type)
+    pattern = SubscriptionPattern(event_types=[expected_type])
+    event = Event(event_type=actual_type)
+    assert not pattern.matches(event)
+
+
+@settings(max_examples=100)
+@given(
+    st.lists(st.from_regex(r"[a-z]{1,8}", fullmatch=True), min_size=1, max_size=4),
+)
+def test_property_subscription_path_glob_matches_suffix(path_parts: list[str]) -> None:
+    suffix = path_parts[-1]
+    path = f"src/{'/'.join(path_parts)}.py"
+    pattern = SubscriptionPattern(path_glob=f"**/{suffix}.py")
+    event = _PathEvent(event_type="ContentChangedEvent", path=path)
+    assert pattern.matches(event)
