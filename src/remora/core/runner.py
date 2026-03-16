@@ -12,6 +12,7 @@ from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
+from remora.core.search import SearchServiceProtocol
 from remora.core.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class ActorPool:
         config: Config,
         dispatcher: TriggerDispatcher | None = None,
         metrics: Metrics | None = None,
-        search_service: object | None = None,
+        search_service: SearchServiceProtocol | None = None,
     ):
         self._event_store = event_store
         self._dispatcher = dispatcher or event_store.dispatcher

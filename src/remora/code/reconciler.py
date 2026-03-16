@@ -25,6 +25,7 @@ from remora.core.events import (
 )
 from remora.core.graph import NodeStore
 from remora.core.node import Node
+from remora.core.search import SearchServiceProtocol
 from remora.core.types import NodeType
 from remora.core.workspace import CairnWorkspaceService
 
@@ -42,7 +43,7 @@ class FileReconciler:
         workspace_service: CairnWorkspaceService,
         project_root: Path,
         *,
-        search_service: object | None = None,
+        search_service: SearchServiceProtocol | None = None,
     ):
         self._config = config
         self._node_store = node_store

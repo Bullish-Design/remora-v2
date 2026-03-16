@@ -14,7 +14,7 @@ from remora.core.events import EventBus, EventStore, SubscriptionRegistry, Trigg
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 from remora.core.runner import ActorPool
-from remora.core.search import SearchService
+from remora.core.search import SearchService, SearchServiceProtocol
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -42,7 +42,7 @@ class RuntimeServices:
         self.workspace_service = CairnWorkspaceService(config, project_root, metrics=self.metrics)
         self.language_registry = LanguageRegistry()
 
-        self.search_service: SearchService | None = None
+        self.search_service: SearchServiceProtocol | None = None
         self.reconciler: FileReconciler | None = None
         self.runner: ActorPool | None = None
 

@@ -33,6 +33,7 @@ from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
+from remora.core.search import SearchServiceProtocol
 from remora.core.types import ChangeType, NodeStatus, serialize_enum
 
 if TYPE_CHECKING:
@@ -87,7 +88,7 @@ def create_app(
     metrics: Metrics | None = None,
     actor_pool: ActorPool | None = None,
     workspace_service: CairnWorkspaceService | None = None,
-    search_service: object | None = None,
+    search_service: SearchServiceProtocol | None = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()

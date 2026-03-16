@@ -20,6 +20,7 @@ from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import NodeStore
 from remora.core.node import Node
+from remora.core.search import SearchServiceProtocol
 from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace
 
@@ -40,7 +41,7 @@ class TurnContext:
         broadcast_max_targets: int = 50,
         send_message_rate_limit: int = 10,
         send_message_rate_window_s: float = 1.0,
-        search_service: Any = None,
+        search_service: SearchServiceProtocol | None = None,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace

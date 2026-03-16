@@ -67,3 +67,21 @@ Next action:
 
 Next action:
 - Step 3.2: replace `search_service` `object|Any` types with `SearchServiceProtocol` across core/reconciler/web.
+- Step 3.2 completed:
+  - typed `search_service` as `SearchServiceProtocol | None` in:
+    - `core/actor.py`
+    - `core/externals.py`
+    - `core/runner.py`
+    - `core/services.py`
+    - `code/reconciler.py`
+    - `web/server.py`
+  - verification subset passed:
+    - `tests/unit/test_services.py`
+    - `tests/unit/test_runner.py`
+    - `tests/unit/test_reconciler.py`
+    - `tests/unit/test_web_server.py`
+    - `tests/unit/test_actor.py`
+    - `tests/unit/test_externals.py`
+
+Next action:
+- Step 3.3: replace `getattr(..., \"available\", False)` checks with protocol-backed attribute access.

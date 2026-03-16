@@ -30,6 +30,7 @@ from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.metrics import Metrics
 from remora.core.node import Node
+from remora.core.search import SearchServiceProtocol
 from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
@@ -327,7 +328,7 @@ class AgentTurnExecutor:
         history: list[Message],
         prompt_builder: PromptBuilder,
         trigger_policy: TriggerPolicy,
-        search_service: object | None,
+        search_service: SearchServiceProtocol | None,
     ) -> None:
         self._node_store = node_store
         self._event_store = event_store
@@ -733,7 +734,7 @@ class Actor:
         config: Config,
         semaphore: asyncio.Semaphore,
         metrics: Metrics | None = None,
-        search_service: object | None = None,
+        search_service: SearchServiceProtocol | None = None,
     ) -> None:
         self.node_id = node_id
         self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
