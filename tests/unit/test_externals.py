@@ -49,6 +49,7 @@ async def _context(
     broadcast_max_targets: int = 50,
     send_message_rate_limit: int = 10,
     send_message_rate_window_s: float = 1.0,
+    search_service=None,
 ) -> TurnContext:
     if outbox is None:
         outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
@@ -64,7 +65,34 @@ async def _context(
         broadcast_max_targets=broadcast_max_targets,
         send_message_rate_limit=send_message_rate_limit,
         send_message_rate_window_s=send_message_rate_window_s,
+        search_service=search_service,
     )
+
+
+class _MockSearchService:
+    def __init__(self, *, available: bool = True) -> None:
+        self.available = available
+        self.search_calls: list[tuple[str, str | None, int, str]] = []
+        self.similar_calls: list[tuple[str, str | None, int]] = []
+
+    async def search(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int = 10,
+        mode: str = "hybrid",
+    ) -> list[dict]:
+        self.search_calls.append((query, collection, top_k, mode))
+        return [{"chunk_id": "c1", "score": 0.9}]
+
+    async def find_similar(
+        self,
+        chunk_id: str,
+        collection: str | None = None,
+        top_k: int = 10,
+    ) -> list[dict]:
+        self.similar_calls.append((chunk_id, collection, top_k))
+        return [{"chunk_id": chunk_id, "score": 0.8}]
 
 
 @pytest.mark.asyncio
@@ -525,3 +553,80 @@ async def test_externals_send_message_rate_limit(context_env) -> None:
     assert await externals["send_message"](target.node_id, "one")
     assert await externals["send_message"](target.node_id, "two")
     assert not await externals["send_message"](target.node_id, "three")
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_returns_empty_without_service(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::search-none")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+
+    assert await context.semantic_search("auth") == []
+    assert await context.find_similar_code("chunk-1") == []
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_returns_empty_when_service_unavailable(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::search-offline")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    search_service = _MockSearchService(available=False)
+    context = await _context(
+        node.node_id,
+        ws,
+        node_store,
+        event_store,
+        search_service=search_service,
+    )
+
+    assert await context.semantic_search("auth") == []
+    assert await context.find_similar_code("chunk-1") == []
+    assert search_service.search_calls == []
+    assert search_service.similar_calls == []
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_and_find_similar_delegate(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::search-live")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    search_service = _MockSearchService(available=True)
+    context = await _context(
+        node.node_id,
+        ws,
+        node_store,
+        event_store,
+        search_service=search_service,
+    )
+
+    results = await context.semantic_search("auth", "code", 5, "hybrid")
+    similar = await context.find_similar_code("c1", "code", 3)
+
+    assert results == [{"chunk_id": "c1", "score": 0.9}]
+    assert similar == [{"chunk_id": "c1", "score": 0.8}]
+    assert search_service.search_calls == [("auth", "code", 5, "hybrid")]
+    assert search_service.similar_calls == [("c1", "code", 3)]
+
+
+@pytest.mark.asyncio
+async def test_capabilities_include_search_methods(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::search-capabilities")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    search_service = _MockSearchService(available=True)
+    context = await _context(
+        node.node_id,
+        ws,
+        node_store,
+        event_store,
+        search_service=search_service,
+    )
+    externals = context.to_capabilities_dict()
+
+    assert "semantic_search" in externals
+    assert "find_similar_code" in externals

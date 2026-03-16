@@ -68,6 +68,7 @@ class ActorPool:
                 config=self._config,
                 semaphore=self._semaphore,
                 metrics=self._metrics,
+                search_service=self._search_service,
             )
             actor.start()
             self._actors[node_id] = actor

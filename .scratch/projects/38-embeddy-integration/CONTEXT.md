@@ -36,6 +36,15 @@ Completed:
   - Verification:
     - `devenv shell -- pytest tests/unit/test_services.py -q` (2 passed)
     - `devenv shell -- pytest tests/unit/test_runner.py tests/unit/test_reconciler.py -q` (24 passed)
+- Step 5 TurnContext + actor plumbing:
+  - Updated `TurnContext` in `src/remora/core/externals.py` to accept `search_service`.
+  - Added `semantic_search()` and `find_similar_code()` externals with graceful `[]` behavior when unavailable.
+  - Exported new externals in `to_capabilities_dict()`.
+  - Updated `AgentTurnExecutor` and `Actor` in `src/remora/core/actor.py` to carry/pass `search_service` into `TurnContext`.
+  - Updated `ActorPool.get_or_create_actor()` in `src/remora/core/runner.py` to pass `search_service` to `Actor`.
+  - Extended `tests/unit/test_externals.py` and `tests/unit/test_runner.py` for new search capabilities/plumbing.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_externals.py tests/unit/test_runner.py tests/unit/test_actor.py -q` (63 passed)
 
 ## Deliverable Summary
 
@@ -61,4 +70,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 5: Add `semantic_search`/`find_similar_code` to `TurnContext` and wire actor runner plumbing.
+- Step 6: Add system Grail tool `bundles/system/tools/semantic_search.pym`.

@@ -214,3 +214,39 @@ async def test_runner_handles_concurrent_triggers_across_agents(runner_env, monk
     assert len(processed) == 20
     assert set(counts.values()) == {4}
     assert max_in_flight >= 2
+
+
+@pytest.mark.asyncio
+async def test_runner_passes_search_service_to_actor(runner_env, monkeypatch) -> None:
+    runner, _node_store, _event_store, _workspace_service = runner_env
+    sentinel = object()
+    runner._search_service = sentinel  # noqa: SLF001
+
+    class FakeActor:
+        captured_search_service = None
+
+        def __init__(self, **kwargs):  # noqa: ANN003
+            type(self).captured_search_service = kwargs.get("search_service")
+            self.inbox = asyncio.Queue()
+            self._running = False
+            self._last_active = 0.0
+
+        @property
+        def last_active(self) -> float:
+            return self._last_active
+
+        @property
+        def is_running(self) -> bool:
+            return self._running
+
+        def start(self) -> None:
+            self._running = True
+
+        async def stop(self) -> None:
+            self._running = False
+
+    monkeypatch.setattr("remora.core.runner.Actor", FakeActor)
+
+    actor = runner.get_or_create_actor("agent-search")
+    assert actor is not None
+    assert FakeActor.captured_search_service is sentinel

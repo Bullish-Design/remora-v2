@@ -299,6 +299,7 @@ class AgentTurnExecutor:
         history: list[Message],
         prompt_builder: PromptBuilder,
         trigger_policy: TriggerPolicy,
+        search_service: object | None,
     ) -> None:
         self._node_store = node_store
         self._event_store = event_store
@@ -309,6 +310,7 @@ class AgentTurnExecutor:
         self._history = history
         self._prompt_builder = prompt_builder
         self._trigger_policy = trigger_policy
+        self._search_service = search_service
 
     async def execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
@@ -430,6 +432,7 @@ class AgentTurnExecutor:
             broadcast_max_targets=self._config.broadcast_max_targets,
             send_message_rate_limit=self._config.send_message_rate_limit,
             send_message_rate_window_s=self._config.send_message_rate_window_s,
+            search_service=self._search_service,
         )
         capabilities = context.to_capabilities_dict()
         tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))
@@ -598,6 +601,7 @@ class Actor:
         config: Config,
         semaphore: asyncio.Semaphore,
         metrics: Metrics | None = None,
+        search_service: object | None = None,
     ) -> None:
         self.node_id = node_id
         self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
@@ -618,6 +622,7 @@ class Actor:
             history=self._history,
             prompt_builder=self._prompt_builder,
             trigger_policy=self._trigger_policy,
+            search_service=search_service,
         )
 
     @property

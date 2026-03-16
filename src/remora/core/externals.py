@@ -42,6 +42,7 @@ class TurnContext:
         broadcast_max_targets: int = 50,
         send_message_rate_limit: int = 10,
         send_message_rate_window_s: float = 1.0,
+        search_service: Any = None,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace
@@ -54,6 +55,7 @@ class TurnContext:
         self._broadcast_max_targets = max(1, int(broadcast_max_targets))
         self._send_message_rate_limit = max(1, int(send_message_rate_limit))
         self._send_message_rate_window_s = max(0.001, float(send_message_rate_window_s))
+        self._search_service = search_service
 
     async def _emit(self, event: Event) -> int:
         """Emit an event through the outbox."""
@@ -293,6 +295,29 @@ class TurnContext:
     async def my_correlation_id(self) -> str | None:
         return self.correlation_id
 
+    async def semantic_search(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int = 10,
+        mode: str = "hybrid",
+    ) -> list[dict[str, Any]]:
+        """Search the codebase using semantic similarity."""
+        if self._search_service is None or not self._search_service.available:
+            return []
+        return await self._search_service.search(query, collection, top_k, mode)
+
+    async def find_similar_code(
+        self,
+        chunk_id: str,
+        collection: str | None = None,
+        top_k: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Find code chunks similar to an existing chunk."""
+        if self._search_service is None or not self._search_service.available:
+            return []
+        return await self._search_service.find_similar(chunk_id, collection, top_k)
+
     def to_capabilities_dict(self) -> dict[str, Any]:
         return {
             "read_file": self.read_file,
@@ -321,6 +346,8 @@ class TurnContext:
             "get_node_source": self.get_node_source,
             "my_node_id": self.my_node_id,
             "my_correlation_id": self.my_correlation_id,
+            "semantic_search": self.semantic_search,
+            "find_similar_code": self.find_similar_code,
         }
 
 
