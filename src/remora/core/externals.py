@@ -143,8 +143,8 @@ class TurnContext:
         return [node.model_dump() for node in children]
 
     async def graph_set_status(self, target_id: str, new_status: str) -> bool:
-        await self._node_store.set_status(target_id, new_status)
-        return True
+        target_enum = NodeStatus(new_status.strip())
+        return await self._node_store.transition_status(target_id, target_enum)
 
     async def event_emit(
         self,

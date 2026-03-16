@@ -23,3 +23,7 @@
 ## 2026-03-15 - Node status transition atomicity
 - Decision: Implement `transition_status` as a single conditional SQL update with allowed source statuses in the `WHERE` clause.
 - Rationale: Prevent stale read/validate/write races where invalid transitions can be committed under concurrent status changes.
+
+## 2026-03-15 - External status writes must respect transition rules
+- Decision: Route `graph_set_status` through `transition_status` and enum-validate `new_status`.
+- Rationale: Prevent tools from bypassing node lifecycle constraints via direct status mutation.

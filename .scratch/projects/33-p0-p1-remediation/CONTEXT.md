@@ -16,7 +16,9 @@ Current status:
 - Added regression test ensuring intermediate inheritance handlers are not invoked.
 - Item 6 complete: `NodeStore.transition_status` now uses atomic conditional UPDATE based on allowed source states.
 - Added concurrency-oriented test for competing transitions from `running`.
+- Item 7 complete: `TurnContext.graph_set_status` now validates `NodeStatus` and routes through transition rules.
+- Added tests for invalid status values and invalid transitions.
 
 Next:
-- Implement item 7: `graph_set_status` transition validation.
+- Implement item 8: Batch SQLite commits.
 - Keep one-item-per-commit and push after each item.

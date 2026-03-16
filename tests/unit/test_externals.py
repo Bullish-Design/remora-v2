@@ -132,6 +132,34 @@ async def test_externals_graph_query_nodes_rejects_invalid_enums(context_env) ->
 
 
 @pytest.mark.asyncio
+async def test_externals_graph_set_status_rejects_invalid_status(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::a")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    with pytest.raises(ValueError):
+        await externals["graph_set_status"](node.node_id, "not-a-status")
+
+
+@pytest.mark.asyncio
+async def test_externals_graph_set_status_enforces_transition_rules(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::a", status="idle")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    assert not await externals["graph_set_status"](node.node_id, "error")
+    updated = await node_store.get_node(node.node_id)
+    assert updated is not None
+    assert updated.status == "idle"
+
+
+@pytest.mark.asyncio
 async def test_externals_event_ops(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::alpha")

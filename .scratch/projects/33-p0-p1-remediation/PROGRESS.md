@@ -6,7 +6,7 @@
 - [x] 4. FileReconciler `_file_locks` eviction (P0)
 - [x] 5. Event bus dispatch fix (P0)
 - [x] 6. Atomic `transition_status` (P0)
-- [ ] 7. `graph_set_status` transition validation (P1)
+- [x] 7. `graph_set_status` transition validation (P1)
 - [ ] 8. Batch SQLite commits (P1)
 - [ ] 9. Subscription cache incremental update (P1)
 - [ ] 10. Agent action limits (P1)
