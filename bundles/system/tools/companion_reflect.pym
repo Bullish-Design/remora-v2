@@ -1,0 +1,29 @@
+# Record a reflection insight to companion KV storage.
+from grail import Input, external
+
+insight: str = Input("insight")
+
+
+@external
+async def kv_get(key: str) -> object: ...
+
+
+@external
+async def kv_set(key: str, value: object) -> bool: ...
+
+@external
+async def my_correlation_id() -> str | None: ...
+
+existing = await kv_get("companion/reflections") or []
+correlation_id = await my_correlation_id()
+existing.append(
+    {
+        "correlation_id": correlation_id,
+        "insight": insight,
+    }
+)
+existing = existing[-30:]
+await kv_set("companion/reflections", existing)
+
+result = f"Recorded reflection: {insight[:80]}..."
+result

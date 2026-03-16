@@ -27,9 +27,18 @@ Completed:
   - `SubscriptionPattern.matches()` now excludes matching `agent_id` or `from_agent`.
   - Added pattern and registry tests for `not_from_agents` behavior in `tests/unit/test_subscription_registry.py`.
   - Verification: `devenv shell -- pytest tests/unit/test_subscription_registry.py -q` (16 passed).
+- Step 5: Added KV-native companion tools.
+  - Added system tools:
+    - `bundles/system/tools/companion_summarize.pym`
+    - `bundles/system/tools/companion_reflect.pym`
+    - `bundles/system/tools/companion_link.pym`
+  - Added `tests/unit/test_companion_tools.py` for presence/content checks.
+  - Verified Grail parsing compatibility with existing tool test suites.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_companion_tools.py tests/unit/test_system_tools.py tests/unit/test_grail.py -q` (21 passed)
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 5: Create KV-native companion Grail tools and validate they load.
+- Step 6: Add `self_reflect` config and self-subscription registration in reconciler.
