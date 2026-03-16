@@ -160,3 +160,13 @@ Next action:
 
 Next action:
 - Step 5.4: extract `AgentTurnExecutor` and `_turn_logger` into `core/turn_executor.py`.
+- Step 5.4 completed:
+  - created `core/turn_executor.py` with `_turn_logger` and `AgentTurnExecutor`
+  - slimmed `core/actor.py` to Actor orchestration + re-exports while preserving monkeypatch compatibility
+  - kept historical logger namespace (`remora.core.actor`) for turn logs
+  - verification:
+    - `tests/unit/test_actor.py`
+    - `tests/unit/test_runner.py`
+
+Next action:
+- Step 5.5/5.6: finalize actor slim-down and verify re-exports/import paths across src/tests.

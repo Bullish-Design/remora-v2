@@ -50,6 +50,6 @@
 - [x] Step 5.1 Create `core/outbox.py` and move outbox classes
 - [x] Step 5.2 Create `core/trigger.py` and move trigger policy
 - [x] Step 5.3 Create `core/prompt.py` and move prompt builder
-- [ ] Step 5.4 Create `core/turn_executor.py` and move turn executor
+- [x] Step 5.4 Create `core/turn_executor.py` and move turn executor
 - [ ] Step 5.5 Slim down `core/actor.py` to orchestration only
 - [ ] Step 5.6 Update imports and re-export verification
