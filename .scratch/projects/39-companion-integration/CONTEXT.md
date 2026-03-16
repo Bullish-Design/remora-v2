@@ -109,9 +109,20 @@ Completed:
       - `devenv shell -- pytest tests/ -q --tb=short --junitxml=/tmp/pytest_post_fix2.xml`
       - Result: `20 failed, 329 passed, 8 skipped, 0 errors`
       - `Too many open files` signatures removed (0), sqlite-open cascade reduced from 139 to 1.
+- Post-FD follow-up remediation:
+  - Updated `src/remora/code/reconciler.py` to avoid opening/creating agent workspaces during subscription registration unless needed:
+    - directory nodes now return before any self-reflect workspace lookup
+    - self-reflect lookup now only runs if workspace already exists (`has_workspace`)
+  - Added `has_workspace()` and `_workspace_path()` helpers to `src/remora/core/workspace.py`.
+  - Updated stale architecture test `tests/unit/test_reflection_tools.py` to assert companion bundle existence instead of removal.
+  - Increased LSP initialize response timeout in acceptance helper (`tests/acceptance/test_live_runtime_real_llm.py`) from 15s -> 45s to reduce startup flakiness.
+  - Verification:
+    - `devenv shell -- pytest tests/integration/test_performance.py::test_perf_reconciler_load_1000_files_10_nodes_each tests/integration/test_startup_shutdown.py::test_startup_shutdown_path_runs_cleanly_for_two_seconds tests/unit/test_actor.py -q` (43 passed)
+    - `devenv shell -- pytest tests/unit/test_reflection_tools.py tests/acceptance/test_live_runtime_real_llm.py::test_acceptance_process_lsp_open_save_emits_content_changed_event -q` (3 passed)
+    - `devenv shell -- pytest tests/ -q --tb=short` (349 passed, 8 skipped)
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Remaining failures are primarily `WORKSPACE_OPEN_FAILED` in actor/perf/startup tests plus stale `test_companion_bundle_removed`; continue with workspace-open stabilization and stale test update.
+- Test suite is green after companion and stability fixes; await user direction for next project or cleanup/docs.

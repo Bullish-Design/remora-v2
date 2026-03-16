@@ -117,6 +117,12 @@ class CairnWorkspaceService:
         agents_root = self._workspace_root / "agents"
         agents_root.mkdir(parents=True, exist_ok=True)
 
+    def has_workspace(self, node_id: str) -> bool:
+        """Return whether a workspace already exists for this node."""
+        if node_id in self._agent_workspaces:
+            return True
+        return self._workspace_path(node_id).exists()
+
     async def get_agent_workspace(self, node_id: str) -> AgentWorkspace:
         """Get or create an AgentWorkspace for the given node ID."""
         async with self._lock:
@@ -126,7 +132,7 @@ class CairnWorkspaceService:
                     self._metrics.workspace_cache_hits += 1
                 return cached
 
-            workspace_path = self._workspace_root / "agents" / self._safe_id(node_id)
+            workspace_path = self._workspace_path(node_id)
             raw_workspace = await cairn_wm.open_workspace(str(workspace_path))
             self._manager.track_workspace(raw_workspace)
             if self._metrics is not None:
@@ -185,6 +191,9 @@ class CairnWorkspaceService:
         digest = hashlib.sha1(node_id.encode("utf-8")).hexdigest()[:10]
         prefix = normalized[:80] if normalized else "node"
         return f"{prefix}-{digest}"
+
+    def _workspace_path(self, node_id: str) -> Path:
+        return self._workspace_root / "agents" / self._safe_id(node_id)
 
 
 __all__ = ["AgentWorkspace", "CairnWorkspaceService"]

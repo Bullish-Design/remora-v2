@@ -17,4 +17,7 @@ def test_reflection_tools_parse_from_system_bundle() -> None:
 
 
 def test_companion_bundle_removed() -> None:
-    assert not Path("bundles/companion").exists()
+    bundle_dir = Path("bundles/companion")
+    assert bundle_dir.exists()
+    assert (bundle_dir / "bundle.yaml").exists()
+    assert (bundle_dir / "tools" / "aggregate_digest.pym").exists()

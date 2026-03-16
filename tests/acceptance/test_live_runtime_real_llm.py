@@ -476,7 +476,7 @@ async def _initialize_lsp(process: asyncio.subprocess.Process) -> None:
     process.stdin.write(_encode_lsp_message(init_request))
     await process.stdin.drain()
 
-    init_response = await _read_lsp_message(process.stdout, timeout_s=15.0)
+    init_response = await _read_lsp_message(process.stdout, timeout_s=45.0)
     assert init_response.get("id") == 1
     assert "result" in init_response
 

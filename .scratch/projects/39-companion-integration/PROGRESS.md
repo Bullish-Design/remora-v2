@@ -25,3 +25,4 @@
 | 18 | Step 13: Update `remora.yaml.example` with companion config | done |
 | 19 | Analyze failing suite and produce `TEST_SUIDE_FAILURE_REPORT.md` with fix plan | done |
 | 20 | Implement true FD leak fix for logging handler lifecycle | done |
+| 21 | Resolve remaining post-FD failures (`WORKSPACE_OPEN_FAILED`, stale companion test, LSP acceptance timeout) | done |
