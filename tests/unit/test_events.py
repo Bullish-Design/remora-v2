@@ -180,6 +180,30 @@ def test_agent_complete_event_preserves_full_response() -> None:
     assert len(event.full_response) == 500
 
 
+def test_agent_complete_event_user_message_field() -> None:
+    event = AgentCompleteEvent(
+        agent_id="agent-a",
+        result_summary="test",
+        full_response="full test response",
+        user_message="What does this function do?",
+    )
+    assert event.user_message == "What does this function do?"
+
+
+def test_agent_complete_event_user_message_defaults_empty() -> None:
+    event = AgentCompleteEvent(agent_id="agent-a")
+    assert event.user_message == ""
+
+
+def test_agent_complete_event_user_message_in_envelope() -> None:
+    event = AgentCompleteEvent(
+        agent_id="agent-a",
+        user_message="hello",
+    )
+    envelope = event.to_envelope()
+    assert envelope["payload"]["user_message"] == "hello"
+
+
 def test_turn_digested_event_defaults() -> None:
     event = TurnDigestedEvent(agent_id="agent-a")
     assert event.event_type == "TurnDigestedEvent"

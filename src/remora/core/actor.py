@@ -355,6 +355,7 @@ class AgentTurnExecutor:
                         content=self._prompt_builder.build_prompt(node, trigger.event),
                     ),
                 ]
+                user_message = messages[1].content if len(messages) > 1 else ""
                 self._history.extend(messages)
 
                 result = await self._run_kernel(
@@ -384,6 +385,7 @@ class AgentTurnExecutor:
                     trigger,
                     turn_log,
                     turn_tags=turn_tags,
+                    user_message=user_message,
                 )
                 if self._metrics is not None:
                     self._metrics.agent_turns_total += 1
@@ -527,6 +529,7 @@ class AgentTurnExecutor:
         turn_log: logging.LoggerAdapter,
         *,
         turn_tags: tuple[str, ...] = ("primary",),
+        user_message: str = "",
     ) -> None:
         turn_log.info(
             "Agent turn complete node=%s corr=%s response=%s",
@@ -539,6 +542,7 @@ class AgentTurnExecutor:
                 agent_id=node_id,
                 result_summary=response_text[:200],
                 full_response=response_text,
+                user_message=user_message,
                 correlation_id=trigger.correlation_id,
                 tags=turn_tags,
             )

@@ -322,6 +322,43 @@ async def test_actor_emits_reflection_tag_on_self_completion_trigger(actor_env, 
 
 
 @pytest.mark.asyncio
+async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::user-message")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-user-message",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello world"),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-user-message",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=20)
+    complete = next(event for event in events if event["event_type"] == "AgentCompleteEvent")
+    assert "hello world" in complete["payload"]["user_message"]
+
+
+@pytest.mark.asyncio
 async def test_actor_missing_node(actor_env) -> None:
     actor = _make_actor(actor_env, "missing-node")
     outbox = Outbox(actor_id="missing-node", event_store=actor_env["event_store"])
