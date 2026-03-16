@@ -10,7 +10,7 @@
 - [x] 5.2 Starlette lifespan migration
 - [x] 5.3 Replace production `assert`
 - [x] 5.4 Add type checking config to CI/project config
-- [ ] 5.5 Standardize enum handling
+- [x] 5.5 Standardize enum handling
 - [ ] 5.6 Health check imports `__version__`
 
 ## Commit Log
@@ -22,4 +22,5 @@
 - [x] `d151bcb` 5.1 Run Ruff autofix and clear remaining lint violations
 - [x] `667e15a` 5.2 Enforce lifespan API via typed context + regression test
 - [x] `6ca539e` 5.3 Add regression guard preventing production `assert` statements
-- [pending push] 5.4 Add Pyright config and dev dependency in project config
+- [x] `98ed9d5` 5.4 Add Pyright config and dev dependency in project config
+- [pending push] 5.5 Standardize enum usage and boundary serialization paths

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from tests.factories import make_node
 from tests.doubles import RecordingOutbox
+from tests.factories import make_node
 
 from remora.core.actor import Outbox
 from remora.core.config import Config
@@ -15,7 +15,7 @@ from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.events.types import CustomEvent
 from remora.core.externals import TurnContext
 from remora.core.graph import NodeStore
-from remora.core.types import NodeType
+from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -186,7 +186,7 @@ async def test_externals_graph_set_status_enforces_transition_rules(context_env)
     assert not await externals["graph_set_status"](node.node_id, "error")
     updated = await node_store.get_node(node.node_id)
     assert updated is not None
-    assert updated.status == "idle"
+    assert updated.status == NodeStatus.IDLE
 
 
 @pytest.mark.asyncio
@@ -248,7 +248,7 @@ async def test_request_human_input_blocks_until_response(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::human")
     await node_store.upsert_node(node)
-    await node_store.set_status(node.node_id, "running")
+    await node_store.set_status(node.node_id, NodeStatus.RUNNING)
 
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, event_store, "corr-human")
@@ -265,14 +265,14 @@ async def test_request_human_input_blocks_until_response(context_env) -> None:
 
     awaiting = await node_store.get_node(node.node_id)
     assert awaiting is not None
-    assert awaiting.status == "awaiting_input"
+    assert awaiting.status == NodeStatus.AWAITING_INPUT
 
     assert event_store.resolve_response(request_id, "yes")
     assert await task == "yes"
 
     resumed = await node_store.get_node(node.node_id)
     assert resumed is not None
-    assert resumed.status == "running"
+    assert resumed.status == NodeStatus.RUNNING
 
 
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::human-timeout")
     await node_store.upsert_node(node)
-    await node_store.set_status(node.node_id, "running")
+    await node_store.set_status(node.node_id, NodeStatus.RUNNING)
 
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(
@@ -303,7 +303,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
 
     resumed = await node_store.get_node(node.node_id)
     assert resumed is not None
-    assert resumed.status == "running"
+    assert resumed.status == NodeStatus.RUNNING
 
 
 @pytest.mark.asyncio
@@ -414,7 +414,7 @@ async def test_externals_code_ops(context_env) -> None:
     assert proposal_events[0]["payload"]["files"] == [f"source/{node.node_id}"]
     updated_node = await node_store.get_node(node.node_id)
     assert updated_node is not None
-    assert updated_node.status == "awaiting_review"
+    assert updated_node.status == NodeStatus.AWAITING_REVIEW
 
 
 @pytest.mark.asyncio
@@ -422,7 +422,7 @@ async def test_propose_changes_excludes_bundle_paths(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::helper")
     await node_store.upsert_node(node)
-    await node_store.set_status(node.node_id, "running")
+    await node_store.set_status(node.node_id, NodeStatus.RUNNING)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/tools/internal.pym", "ignored\n")
     await ws.write(f"source/{node.node_id}", "def helper():\n    return 2\n")

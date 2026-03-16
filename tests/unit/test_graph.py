@@ -7,7 +7,7 @@ from tests.factories import make_node
 
 from remora.core.events import AgentStartEvent, EventStore
 from remora.core.graph import NodeStore
-from remora.core.types import NodeStatus
+from remora.core.types import NodeStatus, NodeType
 
 
 @pytest.mark.asyncio
@@ -36,8 +36,8 @@ async def test_nodestore_list_with_filters(db) -> None:
         )
     )
 
-    by_type = await store.list_nodes(node_type="class")
-    by_status = await store.list_nodes(status="running")
+    by_type = await store.list_nodes(node_type=NodeType.CLASS)
+    by_status = await store.list_nodes(status=NodeStatus.RUNNING)
     by_path = await store.list_nodes(file_path="src/other.py")
 
     assert [n.node_id for n in by_type] == ["src/app.py::B"]
@@ -65,10 +65,10 @@ async def test_nodestore_set_status(db) -> None:
     node = make_node("src/app.py::a", status="idle")
     await store.upsert_node(node)
 
-    await store.set_status(node.node_id, "running")
+    await store.set_status(node.node_id, NodeStatus.RUNNING)
     got = await store.get_node(node.node_id)
     assert got is not None
-    assert got.status == "running"
+    assert got.status == NodeStatus.RUNNING
     assert got.source_hash == node.source_hash
 
 

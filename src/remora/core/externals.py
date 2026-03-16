@@ -20,7 +20,7 @@ from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import NodeStore
 from remora.core.node import Node
-from remora.core.types import NodeStatus, NodeType
+from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace
 
 
@@ -118,23 +118,25 @@ class TurnContext:
         status: str | None = None,
         file_path: str | None = None,
     ) -> list[dict[str, Any]]:
-        normalized_node_type: str | None = None
+        normalized_node_type: NodeType | None = None
         if node_type is not None:
-            normalized_node_type = node_type.strip()
-            valid_node_types = {item.value for item in NodeType}
-            if normalized_node_type not in valid_node_types:
+            node_type_name = node_type.strip()
+            valid_node_types = {serialize_enum(item) for item in NodeType}
+            if node_type_name not in valid_node_types:
                 choices = ", ".join(sorted(valid_node_types))
                 raise ValueError(
                     f"Invalid node_type '{node_type}'. Expected one of: {choices}"
                 )
+            normalized_node_type = NodeType(node_type_name)
 
-        normalized_status: str | None = None
+        normalized_status: NodeStatus | None = None
         if status is not None:
-            normalized_status = status.strip()
-            valid_statuses = {item.value for item in NodeStatus}
-            if normalized_status not in valid_statuses:
+            status_name = status.strip()
+            valid_statuses = {serialize_enum(item) for item in NodeStatus}
+            if status_name not in valid_statuses:
                 choices = ", ".join(sorted(valid_statuses))
                 raise ValueError(f"Invalid status '{status}'. Expected one of: {choices}")
+            normalized_status = NodeStatus(status_name)
 
         nodes = await self._node_store.list_nodes(
             node_type=normalized_node_type,

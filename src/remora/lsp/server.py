@@ -22,7 +22,7 @@ from remora.core.events import (
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import Node
-from remora.core.types import serialize_enum
+from remora.core.types import ChangeType, serialize_enum
 
 _STATUS_ICONS = {
     "idle": "○",
@@ -153,7 +153,7 @@ def create_lsp_server(
         _node_store, current_event_store = await get_stores()
         file_path = _uri_to_path(params.text_document.uri)
         await current_event_store.append(
-            ContentChangedEvent(path=file_path, change_type="modified")
+            ContentChangedEvent(path=file_path, change_type=ChangeType.MODIFIED)
         )
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
@@ -161,7 +161,9 @@ def create_lsp_server(
         _node_store, current_event_store = await get_stores()
         documents.open(params.text_document.uri, params.text_document.text)
         file_path = _uri_to_path(params.text_document.uri)
-        await current_event_store.append(ContentChangedEvent(path=file_path, change_type="opened"))
+        await current_event_store.append(
+            ContentChangedEvent(path=file_path, change_type=ChangeType.OPENED)
+        )
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
     async def did_close(params: lsp.DidCloseTextDocumentParams) -> None:

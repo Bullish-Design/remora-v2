@@ -10,7 +10,12 @@ from typing import Any
 import aiosqlite
 
 from remora.core.node import Node
-from remora.core.types import STATUS_TRANSITIONS, NodeStatus, NodeType
+from remora.core.types import (
+    STATUS_TRANSITIONS,
+    NodeStatus,
+    NodeType,
+    serialize_enum,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +110,8 @@ class NodeStore:
 
     async def list_nodes(
         self,
-        node_type: str | NodeType | None = None,
-        status: str | NodeStatus | None = None,
+        node_type: NodeType | None = None,
+        status: NodeStatus | None = None,
         file_path: str | None = None,
     ) -> list[Node]:
         """List nodes with optional filtering fields."""
@@ -114,10 +119,10 @@ class NodeStore:
         params: list[Any] = []
         if node_type is not None:
             conditions.append("node_type = ?")
-            params.append(node_type.value if isinstance(node_type, NodeType) else node_type)
+            params.append(serialize_enum(node_type))
         if status is not None:
             conditions.append("status = ?")
-            params.append(status.value if isinstance(status, NodeStatus) else status)
+            params.append(serialize_enum(status))
         if file_path is not None:
             conditions.append("file_path = ?")
             params.append(file_path)
@@ -150,9 +155,9 @@ class NodeStore:
         await self._maybe_commit()
         return cursor.rowcount > 0
 
-    async def set_status(self, node_id: str, status: str | NodeStatus) -> None:
+    async def set_status(self, node_id: str, status: NodeStatus) -> None:
         """Update a node status in-place."""
-        status_value = status.value if isinstance(status, NodeStatus) else status
+        status_value = serialize_enum(status)
         await self._db.execute(
             "UPDATE nodes SET status = ? WHERE node_id = ?",
             (status_value, node_id),
@@ -172,7 +177,11 @@ class NodeStore:
         placeholders = ", ".join("?" for _ in valid_sources)
         cursor = await self._db.execute(
             f"UPDATE nodes SET status = ? WHERE node_id = ? AND status IN ({placeholders})",
-            (target.value, node_id, *[source.value for source in valid_sources]),
+            (
+                serialize_enum(target),
+                node_id,
+                *[serialize_enum(source) for source in valid_sources],
+            ),
         )
         await self._maybe_commit()
         if cursor.rowcount > 0:
