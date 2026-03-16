@@ -9,8 +9,10 @@ import time
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
@@ -54,6 +56,25 @@ class RateLimiter:
             return False
         self._timestamps.append(now)
         return True
+
+
+def _is_allowed_origin(origin: str) -> bool:
+    parsed = urlparse(origin)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1"}
+
+
+class CSRFMiddleware(BaseHTTPMiddleware):
+    """Reject mutating requests from non-local browser origins."""
+
+    async def dispatch(self, request: Request, call_next):  # noqa: ANN001
+        if request.method in {"POST", "PUT", "DELETE"}:
+            origin = request.headers.get("origin", "").strip()
+            if origin and not _is_allowed_origin(origin):
+                return JSONResponse({"error": "CSRF rejected"}, status_code=403)
+        return await call_next(request)
 
 
 def create_app(
@@ -513,9 +534,10 @@ def create_app(
         Route("/sse", endpoint=sse_stream),
     ]
     app = Starlette(routes=routes, on_shutdown=[on_shutdown])
+    app.add_middleware(CSRFMiddleware)
     app.state.sse_shutdown_event = shutdown_event
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     return app
 
 
-__all__ = ["create_app"]
+__all__ = ["CSRFMiddleware", "create_app"]

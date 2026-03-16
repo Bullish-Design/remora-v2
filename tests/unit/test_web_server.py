@@ -383,6 +383,29 @@ async def test_chat_rate_limit_blocks_excess(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_csrf_rejects_non_local_origin_for_post(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.post(
+        "/api/chat",
+        json={"node_id": "src/app.py::a", "message": "hello"},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403
+    assert response.json()["error"] == "CSRF rejected"
+
+
+@pytest.mark.asyncio
+async def test_csrf_allows_localhost_origin_for_post(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.post(
+        "/api/chat",
+        json={"node_id": "src/app.py::a", "message": "hello"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_api_events(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     await event_store.append(

@@ -3,3 +3,7 @@
 ## 2026-03-15 - Path traversal handling in proposal endpoints
 - Decision: Reject any resolved proposal target path outside `workspace_service._project_root` with HTTP 400.
 - Rationale: Prevent arbitrary file read/write from crafted workspace proposal paths while returning explicit client-visible rejection instead of 500.
+
+## 2026-03-15 - CSRF scope and allowlist
+- Decision: Apply Origin validation middleware to POST/PUT/DELETE and allow only localhost/127.0.0.1 browser origins.
+- Rationale: Keep local-web UX working while blocking cross-site browser writes from external origins.

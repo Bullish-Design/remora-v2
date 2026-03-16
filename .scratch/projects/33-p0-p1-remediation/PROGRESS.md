@@ -1,7 +1,7 @@
 # Progress
 
 - [x] 1. Path traversal fix (P0)
-- [ ] 2. CSRF middleware (P0)
+- [x] 2. CSRF middleware (P0)
 - [ ] 3. Actor `_depths` TTL cleanup (P0)
 - [ ] 4. FileReconciler `_file_locks` eviction (P0)
 - [ ] 5. Event bus dispatch fix (P0)
