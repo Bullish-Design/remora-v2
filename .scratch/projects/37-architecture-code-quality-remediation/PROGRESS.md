@@ -24,4 +24,4 @@
 - [x] `6ca539e` 5.3 Add regression guard preventing production `assert` statements
 - [x] `98ed9d5` 5.4 Add Pyright config and dev dependency in project config
 - [x] `6c255e2` 5.5 Standardize enum usage and boundary serialization paths
-- [pending push] 5.6 Use package `__version__` in web health endpoint response
+- [x] `089ee5d` 5.6 Use package `__version__` in web health endpoint response
