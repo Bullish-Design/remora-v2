@@ -12,6 +12,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from remora.core.types import serialize_enum
+
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
 
 
@@ -160,7 +162,7 @@ class Config(BaseSettings):
 
     def resolve_bundle(self, node_type: str, node_name: str | None = None) -> str | None:
         """Resolve bundle by priority: first matching rule, then type overlays."""
-        normalized_type = node_type.value if hasattr(node_type, "value") else str(node_type)
+        normalized_type = serialize_enum(node_type)
         normalized_name = node_name or ""
 
         for rule in self.bundle_rules:

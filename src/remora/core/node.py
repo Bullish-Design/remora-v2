@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from remora.core.types import NodeStatus, NodeType
+from remora.core.types import NodeStatus, NodeType, serialize_enum
 
 
 class Node(BaseModel):
@@ -32,14 +32,8 @@ class Node(BaseModel):
     def to_row(self) -> dict[str, Any]:
         """Serialize the model into a sqlite-ready row."""
         data = self.model_dump()
-        data["node_type"] = (
-            data["node_type"].value if hasattr(data["node_type"], "value") else data["node_type"]
-        )
-        data["status"] = (
-            data["status"].value
-            if hasattr(data["status"], "value")
-            else data["status"]
-        )
+        data["node_type"] = serialize_enum(data["node_type"])
+        data["status"] = serialize_enum(data["status"])
         return data
 
     @classmethod

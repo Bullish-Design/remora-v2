@@ -30,7 +30,7 @@ from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.metrics import Metrics
 from remora.core.node import Node
-from remora.core.types import NodeStatus, NodeType
+from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -276,9 +276,7 @@ class PromptBuilder:
     @staticmethod
     def build_prompt(node: Node, trigger_event: Event | None) -> str:
         """Build the turn prompt from node identity and trigger details."""
-        node_type = (
-            node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
-        )
+        node_type = serialize_enum(node.node_type)
         parts = [
             f"# Node: {node.full_name}",
             f"Type: {node_type} | File: {node.file_path}",

@@ -31,7 +31,7 @@ from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
-from remora.core.types import NodeStatus
+from remora.core.types import NodeStatus, serialize_enum
 
 if TYPE_CHECKING:
     from remora.core.runner import ActorPool
@@ -434,11 +434,7 @@ def create_app(
                 character=character,
                 node_id=focused.node_id if focused else None,
                 node_name=focused.full_name if focused else None,
-                node_type=(
-                    focused.node_type.value
-                    if focused is not None and hasattr(focused.node_type, "value")
-                    else None
-                ),
+                node_type=serialize_enum(focused.node_type) if focused is not None else None,
             )
         )
         return JSONResponse({"status": "ok", "node_id": focused.node_id if focused else None})

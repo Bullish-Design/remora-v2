@@ -55,10 +55,16 @@ def validate_status_transition(current: NodeStatus, target: NodeStatus) -> bool:
     return target in STATUS_TRANSITIONS.get(current, set())
 
 
+def serialize_enum(value: StrEnum | str) -> str:
+    """Serialize StrEnum values to their stable string representation."""
+    return value.value if isinstance(value, StrEnum) else str(value)
+
+
 __all__ = [
     "NodeStatus",
     "NodeType",
     "ChangeType",
     "STATUS_TRANSITIONS",
     "validate_status_transition",
+    "serialize_enum",
 ]

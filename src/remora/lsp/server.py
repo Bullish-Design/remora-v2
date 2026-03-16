@@ -21,6 +21,7 @@ from remora.core.events import (
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import Node
+from remora.core.types import serialize_enum
 
 _STATUS_ICONS = {
     "idle": "○",
@@ -208,7 +209,7 @@ def create_lsp_server_standalone(db_path: Path) -> LanguageServer:
 
 def _node_to_lens(node: Node) -> lsp.CodeLens:
     """Map a Node to a CodeLens entry showing runtime status."""
-    status = node.status.value if hasattr(node.status, "value") else str(node.status)
+    status = serialize_enum(node.status)
     icon = _STATUS_ICONS.get(status, "○")
     return lsp.CodeLens(
         range=lsp.Range(
@@ -232,8 +233,8 @@ def _node_to_hover(
     recent_events: list[str] | None = None,
 ) -> lsp.Hover:
     """Map a Node to markdown hover details."""
-    node_type = node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
-    status = node.status.value if hasattr(node.status, "value") else str(node.status)
+    node_type = serialize_enum(node.node_type)
+    status = serialize_enum(node.status)
     caller_ids = callers or []
     callee_ids = callees or []
     event_names = recent_events or []
