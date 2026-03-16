@@ -22,9 +22,14 @@ Completed:
   - `_complete_agent_turn()` now accepts `user_message` and includes it in emitted `AgentCompleteEvent`.
   - Added event-model and actor emission tests for `user_message`.
   - Verification: `devenv shell -- pytest tests/unit/test_events.py tests/unit/test_actor.py -q` (46 passed).
+- Step 4: Added exclusion filter support to subscriptions.
+  - Added `not_from_agents` to `SubscriptionPattern`.
+  - `SubscriptionPattern.matches()` now excludes matching `agent_id` or `from_agent`.
+  - Added pattern and registry tests for `not_from_agents` behavior in `tests/unit/test_subscription_registry.py`.
+  - Verification: `devenv shell -- pytest tests/unit/test_subscription_registry.py -q` (16 passed).
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 4: Add `not_from_agents` filter support to `SubscriptionPattern`.
+- Step 5: Create KV-native companion Grail tools and validate they load.

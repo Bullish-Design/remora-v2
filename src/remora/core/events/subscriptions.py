@@ -19,6 +19,7 @@ class SubscriptionPattern(BaseModel):
 
     event_types: list[str] | None = None
     from_agents: list[str] | None = None
+    not_from_agents: list[str] | None = None
     to_agent: str | None = None
     path_glob: str | None = None
     tags: list[str] | None = None
@@ -31,6 +32,12 @@ class SubscriptionPattern(BaseModel):
         if self.from_agents:
             from_agent = getattr(event, "from_agent", None)
             if from_agent not in self.from_agents:
+                return False
+
+        if self.not_from_agents:
+            agent_id = getattr(event, "agent_id", None)
+            from_agent = getattr(event, "from_agent", None)
+            if agent_id in self.not_from_agents or from_agent in self.not_from_agents:
                 return False
 
         if self.to_agent:

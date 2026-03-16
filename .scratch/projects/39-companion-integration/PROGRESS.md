@@ -13,7 +13,7 @@
 | 6 | Step 1: Add `TurnDigestedEvent` to event system + tests | done |
 | 7 | Step 2: Tag-based turn classification + tests | done |
 | 8 | Step 3: Enrich `AgentCompleteEvent` with `user_message` + tests | done |
-| 9 | Step 4: Add `not_from_agents` subscription filter + tests | pending |
+| 9 | Step 4: Add `not_from_agents` subscription filter + tests | done |
 | 10 | Step 5: Add KV-native companion Grail tools + tests | pending |
 | 11 | Step 6: Add `self_reflect` config + self-subscription registration + tests | pending |
 | 12 | Step 7: Parse `self_reflect` in bundle config + tests | pending |

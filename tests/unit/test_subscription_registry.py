@@ -5,6 +5,7 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from remora.core.events import (
+    AgentCompleteEvent,
     AgentMessageEvent,
     ContentChangedEvent,
     Event,
@@ -41,6 +42,35 @@ def test_subscription_pattern_none_matches_all() -> None:
     pattern = SubscriptionPattern()
     assert pattern.matches(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
     assert pattern.matches(ContentChangedEvent(path="any/path.txt"))
+
+
+def test_not_from_agents_excludes_matching_agent_id() -> None:
+    pattern = SubscriptionPattern(
+        event_types=["AgentCompleteEvent"],
+        not_from_agents=["observer-1"],
+    )
+    own_event = AgentCompleteEvent(agent_id="observer-1", result_summary="done")
+    other_event = AgentCompleteEvent(agent_id="agent-a", result_summary="done")
+    assert not pattern.matches(own_event)
+    assert pattern.matches(other_event)
+
+
+def test_not_from_agents_excludes_matching_from_agent() -> None:
+    pattern = SubscriptionPattern(
+        event_types=["AgentMessageEvent"],
+        not_from_agents=["observer-1"],
+    )
+    event = AgentMessageEvent(from_agent="observer-1", to_agent="agent-a", content="hi")
+    assert not pattern.matches(event)
+
+
+def test_not_from_agents_none_matches_all() -> None:
+    pattern = SubscriptionPattern(
+        event_types=["AgentCompleteEvent"],
+        not_from_agents=None,
+    )
+    event = AgentCompleteEvent(agent_id="any-agent", result_summary="done")
+    assert pattern.matches(event)
 
 
 @pytest.mark.asyncio
@@ -81,6 +111,27 @@ async def test_registry_cache_invalidation(db) -> None:
         AgentMessageEvent(from_agent="a", to_agent="b", content="hello")
     )
     assert second == ["agent-b", "agent-c"]
+
+
+@pytest.mark.asyncio
+async def test_registry_not_from_agents_filter(db) -> None:
+    registry = SubscriptionRegistry(db)
+    await registry.create_tables()
+    await registry.register(
+        "observer-1",
+        SubscriptionPattern(
+            event_types=["AgentCompleteEvent"],
+            not_from_agents=["observer-1"],
+        ),
+    )
+
+    own_event = AgentCompleteEvent(agent_id="observer-1")
+    own_matches = await registry.get_matching_agents(own_event)
+    assert own_matches == []
+
+    other_event = AgentCompleteEvent(agent_id="agent-a")
+    other_matches = await registry.get_matching_agents(other_event)
+    assert other_matches == ["observer-1"]
 
 
 @pytest.mark.asyncio
