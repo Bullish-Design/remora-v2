@@ -414,6 +414,46 @@ async def test_read_bundle_config_malformed_yaml_returns_empty(actor_env) -> Non
 
 
 @pytest.mark.asyncio
+async def test_read_bundle_config_parses_self_reflect(actor_env) -> None:
+    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::self-reflect")
+    await workspace.write(
+        "_bundle/bundle.yaml",
+        (
+            'system_prompt: "You are a code agent."\n'
+            "self_reflect:\n"
+            "  enabled: true\n"
+            '  model: "Qwen/Qwen3-1.7B"\n'
+            "  max_turns: 2\n"
+            '  prompt: "Reflect on your last turn."\n'
+        ),
+    )
+
+    bundle_config = await Actor._read_bundle_config(workspace)
+    assert bundle_config["self_reflect"]["enabled"] is True
+    assert bundle_config["self_reflect"]["model"] == "Qwen/Qwen3-1.7B"
+    assert bundle_config["self_reflect"]["max_turns"] == 2
+    assert bundle_config["self_reflect"]["prompt"] == "Reflect on your last turn."
+
+
+@pytest.mark.asyncio
+async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> None:
+    workspace = await actor_env["workspace_service"].get_agent_workspace(
+        "src/config.py::self-reflect-disabled"
+    )
+    await workspace.write(
+        "_bundle/bundle.yaml",
+        (
+            'system_prompt: "You are a code agent."\n'
+            "self_reflect:\n"
+            "  enabled: false\n"
+        ),
+    )
+
+    bundle_config = await Actor._read_bundle_config(workspace)
+    assert "self_reflect" not in bundle_config
+
+
+@pytest.mark.asyncio
 async def test_actor_reload_reads_updated_bundle_config_each_turn(actor_env, monkeypatch) -> None:
     env = actor_env
     node = make_node("src/app.py::dynamic-config")

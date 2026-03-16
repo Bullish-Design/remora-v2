@@ -482,6 +482,48 @@ async def test_no_self_reflect_subscription_when_disabled(reconcile_env) -> None
 
 
 @pytest.mark.asyncio
+async def test_provision_bundle_persists_self_reflect_config(reconcile_env, tmp_path: Path) -> None:
+    _node_store, _event_store, workspace_service, _config, reconciler = reconcile_env
+    role_bundle = tmp_path / "bundles" / "code-agent" / "bundle.yaml"
+    role_bundle.write_text(
+        "name: code-agent\n"
+        "self_reflect:\n"
+        "  enabled: true\n"
+        "  model: reflection-model\n"
+        "  max_turns: 2\n"
+        "  prompt: Reflect now\n",
+        encoding="utf-8",
+    )
+
+    node_id = "src/app.py::self-reflect-node"
+    await reconciler._provision_bundle(node_id, "code-agent")
+
+    workspace = await workspace_service.get_agent_workspace(node_id)
+    saved = await workspace.kv_get("_system/self_reflect")
+    assert isinstance(saved, dict)
+    assert saved["enabled"] is True
+    assert saved["model"] == "reflection-model"
+
+
+@pytest.mark.asyncio
+async def test_provision_bundle_clears_self_reflect_when_disabled(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    _node_store, _event_store, workspace_service, _config, reconciler = reconcile_env
+    role_bundle = tmp_path / "bundles" / "code-agent" / "bundle.yaml"
+    role_bundle.write_text("name: code-agent\nself_reflect:\n  enabled: false\n", encoding="utf-8")
+
+    node_id = "src/app.py::self-reflect-disabled-node"
+    workspace = await workspace_service.get_agent_workspace(node_id)
+    await workspace.kv_set("_system/self_reflect", {"enabled": True})
+
+    await reconciler._provision_bundle(node_id, "code-agent")
+    saved = await workspace.kv_get("_system/self_reflect")
+    assert saved is None
+
+
+@pytest.mark.asyncio
 async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "virtual.db")
     node_store = NodeStore(db)

@@ -606,6 +606,26 @@ class AgentTurnExecutor:
             if prompt_values:
                 validated["prompts"] = prompt_values
 
+        self_reflect = expanded.get("self_reflect")
+        if isinstance(self_reflect, dict):
+            sr_values: dict[str, Any] = {}
+            if self_reflect.get("enabled"):
+                sr_values["enabled"] = True
+            sr_model = self_reflect.get("model")
+            if isinstance(sr_model, str) and sr_model.strip():
+                sr_values["model"] = sr_model
+            sr_max_turns = self_reflect.get("max_turns")
+            if sr_max_turns is not None:
+                try:
+                    sr_values["max_turns"] = max(1, int(sr_max_turns))
+                except (TypeError, ValueError):
+                    pass
+            sr_prompt = self_reflect.get("prompt")
+            if isinstance(sr_prompt, str) and sr_prompt.strip():
+                sr_values["prompt"] = sr_prompt
+            if sr_values:
+                validated["self_reflect"] = sr_values
+
         return validated
 
 

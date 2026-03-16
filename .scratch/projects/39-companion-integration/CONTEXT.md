@@ -46,9 +46,16 @@ Completed:
   - Added reconciler tests for self-reflect enabled/disabled subscription behavior.
   - Verification:
     - `devenv shell -- pytest tests/unit/test_reconciler.py tests/unit/test_subscription_registry.py -q` (36 passed)
+- Step 7: Parsed and persisted `self_reflect` config.
+  - `Actor._read_bundle_config()` now parses optional `self_reflect` dict (`enabled`, `model`, `max_turns`, `prompt`) with validation/coercion.
+  - `FileReconciler._provision_bundle()` now syncs `_system/self_reflect` in workspace KV based on bundle config.
+  - Added actor tests for parsing enabled/disabled self_reflect.
+  - Added reconciler tests for KV persistence/clearing of self_reflect config.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_reconciler.py -q` (56 passed)
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 7: Parse and validate `self_reflect` settings in actor bundle config parser.
+- Step 8: Apply reflection-turn prompt/model override behavior in `PromptBuilder`.

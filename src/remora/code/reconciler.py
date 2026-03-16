@@ -8,6 +8,8 @@ import json
 import logging
 from pathlib import Path
 
+import yaml
+
 from remora.code.discovery import discover
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk_source_files
 from remora.code.projections import project_nodes
@@ -324,6 +326,18 @@ class FileReconciler:
         if role:
             template_dirs.append(bundle_root / role)
         await self._workspace_service.provision_bundle(node_id, template_dirs)
+
+        workspace = await self._workspace_service.get_agent_workspace(node_id)
+        try:
+            text = await workspace.read("_bundle/bundle.yaml")
+            loaded = yaml.safe_load(text) or {}
+            self_reflect = loaded.get("self_reflect") if isinstance(loaded, dict) else None
+            if isinstance(self_reflect, dict) and self_reflect.get("enabled"):
+                await workspace.kv_set("_system/self_reflect", self_reflect)
+            else:
+                await workspace.kv_set("_system/self_reflect", None)
+        except Exception:  # noqa: BLE001 - best effort bundle metadata sync
+            logger.debug("Failed to sync self_reflect config for %s", node_id, exc_info=True)
 
     def _relative_file_path(self, file_path: str) -> str:
         absolute = Path(file_path).resolve()
