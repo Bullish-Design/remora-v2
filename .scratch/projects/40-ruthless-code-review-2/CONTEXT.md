@@ -105,3 +105,10 @@ Next action:
 
 Next action:
 - Start Phase 4, Step 4.1 (`BundleConfig`/`SelfReflectConfig` model extraction in `core/config.py`).
+- Step 4.1 completed:
+  - added `SelfReflectConfig` and `BundleConfig` pydantic models to `core/config.py`
+  - exported new models in config module `__all__`
+  - verification: `tests/unit/test_config.py` passed
+
+Next action:
+- Step 4.2: replace `AgentTurnExecutor._read_bundle_config` manual parsing with `BundleConfig`.

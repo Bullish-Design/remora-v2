@@ -90,6 +90,41 @@ class SearchConfig(BaseModel):
         return value
 
 
+class SelfReflectConfig(BaseModel):
+    """Self-reflection configuration within a bundle."""
+
+    enabled: bool = False
+    model: str | None = None
+    max_turns: int = 2
+    prompt: str | None = None
+
+    @field_validator("max_turns")
+    @classmethod
+    def _validate_max_turns(cls, value: int) -> int:
+        return max(1, value)
+
+
+class BundleConfig(BaseModel):
+    """Agent bundle configuration loaded from bundle.yaml."""
+
+    system_prompt: str = "You are an autonomous code agent."
+    system_prompt_extension: str = ""
+    model: str | None = None
+    max_turns: int = 8
+    prompts: dict[str, str] = Field(default_factory=dict)
+    self_reflect: SelfReflectConfig | None = None
+
+    @field_validator("max_turns")
+    @classmethod
+    def _validate_max_turns(cls, value: int) -> int:
+        return max(1, value)
+
+    @field_validator("prompts")
+    @classmethod
+    def _validate_prompts(cls, value: dict[str, str]) -> dict[str, str]:
+        return {k: v for k, v in value.items() if k in ("chat", "reactive") and v.strip()}
+
+
 class Config(BaseSettings):
     """Remora configuration loaded from remora.yaml and environment variables."""
 
@@ -257,8 +292,10 @@ def load_config(path: Path | None = None) -> Config:
 
 
 __all__ = [
+    "BundleConfig",
     "BundleOverlayRule",
     "SearchConfig",
+    "SelfReflectConfig",
     "VirtualSubscriptionConfig",
     "VirtualAgentConfig",
     "Config",

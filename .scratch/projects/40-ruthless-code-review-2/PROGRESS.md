@@ -40,3 +40,8 @@
 - [x] Step 3.2 Replace search_service `object|Any` usages with protocol typing
 - [x] Step 3.3 Replace search_service getattr duck-typing checks
 - [x] Step 3.4 Type remaining `Any` parameters (externals/workspace/lifecycle)
+
+### Phase 4
+- [x] Step 4.1 Create `BundleConfig` and `SelfReflectConfig` models
+- [ ] Step 4.2 Replace `AgentTurnExecutor._read_bundle_config` manual validation
+- [ ] Step 4.3 Update bundle config callers/types
