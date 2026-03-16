@@ -10,7 +10,7 @@ from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from starlette.applications import Starlette
@@ -145,6 +145,21 @@ def create_app(
         if node is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(node.model_dump())
+
+    async def api_node_companion(request: Request) -> JSONResponse:
+        node_id = request.path_params["node_id"]
+        if workspace_service is None:
+            return JSONResponse({"error": "No workspace service"}, status_code=503)
+
+        workspace = await workspace_service.get_agent_workspace(node_id)
+        companion_data: dict[str, Any] = {}
+        for key in ("companion/chat_index", "companion/reflections", "companion/links"):
+            value = await workspace.kv_get(key)
+            if value is not None:
+                short_key = key.removeprefix("companion/")
+                companion_data[short_key] = value
+
+        return JSONResponse(companion_data)
 
     async def api_edges(request: Request) -> JSONResponse:
         node_id = request.path_params["node_id"]
@@ -556,6 +571,7 @@ def create_app(
         Route("/api/edges", endpoint=api_all_edges),
         Route("/api/nodes/{node_id:path}/edges", endpoint=api_edges),
         Route("/api/nodes/{node_id:path}/conversation", endpoint=api_conversation),
+        Route("/api/nodes/{node_id:path}/companion", endpoint=api_node_companion),
         Route("/api/chat", endpoint=api_chat, methods=["POST"]),
         Route("/api/nodes/{node_id:path}/respond", endpoint=api_respond, methods=["POST"]),
         Route("/api/nodes/{node_id:path}", endpoint=api_node),

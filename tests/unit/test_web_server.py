@@ -125,6 +125,37 @@ async def proposal_web_env(tmp_path: Path):
     await db.close()
 
 
+@pytest_asyncio.fixture
+async def companion_web_env(tmp_path: Path):
+    db = await open_database(tmp_path / "companion-web.db")
+    event_bus = EventBus()
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db, event_bus=event_bus)
+    await event_store.create_tables()
+
+    config = Config(workspace_root=".remora-web-companion")
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+
+    app = create_app(
+        event_store,
+        node_store,
+        event_bus,
+        workspace_service=workspace_service,
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield {
+            "client": client,
+            "node_store": node_store,
+            "workspace_service": workspace_service,
+        }
+
+    await workspace_service.close()
+    await db.close()
+
+
 @pytest.mark.asyncio
 async def test_api_nodes_returns_list(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
@@ -149,6 +180,35 @@ async def test_api_node_not_found(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
     response = await client.get("/api/nodes/missing")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_api_node_companion_empty(companion_web_env) -> None:
+    env = companion_web_env
+    node = make_node("src/validate.py::validate", file_path="src/validate.py")
+    await env["node_store"].upsert_node(node)
+
+    response = await env["client"].get(f"/api/nodes/{node.node_id}/companion")
+    assert response.status_code == 200
+    assert response.json() == {}
+
+
+@pytest.mark.asyncio
+async def test_api_node_companion_with_data(companion_web_env) -> None:
+    env = companion_web_env
+    node = make_node("src/validate.py::validate", file_path="src/validate.py")
+    await env["node_store"].upsert_node(node)
+
+    workspace = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await workspace.kv_set("companion/chat_index", [{"summary": "test", "tags": ["bug"]}])
+    await workspace.kv_set("companion/reflections", [{"insight": "needs fix"}])
+
+    response = await env["client"].get(f"/api/nodes/{node.node_id}/companion")
+    assert response.status_code == 200
+    data = response.json()
+    assert "chat_index" in data
+    assert "reflections" in data
+    assert data["chat_index"][0]["summary"] == "test"
 
 
 @pytest.mark.asyncio

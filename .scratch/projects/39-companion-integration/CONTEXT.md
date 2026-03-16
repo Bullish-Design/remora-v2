@@ -71,9 +71,14 @@ Completed:
   - Updated `bundles/code-agent/bundle.yaml` with a `self_reflect` section (`enabled`, `model`, `max_turns`, `prompt`).
   - Added `tests/unit/test_bundle_configs.py` for bundle self-reflect config validation.
   - Verification: `devenv shell -- pytest tests/unit/test_bundle_configs.py -v` (1 passed).
+- Step 11: Added web companion API endpoint.
+  - Added `GET /api/nodes/{node_id}/companion` in `src/remora/web/server.py`.
+  - Endpoint returns workspace KV data for `companion/chat_index`, `companion/reflections`, `companion/links`.
+  - Added web tests in `tests/unit/test_web_server.py` for empty and populated companion data responses.
+  - Verification: `devenv shell -- pytest tests/unit/test_web_server.py -v -k companion` (2 passed).
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 11: Add web API endpoint for node companion data and endpoint tests.
+- Step 12: Add Layer 2 companion observer bundle and aggregate digest tool with tests.

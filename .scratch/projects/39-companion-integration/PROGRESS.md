@@ -20,6 +20,6 @@
 | 13 | Step 8: Reflection model/prompt override in `PromptBuilder` + tests | done |
 | 14 | Step 9: Companion context injection into system prompt + tests | done |
 | 15 | Step 10: Add `self_reflect` config to code-agent bundle + tests | done |
-| 16 | Step 11: Add web companion API endpoint + tests | pending |
+| 16 | Step 11: Add web companion API endpoint + tests | done |
 | 17 | Step 12: Add companion observer bundle/tools + tests | pending |
 | 18 | Step 13: Update `remora.yaml.example` with companion config | pending |
