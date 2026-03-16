@@ -261,7 +261,7 @@ After typing, all `getattr(search_service, "available", False)` calls in `reconc
   ```
 
 **File**: `src/remora/core/workspace.py`
-- `workspace: Any` in `AgentWorkspace.__init__` — this wraps a Cairn workspace. If Cairn exports a Protocol or base class, use it. Otherwise leave as `Any` with a `# cairn runtime type` comment.
+- `workspace: Any` in `AgentWorkspace.__init__` — this wraps a Cairn workspace. Study that library codebase, which has been copied in for reference in the .context/ directory at repo root. If Cairn exports a Protocol or base class, use it. Otherwise leave as `Any` with a `# cairn runtime type` comment.
 
 **File**: `src/remora/core/lifecycle.py`
 - `configure_file_logging: Any` → `configure_file_logging: Callable[[Path], None]`:
