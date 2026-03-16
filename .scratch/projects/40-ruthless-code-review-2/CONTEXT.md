@@ -54,3 +54,9 @@ Next action:
 
 Next action:
 - Step 2.4: simplify `FileReconciler._normalize_dir_id`.
+- Step 2.4 completed:
+  - simplified `_normalize_dir_id` to a single `Path(path).as_posix()` path
+  - verification: `tests/unit/test_reconciler.py` passed
+
+Next action:
+- Start Phase 3, Step 3.1 (add `SearchServiceProtocol` and begin typing migration).

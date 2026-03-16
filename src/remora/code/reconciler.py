@@ -349,7 +349,7 @@ class FileReconciler:
 
     @staticmethod
     def _normalize_dir_id(path: Path | str) -> str:
-        value = Path(path).as_posix() if isinstance(path, Path) else Path(path).as_posix()
+        value = Path(path).as_posix()
         return "." if value in {"", "."} else value
 
     @staticmethod
