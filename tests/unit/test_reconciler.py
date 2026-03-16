@@ -357,9 +357,93 @@ async def test_directory_bundles_refreshed_on_startup(reconcile_env, tmp_path: P
         project_root=tmp_path,
     )
     await restart_reconciler.reconcile_cycle()
-
     refreshed = await root_workspace.read("_bundle/tools/send_message.pym")
     assert "fresh" in refreshed
+
+
+class _MockSearchService:
+    def __init__(self, *, available: bool = True, fail_index: bool = False) -> None:
+        self.available = available
+        self.fail_index = fail_index
+        self.indexed: list[str] = []
+        self.deindexed: list[str] = []
+
+    async def index_file(self, file_path: str) -> None:
+        self.indexed.append(file_path)
+        if self.fail_index:
+            raise RuntimeError("index failed")
+
+    async def delete_source(self, file_path: str) -> None:
+        self.deindexed.append(file_path)
+
+
+@pytest.mark.asyncio
+async def test_reconciler_indexes_files_when_search_service_available(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    node_store, event_store, workspace_service, config, _reconciler = reconcile_env
+    search = _MockSearchService(available=True)
+    reconciler = FileReconciler(
+        config,
+        node_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+        search_service=search,
+    )
+    source = tmp_path / "src" / "index_me.py"
+    write_file(source, "def index_me():\n    return 1\n")
+
+    await reconciler.full_scan()
+    assert str(source) in search.indexed
+
+
+@pytest.mark.asyncio
+async def test_reconciler_deindexes_files_on_delete(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    node_store, event_store, workspace_service, config, _reconciler = reconcile_env
+    search = _MockSearchService(available=True)
+    reconciler = FileReconciler(
+        config,
+        node_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+        search_service=search,
+    )
+    source = tmp_path / "src" / "delete_me.py"
+    write_file(source, "def delete_me():\n    return 1\n")
+    await reconciler.full_scan()
+
+    source.unlink()
+    await reconciler.reconcile_cycle()
+    assert str(source) in search.deindexed
+
+
+@pytest.mark.asyncio
+async def test_reconciler_search_index_failures_do_not_break_reconcile(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    node_store, event_store, workspace_service, config, _reconciler = reconcile_env
+    search = _MockSearchService(available=True, fail_index=True)
+    reconciler = FileReconciler(
+        config,
+        node_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+        search_service=search,
+    )
+    source = tmp_path / "src" / "fail_index.py"
+    write_file(source, "def fail_index():\n    return 1\n")
+
+    await reconciler.reconcile_cycle()
+    node = await node_store.get_node(f"{source}::fail_index")
+    assert node is not None
 
 
 @pytest.mark.asyncio

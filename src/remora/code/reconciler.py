@@ -96,6 +96,7 @@ class FileReconciler:
             _mtime, node_ids = self._file_state[file_path]
             for node_id in sorted(node_ids):
                 await self._remove_node(node_id)
+            await self._deindex_file_for_search(file_path)
             self._file_state.pop(file_path, None)
         self._bundles_bootstrapped = True
         self._evict_stale_file_locks(generation)
@@ -144,6 +145,7 @@ class FileReconciler:
                         _mtime, node_ids = self._file_state[str(p)]
                         for node_id in sorted(node_ids):
                             await self._remove_node(node_id)
+                        await self._deindex_file_for_search(str(p))
                         self._file_state.pop(str(p), None)
                 self._evict_stale_file_locks(generation)
             except Exception:  # noqa: BLE001 - isolate one watch batch failure
@@ -450,6 +452,25 @@ class FileReconciler:
                 await self._remove_node(node_id)
 
         self._file_state[file_path] = (mtime_ns, new_ids)
+        await self._index_file_for_search(file_path)
+
+    async def _index_file_for_search(self, file_path: str) -> None:
+        """Index a file for semantic search, logging failures without raising."""
+        if self._search_service is None or not getattr(self._search_service, "available", False):
+            return
+        try:
+            await self._search_service.index_file(file_path)
+        except Exception:  # noqa: BLE001
+            logger.debug("Search indexing failed for %s", file_path, exc_info=True)
+
+    async def _deindex_file_for_search(self, file_path: str) -> None:
+        """Remove a file from semantic search, logging failures without raising."""
+        if self._search_service is None or not getattr(self._search_service, "available", False):
+            return
+        try:
+            await self._search_service.delete_source(file_path)
+        except Exception:  # noqa: BLE001
+            logger.debug("Search deindexing failed for %s", file_path, exc_info=True)
 
     def _file_lock(self, file_path: str, generation: int) -> asyncio.Lock:
         lock = self._file_locks.get(file_path)

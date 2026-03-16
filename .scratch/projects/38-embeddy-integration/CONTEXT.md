@@ -49,6 +49,14 @@ Completed:
   - Added `bundles/system/tools/semantic_search.pym` using `@external semantic_search(...)`.
   - Tool supports `query`, optional `collection`, and `top_k` inputs and renders readable ranked output.
   - Verification: `devenv shell -- pytest tests/unit/test_system_tools.py tests/unit/test_grail.py -q` (18 passed)
+- Step 7 reconciler hooks:
+  - Added `_index_file_for_search()` and `_deindex_file_for_search()` in `src/remora/code/reconciler.py`.
+  - Reconciler now indexes files after successful reconcile and deindexes on delete in both cycle and watch paths.
+  - Failures in search indexing/deindexing are logged at debug and do not break reconciliation.
+  - Extended `tests/unit/test_reconciler.py` with coverage for indexing, deindexing, and graceful failure handling.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_reconciler.py -q` (18 passed)
+    - `devenv shell -- pytest tests/unit/test_services.py tests/unit/test_runner.py tests/unit/test_reconciler.py -q` (30 passed)
 
 ## Deliverable Summary
 
@@ -74,4 +82,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 7: Add reconciler indexing/deindexing hooks and tests.
+- Step 8: Add web `POST /api/search` endpoint and tests.
