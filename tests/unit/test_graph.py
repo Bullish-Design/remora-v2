@@ -59,13 +59,13 @@ async def test_nodestore_delete(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_set_status(db) -> None:
+async def test_nodestore_transition_status_updates_node(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
     node = make_node("src/app.py::a", status="idle")
     await store.upsert_node(node)
 
-    await store.set_status(node.node_id, NodeStatus.RUNNING)
+    assert await store.transition_status(node.node_id, NodeStatus.RUNNING)
     got = await store.get_node(node.node_id)
     assert got is not None
     assert got.status == NodeStatus.RUNNING

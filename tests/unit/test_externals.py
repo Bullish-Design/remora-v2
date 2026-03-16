@@ -276,7 +276,7 @@ async def test_request_human_input_blocks_until_response(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::human")
     await node_store.upsert_node(node)
-    await node_store.set_status(node.node_id, NodeStatus.RUNNING)
+    assert await node_store.transition_status(node.node_id, NodeStatus.RUNNING)
 
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, event_store, "corr-human")
@@ -308,7 +308,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::human-timeout")
     await node_store.upsert_node(node)
-    await node_store.set_status(node.node_id, NodeStatus.RUNNING)
+    assert await node_store.transition_status(node.node_id, NodeStatus.RUNNING)
 
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(
@@ -450,7 +450,7 @@ async def test_propose_changes_excludes_bundle_paths(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::helper")
     await node_store.upsert_node(node)
-    await node_store.set_status(node.node_id, NodeStatus.RUNNING)
+    assert await node_store.transition_status(node.node_id, NodeStatus.RUNNING)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/tools/internal.pym", "ignored\n")
     await ws.write(f"source/{node.node_id}", "def helper():\n    return 2\n")

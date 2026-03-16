@@ -161,15 +161,6 @@ class NodeStore:
         await self._maybe_commit()
         return cursor.rowcount > 0
 
-    async def set_status(self, node_id: str, status: NodeStatus) -> None:
-        """Update a node status in-place."""
-        status_value = serialize_enum(status)
-        await self._db.execute(
-            "UPDATE nodes SET status = ? WHERE node_id = ?",
-            (status_value, node_id),
-        )
-        await self._maybe_commit()
-
     async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
         """Transition node status atomically when the transition is valid."""
         valid_sources = [

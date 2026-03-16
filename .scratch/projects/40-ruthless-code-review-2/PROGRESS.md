@@ -7,7 +7,7 @@
 
 ## Phase Tracking
 - [x] Phase 0 Preparation
-- [ ] Phase 1 Correctness Fixes (in-progress)
+- [x] Phase 1 Correctness Fixes
 - [ ] Phase 2 Delete Dead Weight
 - [ ] Phase 3 Type the Untyped
 - [ ] Phase 4 Extract BundleConfig Model
@@ -27,4 +27,4 @@
 ### Phase 1
 - [x] Step 1.1 Fix TurnContext class-level mutable state
 - [x] Step 1.2 Fix NodeStore batch() error handling and rollback
-- [ ] Step 1.3 Remove NodeStore.set_status and migrate callers
+- [x] Step 1.3 Remove NodeStore.set_status and migrate callers

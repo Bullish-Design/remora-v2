@@ -17,6 +17,12 @@ Next action:
   - updated `NodeStore.batch()` to rollback on exception at outer batch boundary
   - added regression test: `test_batch_rolls_back_on_exception`
   - verification: `tests/unit/test_graph.py` passed
+- Step 1.3 completed:
+  - removed `NodeStore.set_status` API
+  - migrated all callers/tests to `transition_status`
+  - verification:
+    - `tests/unit/test_graph.py` passed
+    - `tests/unit/test_externals.py` passed
 
 Next action:
-- Implement Step 1.3 (remove `NodeStore.set_status` and migrate all callers/tests).
+- Start Phase 2, Step 2.1 (delete Actor delegation wrappers).
