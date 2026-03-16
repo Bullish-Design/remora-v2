@@ -9,4 +9,10 @@ Current baseline:
 - Ruff baseline: 3 pre-existing `E501` violations
 
 Next action:
-- Start Phase 1 correctness fixes, beginning with Step 1.1 (TurnContext class-level mutable state).
+- Step 1.1 completed:
+  - moved `TurnContext._send_message_timestamps` from class state to instance state
+  - added regression test: `test_externals_send_message_rate_limit_isolated_per_context_instance`
+  - verification: `tests/unit/test_externals.py` passed
+
+Next action:
+- Implement Step 1.2 (`NodeStore.batch()` rollback semantics + test).

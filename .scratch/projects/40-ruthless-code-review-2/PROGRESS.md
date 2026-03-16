@@ -21,3 +21,10 @@
 - [ ] Phase 12 Logging & Error Boundary Cleanup
 - [ ] Phase 13 Minor Fixes & Polish
 - [ ] Phase 14 Test Suite Improvements
+
+## Step Tracking
+
+### Phase 1
+- [x] Step 1.1 Fix TurnContext class-level mutable state
+- [ ] Step 1.2 Fix NodeStore batch() error handling and rollback
+- [ ] Step 1.3 Remove NodeStore.set_status and migrate callers

@@ -534,7 +534,6 @@ async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
 @pytest.mark.asyncio
 async def test_externals_send_message_rate_limit(context_env) -> None:
     node_store, event_store, workspace_service = context_env
-    TurnContext._send_message_timestamps.clear()
     sender = make_node("src/app.py::sender")
     target = make_node("src/app.py::target")
     await node_store.upsert_node(sender)
@@ -553,6 +552,41 @@ async def test_externals_send_message_rate_limit(context_env) -> None:
     assert await externals["send_message"](target.node_id, "one")
     assert await externals["send_message"](target.node_id, "two")
     assert not await externals["send_message"](target.node_id, "three")
+
+
+@pytest.mark.asyncio
+async def test_externals_send_message_rate_limit_isolated_per_context_instance(
+    context_env,
+) -> None:
+    node_store, event_store, workspace_service = context_env
+    sender = make_node("src/app.py::sender-isolated")
+    target = make_node("src/app.py::target-isolated")
+    await node_store.upsert_node(sender)
+    await node_store.upsert_node(target)
+    ws = await workspace_service.get_agent_workspace(sender.node_id)
+
+    first = await _context(
+        sender.node_id,
+        ws,
+        node_store,
+        event_store,
+        send_message_rate_limit=1,
+        send_message_rate_window_s=60.0,
+    )
+    second = await _context(
+        sender.node_id,
+        ws,
+        node_store,
+        event_store,
+        send_message_rate_limit=1,
+        send_message_rate_window_s=60.0,
+    )
+
+    first_externals = first.to_capabilities_dict()
+    second_externals = second.to_capabilities_dict()
+
+    assert await first_externals["send_message"](target.node_id, "one")
+    assert await second_externals["send_message"](target.node_id, "fresh-context")
 
 
 @pytest.mark.asyncio

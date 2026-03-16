@@ -27,8 +27,6 @@ from remora.core.workspace import AgentWorkspace
 class TurnContext:
     """Per-turn context providing externals API for an agent's tools."""
 
-    _send_message_timestamps: dict[str, deque[float]] = {}
-
     def __init__(
         self,
         node_id: str,
@@ -56,6 +54,7 @@ class TurnContext:
         self._send_message_rate_limit = max(1, int(send_message_rate_limit))
         self._send_message_rate_window_s = max(0.001, float(send_message_rate_window_s))
         self._search_service = search_service
+        self._send_message_timestamps: dict[str, deque[float]] = {}
 
     async def _emit(self, event: Event) -> int:
         """Emit an event through the outbox."""
