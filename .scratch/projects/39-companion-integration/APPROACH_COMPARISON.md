@@ -32,6 +32,15 @@
    - 8.1 Inline Hooks for Per-Agent Memory + Observer for Cross-Agent
    - 8.2 Phased Rollout
 9. [Recommendation & Trade-off Summary](#9-recommendation-trade-off-summary)
+10. [Appendix A: First-Principles Redesign of the Observer](#appendix-a-first-principles-redesign-of-the-observer)
+    - A.1 The v2 Ethos: What Are We Actually Building?
+    - A.2 What the Observer Really Wants to Do
+    - A.3 Existing Primitives We Haven't Fully Exploited
+    - A.4 Design A: The Agent That Teaches Itself (Self-Directed Companion)
+    - A.5 Design B: EventBus Listener + Direct KV (Non-Actor Observer)
+    - A.6 Design C: Scoped Workspace Delegation (Sanctioned Cross-Write)
+    - A.7 Design D: Event Enrichment Pipeline (No Observer At All)
+    - A.8 Synthesis: What Aligns Best With v2?
 
 ---
 
@@ -400,3 +409,355 @@ Phase 2 is entirely additive and can be deferred indefinitely without affecting 
 5. **Simplicity.** One file + a few modifications vs. a new subsystem with cross-workspace access, event loop risks, and concurrency contention.
 
 The observer pattern remains available for future cross-agent features, building on top of the inline hooks rather than replacing them.
+
+---
+
+## Appendix A: First-Principles Redesign of the Observer
+
+### Table of Contents
+
+- A.1 [The v2 Ethos: What Are We Actually Building?](#a1-the-v2-ethos-what-are-we-actually-building)
+- A.2 [What the Observer Really Wants to Do](#a2-what-the-observer-really-wants-to-do)
+- A.3 [Existing Primitives We Haven't Fully Exploited](#a3-existing-primitives-we-havent-fully-exploited)
+- A.4 [Design A: The Agent That Teaches Itself (Self-Directed Companion)](#a4-design-a-the-agent-that-teaches-itself-self-directed-companion)
+- A.5 [Design B: EventBus Listener + Direct KV (Non-Actor Observer)](#a5-design-b-eventbus-listener--direct-kv-non-actor-observer)
+- A.6 [Design C: Scoped Workspace Delegation (Sanctioned Cross-Write)](#a6-design-c-scoped-workspace-delegation-sanctioned-cross-write)
+- A.7 [Design D: Event Enrichment Pipeline (No Observer At All)](#a7-design-d-event-enrichment-pipeline-no-observer-at-all)
+- A.8 [Synthesis: What Aligns Best With v2?](#a8-synthesis-what-aligns-best-with-v2)
+
+---
+
+### A.1 The v2 Ethos: What Are We Actually Building?
+
+Before designing the observer, we need to state what remora-v2 *is* at the philosophical level, because the right design flows from first principles, not from jamming v1 concepts into v2 plumbing.
+
+**v2's core axioms, as evidenced by the code:**
+
+1. **Code elements are agents.** Every function, class, method, file, and directory IS an actor. There is no separation between "the code" and "the agent that manages it." `PromptBuilder.build_prompt()` says *"# Node: {node.full_name}"* — the agent IS the node. `code-agent/bundle.yaml` says *"You ARE the code element. Speak in the first person."*
+
+2. **One agent, one workspace, one identity.** Each actor has a sandboxed `AgentWorkspace` at `.remora/agents/<safe_id>/`. KV store, files, bundle config — all scoped to that one identity. There is no shared state between agents except through events.
+
+3. **Events are the only inter-agent channel.** Agents don't call each other. They emit events, subscribe to events, and send messages (which are events). The `TriggerDispatcher` is the only way one agent's action causes another agent to act. The subscription system is the permission model.
+
+4. **Bundles define behavior, not code.** An agent's personality, capabilities, and response patterns come from its bundle (system prompt, tool scripts, model choice). The Actor class is generic — behavior lives in configuration. The `system` bundle layers underneath role-specific bundles.
+
+5. **Virtual agents extend the graph without code elements.** `VirtualAgentConfig` lets you define agents that don't map to source code. They get subscriptions, bundles, workspaces — everything a real agent gets. They're first-class graph citizens with `NodeType.VIRTUAL`.
+
+6. **Tools are the agent's hands.** Grail `.pym` scripts are the mechanism through which agents act on the world. The `@external` pattern maps tool calls to `TurnContext` capabilities. Agents can only do what their tools allow.
+
+Now: how do these axioms constrain and enable the observer?
+
+---
+
+### A.2 What the Observer Really Wants to Do
+
+Strip away the implementation debates and state what the observer's *job* is:
+
+> **After an agent completes a turn, extract structured metadata (summary, tags, reflections, cross-node links) and persist that metadata so the originating agent can build on it in future turns.**
+
+Decompose this into primitives:
+
+1. **Trigger:** An agent completed a turn → `AgentCompleteEvent` was emitted.
+2. **Input:** The user message and assistant response from that turn.
+3. **Processing:** One LLM call with a structured output request.
+4. **Output:** Structured metadata (summary, tags, reflection, links).
+5. **Persistence:** Write to the originating agent's KV store.
+6. **Feedback loop:** The originating agent's system prompt reads back the accumulated metadata.
+
+The question is: *who* does steps 2-5, and *where* does that processing live?
+
+The main document's Approach A (virtual agent observer) says "a separate virtual agent." The recommended approach says "inline in the originating agent's turn executor." But there are other answers that flow from first principles.
+
+---
+
+### A.3 Existing Primitives We Haven't Fully Exploited
+
+Before inventing new machinery, audit what already exists:
+
+**Discovery 1: Companion tools already exist in `bundles/system/tools/`.**
+
+The system bundle already ships:
+- `reflect.pym` — Writes reflection notes to workspace files
+- `summarize.pym` — Generates an activity summary from event history
+- `categorize.pym` — Tags the code element by heuristic keyword matching
+- `find_links.pym` — Records graph edges to workspace files
+
+These tools are **already available to every agent** (system bundle layers under all role bundles). They write to workspace files (`notes/reflection.md`, `notes/summary.md`, `meta/categories.md`, `meta/links.md`) rather than KV, and they're heuristic-based rather than LLM-based. But they exist and they work.
+
+This means every agent *already has* companion-like capabilities. They just don't *use* them automatically after each turn.
+
+**Discovery 2: The `reactive` prompt mode already handles post-event behavior.**
+
+`PromptBuilder.build_system_prompt()` selects between `chat` and `reactive` prompts based on whether the trigger event has a `from_agent == "user"`. The reactive prompt in `code-agent/bundle.yaml` says:
+
+> *"A change was detected in your code or a related element. Review what happened. Use reflect to update your understanding."*
+
+Agents already have instructions to self-reflect when triggered by events. The infrastructure for "do companion work after something happens" exists in the prompt system.
+
+**Discovery 3: `EventBus` supports non-actor listeners.**
+
+`EventBus.subscribe()` and `EventBus.subscribe_all()` accept any `EventHandler` callable. `EventBus.stream()` yields an async iterator. These don't route through the actor system at all — they're direct in-process event listeners. The SSE endpoint in `web/server.py` uses `event_bus.stream()` to watch events. A companion processor could do the same.
+
+**Discovery 4: `CairnWorkspaceService.get_agent_workspace()` is a service-level call.**
+
+Any code that holds a reference to `CairnWorkspaceService` can call `get_agent_workspace(node_id)` for *any* agent. The sandboxing is at the `TurnContext` level (tools can only access `self.workspace`), not at the service level. The service itself has no sandboxing — it's already used by `FileReconciler` to provision bundles for arbitrary agents.
+
+This means a non-actor companion processor that holds `CairnWorkspaceService` can write to any agent's KV store without breaking any actual sandbox boundary. The workspace sandbox is a tool-level abstraction, not a storage-level one.
+
+---
+
+### A.4 Design A: The Agent That Teaches Itself (Self-Directed Companion)
+
+**Core idea:** Don't add an observer at all. Instead, make agents *teach themselves* by expanding the reactive turn to include self-reflection.
+
+**How it works:**
+
+After `AgentCompleteEvent` is emitted, the same agent receives it as a self-trigger (via a self-subscription). The agent runs a *second turn* in reactive mode, where its system prompt instructs it to:
+1. Review the exchange it just completed
+2. Use its existing tools (`reflect.pym`, `categorize.pym`, `kv_set.pym`) to record metadata
+3. Update its own understanding
+
+```yaml
+# In remora.yaml or via subscription setup
+# Each agent subscribes to its own AgentCompleteEvents
+```
+
+Or: add a `self_subscribe` flag in bundle config that auto-registers a subscription for the agent's own `AgentCompleteEvent` during bundle provisioning.
+
+**Alignment with v2 ethos:**
+
+- ✅ **Code elements are agents:** The agent is reflecting on *itself*. No external entity needed.
+- ✅ **One agent, one workspace:** Writes to its own KV. No cross-workspace access.
+- ✅ **Events are the channel:** Uses the existing subscription + dispatch system.
+- ✅ **Bundles define behavior:** The self-reflection behavior is controlled via the reactive prompt and tool availability.
+- ✅ **Tools are the hands:** Uses existing `reflect.pym`, `kv_set.pym`, etc.
+
+**Problems:**
+
+1. **Double turn cost.** Every agent turn triggers a second turn (the self-reflection). That's 2x LLM calls, 2x semaphore acquisition, 2x the latency. The second turn uses the full actor machinery (workspace lookup, tool discovery, kernel creation, structured-agents framework) for what amounts to "call LLM once with a structured output request."
+
+2. **Trigger depth.** The self-reflection turn emits its own `AgentCompleteEvent`, which could trigger another self-reflection. The `TriggerPolicy.max_trigger_depth` bounds this, but it wastes a depth slot. Need either: tags to distinguish "primary turn" from "reflection turn", or a `post_turn` flag on `AgentCompleteEvent` that subscriptions can filter on.
+
+3. **Tool overhead.** The LLM in the reflection turn must *decide* which tools to call (kv_set, reflect, etc.) and call them individually via the structured-agents tool-calling loop. This is heavier than a single `digest_turn()` function call that directly writes to KV. The agent might make bad tool choices, call too many tools, or hallucinate — all the failure modes of agentic LLM usage apply.
+
+4. **Prompt engineering burden.** Getting the reflection prompt right — so the agent consistently produces useful summaries and doesn't just say "I reviewed the activity, everything looks fine" — is a prompt engineering challenge that doesn't exist with structured output parsing.
+
+**Verdict:** Philosophically the most v2-aligned approach. Practically, it's expensive and fragile. The agent-as-self-reflector idea is beautiful but the overhead of running a full agentic turn for metadata extraction is disproportionate.
+
+---
+
+### A.5 Design B: EventBus Listener + Direct KV (Non-Actor Observer)
+
+**Core idea:** Use `EventBus.subscribe()` to register a plain async function (not an actor) that listens for `AgentCompleteEvent`, makes an LLM call directly, and writes to the originating agent's KV via `CairnWorkspaceService`.
+
+**How it works:**
+
+```python
+# core/companion.py
+
+class CompanionListener:
+    def __init__(
+        self,
+        workspace_service: CairnWorkspaceService,
+        config: Config,
+    ):
+        self._workspace_service = workspace_service
+        self._config = config
+
+    async def on_agent_complete(self, event: Event) -> None:
+        if not isinstance(event, AgentCompleteEvent):
+            return
+        # Make LLM call for structured digest
+        digest = await digest_turn(
+            agent_id=event.agent_id,
+            response_text=event.full_response,
+            model_name=self._config.post_turn_model,
+            config=self._config,
+        )
+        # Write directly to the originating agent's workspace KV
+        workspace = await self._workspace_service.get_agent_workspace(event.agent_id)
+        await apply_turn_digest(workspace, digest)
+```
+
+Registered during startup:
+```python
+listener = CompanionListener(services.workspace_service, services.config)
+services.event_bus.subscribe(AgentCompleteEvent, listener.on_agent_complete)
+```
+
+**Alignment with v2 ethos:**
+
+- ⚠️ **Not an agent.** The listener is infrastructure, like the EventStore or TriggerDispatcher. It doesn't have an identity, a workspace, or a conversation history. This is intentional — it's a system service, not a participant.
+- ✅ **Events are the channel.** Uses `EventBus.subscribe()` — the same mechanism the web SSE endpoint uses. No new event routing concepts.
+- ✅ **No concurrency contention.** Doesn't acquire the semaphore. Runs independently of the actor pool.
+- ⚠️ **Cross-workspace writes.** Uses `CairnWorkspaceService.get_agent_workspace()` to write to any agent's KV. This doesn't break the tool-level sandbox (TurnContext still restricts tool access), but it does mean a service-level component writes to agent-owned state. This is analogous to how `FileReconciler` provisions bundles into agent workspaces — existing precedent for service-level workspace writes.
+
+**Key insight:** `CairnWorkspaceService.get_agent_workspace()` is already called by `FileReconciler._provision_bundle()` which writes `_bundle/bundle.yaml` and `_bundle/tools/*.pym` into agent workspaces. The companion listener would be doing the exact same thing — a service-level component writing structured data into agent workspaces. The sandboxing boundary isn't violated because the boundary is at the TurnContext level, and this code doesn't go through TurnContext.
+
+**Problems:**
+
+1. **No user_message on AgentCompleteEvent.** `AgentCompleteEvent` has `full_response` and `result_summary`, but not the user message. The digest LLM call ideally needs both sides of the exchange for good summaries. Solutions:
+   - Enrich `AgentCompleteEvent` with a `user_message` field (adds ~100 chars per event to storage)
+   - Have the listener query `event_store.get_events_for_agent()` to reconstruct context (adds latency)
+   - Accept lower-quality digests based only on the response (simpler, may be sufficient)
+
+2. **Not observable in the agent graph.** The listener isn't a node — it doesn't show up in the web UI's node list, doesn't emit its own events, doesn't have metrics. It's invisible infrastructure. This may be fine (the EventStore is also invisible) or may be a problem (can't monitor companion processing health).
+
+3. **Direct LLM calls outside the kernel system.** The listener makes LLM calls without going through `create_kernel()` / structured-agents. It needs its own httpx client or a simpler LLM call wrapper. This is a new code path for LLM interaction.
+
+**Verdict:** Pragmatic and well-aligned. Uses existing event infrastructure without creating a new actor. The cross-workspace write follows the `FileReconciler` precedent. The main weakness is lack of observability and the need for a standalone LLM call path.
+
+---
+
+### A.6 Design C: Scoped Workspace Delegation (Sanctioned Cross-Write)
+
+**Core idea:** Extend the virtual agent model with a new capability: *delegated workspace write access*. A virtual agent can be granted explicit write permission to specific KV prefixes in other agents' workspaces, declared in the configuration.
+
+**How it works:**
+
+```yaml
+virtual_agents:
+  - id: companion-observer
+    role: companion
+    subscriptions:
+      - event_types: ["AgentCompleteEvent"]
+    workspace_delegation:
+      kv_prefix: "companion/"
+      scope: "all"  # or list of specific agent IDs
+```
+
+This tells the system: "the `companion-observer` agent is allowed to write KV keys under `companion/` in any agent's workspace." A new `TurnContext` method is exposed:
+
+```python
+async def delegated_kv_set(self, agent_id: str, key: str, value: Any) -> bool:
+    """Write to another agent's KV store under a delegated prefix."""
+```
+
+The method checks the caller's delegation scope (from its `VirtualAgentConfig`) before allowing the write. Only the declared prefix is writable. The tool is only available to agents that have delegation configured.
+
+**Alignment with v2 ethos:**
+
+- ✅ **The observer is a real agent.** Virtual agent with identity, workspace, subscriptions — first-class graph citizen.
+- ✅ **Events are the channel.** Standard subscription routing.
+- ✅ **Bundles define behavior.** The observer's behavior comes from its bundle's system prompt and tools.
+- ⚠️ **Sandboxing is loosened, not broken.** The delegation is explicit, scoped, and declared in configuration. Unlike a blanket `kv_set_foreign()`, this limits writes to a specific prefix (`companion/`) for specific agents. The admin explicitly grants this power.
+- ✅ **Discoverable.** The observer is visible in the node graph, emits events, has metrics.
+
+**New concepts introduced:**
+
+1. `workspace_delegation` in `VirtualAgentConfig` — new config field
+2. `delegated_kv_set` / `delegated_kv_get` in `TurnContext` — new capabilities
+3. Delegation check logic in TurnContext (read delegation scope from config)
+4. A new Grail tool: `delegated_kv_set.pym`
+
+**Problems:**
+
+1. **Config-to-runtime plumbing.** The `VirtualAgentConfig.workspace_delegation` must flow through: `FileReconciler._sync_virtual_agents()` → `_provision_bundle()` → somehow into the `TurnContext` that gets created for the observer's turns. Currently, `TurnContext` knows nothing about the agent's config — it gets instantiated with raw parameters. We'd need to either pass the delegation config into TurnContext or have a registry that TurnContext queries.
+
+2. **Still a full actor turn.** Same overhead as Approach A: semaphore slot, workspace setup, tool discovery, kernel creation. The delegation solves the cross-workspace problem but doesn't solve the cost problem.
+
+3. **Self-trigger loop.** Still present. The observer's `AgentCompleteEvent` must be filtered.
+
+4. **Complexity budget.** A new config concept, new TurnContext method, new capability, new tool — for something that could be a 5-line function call in the turn executor. The abstraction carries weight proportional to a feature that's used by exactly one agent.
+
+**Verdict:** The most architecturally principled solution to the cross-workspace problem. If you *must* have a virtual agent observer, this is how to do it right. But the overhead of the full actor turn cycle and the new config/capability surface area are significant costs for what remains a metadata extraction task.
+
+---
+
+### A.7 Design D: Event Enrichment Pipeline (No Observer At All)
+
+**Core idea:** Abandon the "observer" framing entirely. Instead, treat companion metadata as *event enrichment* — a processing pipeline that annotates events before they're persisted, similar to how a database trigger enriches rows on insert.
+
+**How it works:**
+
+Add an optional enrichment step in `EventStore.append()`:
+
+```python
+async def append(self, event: Event) -> int:
+    # Existing: persist, bus emit, dispatch
+    event_id = await self._persist(event)
+    await self._event_bus.emit(event)
+    await self._dispatcher.dispatch(event)
+
+    # NEW: post-persist enrichment (fire-and-forget)
+    if self._enrichment_pipeline:
+        asyncio.create_task(
+            self._enrichment_pipeline.process(event, event_id)
+        )
+    return event_id
+```
+
+The enrichment pipeline is a simple list of async processors:
+
+```python
+class CompanionEnricher:
+    """Enriches AgentCompleteEvents with companion metadata."""
+
+    async def process(self, event: Event, event_id: int) -> None:
+        if not isinstance(event, AgentCompleteEvent):
+            return
+        digest = await digest_turn(event.agent_id, event.full_response, ...)
+        workspace = await self._workspace_service.get_agent_workspace(event.agent_id)
+        await apply_turn_digest(workspace, digest)
+```
+
+**Alignment with v2 ethos:**
+
+- ✅ **Events as the backbone.** The enrichment IS the event system doing its job — events flow through a pipeline and get annotated along the way.
+- ⚠️ **Not an agent.** Like Design B, this is infrastructure, not an entity.
+- ✅ **Zero concurrency impact.** Fire-and-forget task, no semaphore.
+- ⚠️ **Modifies EventStore.** Adds a new concept (enrichment pipeline) to the event persistence layer.
+
+**Problems:**
+
+1. **EventStore scope creep.** EventStore currently does exactly three things: persist, bus-emit, dispatch. Adding enrichment makes it a four-stage pipeline. The enrichment is conceptually separate from event persistence — it's a downstream consumer, not a persistence concern.
+
+2. **Same cross-workspace pattern as Design B.** Uses `CairnWorkspaceService` directly. Same precedent, same trade-offs.
+
+3. **Ordering guarantees.** If the enrichment is fire-and-forget, there's no guarantee the companion data is written before the next turn reads it. For a system prompt that reads companion context, this means the most recent exchange's digest might not be available. (This is also true of Design B and the inline hooks approach — all fire-and-forget.)
+
+**Verdict:** Clean concept but wrong placement. The EventStore shouldn't grow responsibilities. The enrichment logic belongs at a higher layer — which is essentially what the inline hooks approach or Design B already are.
+
+---
+
+### A.8 Synthesis: What Aligns Best With v2?
+
+Let's score each design against the v2 axioms:
+
+| Axiom | Self-Directed (A) | EventBus Listener (B) | Scoped Delegation (C) | Event Enrichment (D) |
+|-------|:-:|:-:|:-:|:-:|
+| Code elements are agents | ✅ Best | ❌ Not an agent | ✅ Virtual agent | ❌ Not an agent |
+| One agent, one workspace | ✅ Own workspace | ⚠️ Writes to others (precedented) | ⚠️ Scoped cross-write | ⚠️ Writes to others |
+| Events are the channel | ✅ Self-subscription | ✅ EventBus.subscribe | ✅ Subscription dispatch | ✅ Event pipeline |
+| Bundles define behavior | ✅ Prompt-driven | ❌ Code-driven | ✅ Prompt-driven | ❌ Code-driven |
+| Tools are the hands | ✅ Uses existing tools | ❌ Direct function call | ✅ New delegated tool | ❌ Direct function call |
+| Practical cost | ❌ 2x turns | ✅ Minimal overhead | ⚠️ Full turn + new concepts | ✅ Minimal overhead |
+
+**The philosophical winner is Design A (self-directed)** — it's the most v2-native because the agent teaches itself using its own tools, workspace, and event subscriptions. No new concepts needed. It's what the system was *designed* for.
+
+**The practical winner is Design B (EventBus listener)** — it's the lightest-weight implementation that uses existing infrastructure (EventBus.subscribe, CairnWorkspaceService) with clear precedent (FileReconciler already writes to agent workspaces).
+
+**The compromise winner is Design C (scoped delegation)** — it solves the cross-workspace problem properly and keeps the observer as a first-class agent. But the implementation cost is high for a v1 feature.
+
+**The "maybe later" insight:** Designs A and C are most interesting when companion behavior needs to be *customizable per deployment*. If different projects want different reflection strategies, the agent-based approaches let you swap bundles rather than code. But if the companion pipeline is the same everywhere (summarize + tag + reflect + link), the code-based approaches (B, or the original inline hooks) are simpler.
+
+### The Real First-Principles Answer
+
+If we truly start from v2's ethos, the answer is this:
+
+**The companion system shouldn't be a separate subsystem at all.** v2 was designed so that every agent IS a companion to its code element. The system bundle already ships `reflect.pym`, `categorize.pym`, `find_links.pym`, `summarize.pym`. The `code-agent` bundle's reactive prompt already says *"Use reflect to update your understanding."*
+
+The gap isn't "we need a companion system." The gap is:
+1. **Agents don't self-reflect reliably** — they need better prompts and possibly a post-turn reactive trigger
+2. **The existing tools write to files instead of KV** — should be updated to use `kv_set`
+3. **There's no mechanism to auto-trigger self-reflection** — agents only reflect when the LLM decides to call the tool during a turn
+
+The minimal v2-aligned intervention is:
+- Update `reflect.pym`, `summarize.pym`, `categorize.pym`, `find_links.pym` to use `kv_set` instead of `write_file`
+- Add a `post_turn_self_trigger` config option that auto-fires a self-subscription for `AgentCompleteEvent`
+- Improve reactive prompts to consistently produce useful reflections
+- Accept the 2x turn cost as the price of staying within v2's model
+
+OR: accept that post-turn metadata extraction is an *infrastructure concern* (like bundle provisioning, event persistence, or subscription matching) and implement it as infrastructure — which is exactly what the inline hooks approach does.
+
+Both are honest answers to "what does v2 want?" The choice depends on whether you believe companion metadata is an *agent behavior* (→ self-directed) or an *infrastructure service* (→ inline hooks / EventBus listener).
