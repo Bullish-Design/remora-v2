@@ -171,6 +171,99 @@ def _write_proposal_project(
     return RuntimeProject(config_path=config_path, source_path=source_path)
 
 
+def _write_reactive_mode_project(
+    root: Path,
+    *,
+    model_url: str,
+    model_name: str,
+    model_api_key: str,
+) -> RuntimeProject:
+    source_path = root / "src" / "app.py"
+    write_file(source_path, "def alpha():\n    return 1\n")
+
+    bundles_root = root / "bundles"
+    system = bundles_root / "system"
+    code = bundles_root / "code-agent"
+    directory = bundles_root / "directory-agent"
+    (system / "tools").mkdir(parents=True, exist_ok=True)
+    (code / "tools").mkdir(parents=True, exist_ok=True)
+    (directory / "tools").mkdir(parents=True, exist_ok=True)
+
+    write_file(
+        system / "bundle.yaml",
+        (
+            "name: system\n"
+            "system_prompt: >-\n"
+            "  You are a deterministic acceptance-test agent.\n"
+            "  If the user asks for rewrite_to_magic, call rewrite_to_magic exactly once,\n"
+            "  then reply in one sentence.\n"
+            "  For reactive (non-user) turns, you MUST call emit_mode_token exactly once,\n"
+            "  then reply in one sentence.\n"
+            f"model: {model_name}\n"
+            "max_turns: 8\n"
+            "prompts:\n"
+            "  chat: |\n"
+            "    MODE_TOKEN=chat-ok\n"
+            "  reactive: |\n"
+            "    MODE_TOKEN=reactive-ok\n"
+        ),
+    )
+    write_file(code / "bundle.yaml", f"name: code-agent\nmodel: {model_name}\nmax_turns: 8\n")
+    write_file(
+        directory / "bundle.yaml",
+        f"name: directory-agent\nmodel: {model_name}\nmax_turns: 8\n",
+    )
+    write_file(
+        system / "tools" / "emit_mode_token.pym",
+        (
+            "from grail import external\n\n"
+            "@external\n"
+            "async def my_node_id() -> str: ...\n"
+            "@external\n"
+            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "node_id = await my_node_id()\n"
+            "ok = await send_message(node_id, \"reactive-ok\")\n"
+            "result = \"reactive-ok\" if ok else \"failed\"\n"
+            "result\n"
+        ),
+    )
+    write_file(
+        code / "tools" / "rewrite_to_magic.pym",
+        (
+            "from grail import external\n\n"
+            "@external\n"
+            "async def write_file(path: str, content: str) -> bool: ...\n"
+            "@external\n"
+            "async def propose_changes(reason: str = '') -> str: ...\n\n"
+            "await write_file(\"source/src/app.py\", \"def alpha():\\n    return 3\\n\")\n"
+            "proposal_id = await propose_changes(\"reactive acceptance rewrite\")\n"
+            "proposal_id\n"
+        ),
+    )
+
+    config_path = root / "remora.yaml"
+    config_path.write_text(
+        (
+            "discovery_paths:\n"
+            "  - src\n"
+            "discovery_languages:\n"
+            "  - python\n"
+            "language_map:\n"
+            "  .py: python\n"
+            "query_paths: []\n"
+            "workspace_root: .remora-acceptance\n"
+            f"bundle_root: {bundles_root}\n"
+            f"model_base_url: {model_url}\n"
+            f"model_default: {model_name}\n"
+            f"model_api_key: {model_api_key}\n"
+            "timeout_s: 60\n"
+            "max_turns: 8\n"
+        ),
+        encoding="utf-8",
+    )
+    return RuntimeProject(config_path=config_path, source_path=source_path)
+
+
 async def _wait_for_health(base_url: str, timeout_s: float = _READINESS_TIMEOUT_S) -> None:
     deadline = time.monotonic() + timeout_s
     async with httpx.AsyncClient(base_url=base_url, timeout=2.0) as client:
@@ -200,12 +293,27 @@ async def _wait_for_event(
     timeout_s: float = _EVENT_TIMEOUT_S,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_s
+    last_events: list[dict[str, Any]] = []
     while time.monotonic() < deadline:
-        for event in await _fetch_events(client):
+        last_events = await _fetch_events(client)
+        for event in last_events:
             if predicate(event):
                 return event
         await asyncio.sleep(0.2)
-    raise AssertionError(f"Timed out waiting for matching event after {timeout_s}s")
+    recent = [
+        (
+            event.get("event_type"),
+            event.get("correlation_id"),
+            event.get("payload", {}).get("agent_id"),
+            event.get("payload", {}).get("from_agent"),
+            event.get("payload", {}).get("to_agent"),
+            event.get("payload", {}).get("content"),
+        )
+        for event in last_events[:20]
+    ]
+    raise AssertionError(
+        f"Timed out waiting for matching event after {timeout_s}s; recent_events={recent}"
+    )
 
 
 async def _wait_for_function_node_id(client: httpx.AsyncClient) -> str:
@@ -222,6 +330,22 @@ async def _wait_for_function_node_id(client: httpx.AsyncClient) -> str:
                     return node_id
         await asyncio.sleep(0.2)
     raise AssertionError("Timed out waiting for discovered function node")
+
+
+async def _wait_for_directory_node_id(client: httpx.AsyncClient) -> str:
+    deadline = time.monotonic() + _EVENT_TIMEOUT_S
+    while time.monotonic() < deadline:
+        response = await client.get("/api/nodes")
+        assert response.status_code == 200
+        nodes = response.json()
+        assert isinstance(nodes, list)
+        for node in nodes:
+            if node.get("node_type") == "directory":
+                node_id = str(node.get("node_id", "")).strip()
+                if node_id == ".":
+                    return node_id
+        await asyncio.sleep(0.2)
+    raise AssertionError("Timed out waiting for root directory node")
 
 
 async def _wait_for_pending_proposal(
@@ -409,3 +533,71 @@ async def test_acceptance_proposal_flow_generates_diff_and_accept_materializes_f
                     and event.get("payload", {}).get("path") == str(materialized_path)
                 ),
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
+@pytest.mark.real_llm
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_acceptance_reactive_file_change_triggers_live_real_llm_turn(
+    tmp_path: Path,
+) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+
+    runtime_project = _write_reactive_mode_project(
+        tmp_path,
+        model_url=model_url,
+        model_name=model_name,
+        model_api_key=model_api_key,
+    )
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=runtime_project.config_path,
+        port=port,
+    ) as base_url:
+        async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+            function_node_id = await _wait_for_function_node_id(client)
+            directory_node_id = await _wait_for_directory_node_id(client)
+            chat_response = await client.post(
+                "/api/chat",
+                json={
+                    "node_id": function_node_id,
+                    "message": "Call rewrite_to_magic exactly once, then confirm completion.",
+                },
+            )
+            assert chat_response.status_code == 200
+            await _wait_for_pending_proposal(client, node_id=function_node_id)
+            accept_response = await client.post(f"/api/proposals/{function_node_id}/accept", json={})
+            assert accept_response.status_code == 200
+
+            message_event = await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "AgentMessageEvent"
+                    and event.get("payload", {}).get("from_agent") == directory_node_id
+                    and event.get("payload", {}).get("to_agent") == directory_node_id
+                    and event.get("payload", {}).get("content") == "reactive-ok"
+                ),
+            )
+            correlation_id = str(message_event.get("correlation_id") or "").strip()
+            assert correlation_id
+
+            await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "AgentCompleteEvent"
+                    and event.get("correlation_id") == correlation_id
+                ),
+            )
+            events = await _fetch_events(client)
+            errors = [
+                event
+                for event in events
+                if event.get("event_type") == "AgentErrorEvent"
+                and event.get("correlation_id") == correlation_id
+            ]
+            assert errors == []
