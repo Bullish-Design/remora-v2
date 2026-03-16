@@ -112,3 +112,11 @@ Next action:
 
 Next action:
 - Step 4.2: replace `AgentTurnExecutor._read_bundle_config` manual parsing with `BundleConfig`.
+- Step 4.2 completed:
+  - replaced `_read_bundle_config` manual field validation with `BundleConfig.model_validate(...)`
+  - preserved previous behavior for malformed YAML and disabled `self_reflect`
+  - kept explicit defaults provided in YAML via `exclude_unset=True`
+  - verification: `tests/unit/test_actor.py` passed
+
+Next action:
+- Step 4.3: update bundle config caller typing so prompt/build paths use typed config shape.

@@ -43,5 +43,5 @@
 
 ### Phase 4
 - [x] Step 4.1 Create `BundleConfig` and `SelfReflectConfig` models
-- [ ] Step 4.2 Replace `AgentTurnExecutor._read_bundle_config` manual validation
+- [x] Step 4.2 Replace `AgentTurnExecutor._read_bundle_config` manual validation
 - [ ] Step 4.3 Update bundle config callers/types

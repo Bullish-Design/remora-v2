@@ -11,9 +11,10 @@ from typing import Any
 
 import yaml
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
+from pydantic import ValidationError
 from structured_agents import Message
 
-from remora.core.config import Config, _expand_env_vars
+from remora.core.config import BundleConfig, Config, _expand_env_vars
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
 from remora.core.events.types import (
@@ -676,50 +677,19 @@ class AgentTurnExecutor:
         if not isinstance(expanded, dict):
             return {}
 
-        validated: dict[str, Any] = {}
-        for key in ("system_prompt", "system_prompt_extension", "model"):
-            value = expanded.get(key)
-            if isinstance(value, str) and value.strip():
-                validated[key] = value
-
-        max_turns = expanded.get("max_turns")
-        if max_turns is not None:
-            try:
-                validated["max_turns"] = max(1, int(max_turns))
-            except (TypeError, ValueError):
-                pass
-
-        prompts = expanded.get("prompts")
-        if isinstance(prompts, dict):
-            prompt_values: dict[str, str] = {}
-            for mode in ("chat", "reactive"):
-                value = prompts.get(mode)
-                if isinstance(value, str) and value.strip():
-                    prompt_values[mode] = value
-            if prompt_values:
-                validated["prompts"] = prompt_values
-
+        # Preserve previous behavior: disabled self-reflect should be treated as absent.
         self_reflect = expanded.get("self_reflect")
-        if isinstance(self_reflect, dict):
-            sr_values: dict[str, Any] = {}
-            if self_reflect.get("enabled"):
-                sr_values["enabled"] = True
-            sr_model = self_reflect.get("model")
-            if isinstance(sr_model, str) and sr_model.strip():
-                sr_values["model"] = sr_model
-            sr_max_turns = self_reflect.get("max_turns")
-            if sr_max_turns is not None:
-                try:
-                    sr_values["max_turns"] = max(1, int(sr_max_turns))
-                except (TypeError, ValueError):
-                    pass
-            sr_prompt = self_reflect.get("prompt")
-            if isinstance(sr_prompt, str) and sr_prompt.strip():
-                sr_values["prompt"] = sr_prompt
-            if sr_values:
-                validated["self_reflect"] = sr_values
+        if isinstance(self_reflect, dict) and not self_reflect.get("enabled"):
+            expanded = dict(expanded)
+            expanded.pop("self_reflect", None)
 
-        return validated
+        try:
+            bundle = BundleConfig.model_validate(expanded)
+        except ValidationError:
+            logger.warning("Ignoring invalid _bundle/bundle.yaml")
+            return {}
+
+        return bundle.model_dump(exclude_none=True, exclude_unset=True)
 
 
 class Actor:
