@@ -15,6 +15,7 @@
 - Completed item `5.3` by adding a regression test that enforces zero `assert` statements in production code under `src/remora/`.
 - Completed item `5.4` by adding Pyright config in `pyproject.toml` and adding `pyright` to dev dependencies.
 - Completed item `5.5` by standardizing enum handling across graph/external/LSP/reconciler paths: enum-first NodeStore query/status APIs, enum serialization via `serialize_enum`, and `ChangeType` enum usage for content-change events.
+- Completed item `5.6` by wiring health endpoint version reporting to `remora.__version__` and asserting it in web unit tests.
 - Verification run for 4.1:
   - `devenv shell -- uv sync --extra dev`
   - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_runner.py -q`
@@ -43,4 +44,7 @@
   - `devenv shell -- pytest tests/unit/test_graph.py tests/unit/test_externals.py tests/unit/test_reconciler.py tests/unit/test_lsp_server.py tests/unit/test_web_server.py -q`
   - `devenv shell -- ruff check src/remora tests/unit/test_graph.py tests/unit/test_externals.py tests/unit/test_web_server.py`
   - `devenv shell -- pyright src/remora` (15 baseline issues remain)
-- Next action: commit+push item 5.5, then finalize item `5.6` (`__version__` in health endpoint).
+- Verification run for 5.6:
+  - `devenv shell -- pytest tests/unit/test_web_server.py -q`
+  - `devenv shell -- ruff check src/remora tests/unit/test_web_server.py`
+- Next action: commit+push item 5.6 and finalize project completion summary.

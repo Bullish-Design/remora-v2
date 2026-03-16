@@ -11,7 +11,7 @@
 - [x] 5.3 Replace production `assert`
 - [x] 5.4 Add type checking config to CI/project config
 - [x] 5.5 Standardize enum handling
-- [ ] 5.6 Health check imports `__version__`
+- [x] 5.6 Health check imports `__version__`
 
 ## Commit Log
 - [x] `2024f2d` 4.1 Extract Actor responsibilities into `TriggerPolicy`, `PromptBuilder`, and `AgentTurnExecutor`
@@ -23,4 +23,5 @@
 - [x] `667e15a` 5.2 Enforce lifespan API via typed context + regression test
 - [x] `6ca539e` 5.3 Add regression guard preventing production `assert` statements
 - [x] `98ed9d5` 5.4 Add Pyright config and dev dependency in project config
-- [pending push] 5.5 Standardize enum usage and boundary serialization paths
+- [x] `6c255e2` 5.5 Standardize enum usage and boundary serialization paths
+- [pending push] 5.6 Use package `__version__` in web health endpoint response

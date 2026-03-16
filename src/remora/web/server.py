@@ -20,6 +20,7 @@ from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
+from remora import __version__
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
@@ -32,7 +33,7 @@ from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
-from remora.core.types import NodeStatus, serialize_enum
+from remora.core.types import ChangeType, NodeStatus, serialize_enum
 
 if TYPE_CHECKING:
     from remora.core.runner import ActorPool
@@ -320,7 +321,7 @@ def create_app(
             await event_store.append(
                 ContentChangedEvent(
                     path=str(disk_path),
-                    change_type="modified",
+                    change_type=ChangeType.MODIFIED,
                     agent_id=node_id,
                     old_hash=hashlib.sha256(old_bytes).hexdigest(),
                     new_hash=hashlib.sha256(new_bytes).hexdigest(),
@@ -381,7 +382,7 @@ def create_app(
         node_count = int(row[0]) if row is not None else 0
         health: dict[str, object] = {
             "status": "ok",
-            "version": "0.5.0",
+            "version": __version__,
             "nodes": node_count,
         }
         if metrics is not None:

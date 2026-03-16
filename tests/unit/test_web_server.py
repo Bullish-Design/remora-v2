@@ -12,6 +12,7 @@ import pytest_asyncio
 from structured_agents import Message
 from tests.factories import make_node
 
+from remora import __version__
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import (
@@ -426,6 +427,7 @@ async def test_health_endpoint_returns_ok(web_env) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
+    assert payload["version"] == __version__
     assert payload["nodes"] >= 1
 
 

@@ -11,3 +11,4 @@
 - `2026-03-16`: Since production had no `assert` statements, item `5.3` was implemented as a regression guard test scanning `src/remora` AST for `ast.Assert` nodes to prevent future reintroduction.
 - `2026-03-16`: Implemented item `5.4` by enabling Pyright in project config (`pyproject.toml`) and adding it to dev dependencies; existing type errors remain as baseline follow-up work rather than blocking this configuration step.
 - `2026-03-16`: Standardized enum usage by making `NodeStore` APIs enum-first and converting all remaining direct enum `.value` handling to the shared `serialize_enum` boundary utility; event change type arguments now use `ChangeType` directly.
+- `2026-03-16`: For item `5.6`, replaced hard-coded health endpoint version with `remora.__version__` and locked behavior with a unit test assertion.
