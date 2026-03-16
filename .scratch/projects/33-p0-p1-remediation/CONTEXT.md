@@ -14,7 +14,9 @@ Current status:
 - Added test coverage proving unused file locks are removed on subsequent cycles.
 - Item 5 complete: EventBus emit now dispatches to exact type handlers plus base `Event` handlers only.
 - Added regression test ensuring intermediate inheritance handlers are not invoked.
+- Item 6 complete: `NodeStore.transition_status` now uses atomic conditional UPDATE based on allowed source states.
+- Added concurrency-oriented test for competing transitions from `running`.
 
 Next:
-- Implement item 6: Atomic `transition_status`.
+- Implement item 7: `graph_set_status` transition validation.
 - Keep one-item-per-commit and push after each item.

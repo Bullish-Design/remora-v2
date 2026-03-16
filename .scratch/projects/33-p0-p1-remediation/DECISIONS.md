@@ -19,3 +19,7 @@
 ## 2026-03-15 - EventBus dispatch semantics
 - Decision: Replace MRO-based dispatch with exact event-type dispatch plus explicit `Event` base dispatch.
 - Rationale: Avoid accidental delivery to intermediate base-class subscribers while preserving global/base handler behavior.
+
+## 2026-03-15 - Node status transition atomicity
+- Decision: Implement `transition_status` as a single conditional SQL update with allowed source statuses in the `WHERE` clause.
+- Rationale: Prevent stale read/validate/write races where invalid transitions can be committed under concurrent status changes.

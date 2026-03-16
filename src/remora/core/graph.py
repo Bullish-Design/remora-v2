@@ -8,7 +8,7 @@ from typing import Any
 
 import aiosqlite
 from remora.core.node import Node
-from remora.core.types import NodeStatus, NodeType, validate_status_transition
+from remora.core.types import STATUS_TRANSITIONS, NodeStatus, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -142,21 +142,30 @@ class NodeStore:
         await self._db.commit()
 
     async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
-        """Transition node status if the transition is valid."""
+        """Transition node status atomically when the transition is valid."""
+        valid_sources = [state for state, targets in STATUS_TRANSITIONS.items() if target in targets]
+        if not valid_sources:
+            return False
+
+        placeholders = ", ".join("?" for _ in valid_sources)
+        cursor = await self._db.execute(
+            f"UPDATE nodes SET status = ? WHERE node_id = ? AND status IN ({placeholders})",
+            (target.value, node_id, *[source.value for source in valid_sources]),
+        )
+        await self._db.commit()
+        if cursor.rowcount > 0:
+            return True
+
         node = await self.get_node(node_id)
         if node is None:
             return False
-        current = node.status
-        if not validate_status_transition(current, target):
-            logger.warning(
-                "Invalid status transition for %s: %s -> %s",
-                node_id,
-                current,
-                target,
-            )
-            return False
-        await self.set_status(node_id, target)
-        return True
+        logger.warning(
+            "Invalid status transition for %s: %s -> %s",
+            node_id,
+            node.status,
+            target,
+        )
+        return False
 
     async def add_edge(self, from_id: str, to_id: str, edge_type: str) -> None:
         """Insert an edge unless it already exists."""

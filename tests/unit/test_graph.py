@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from tests.factories import make_node
 
@@ -189,6 +191,23 @@ async def test_nodestore_transition_status_awaiting_review(db) -> None:
     idle = await store.get_node("src/app.py::a")
     assert idle is not None
     assert idle.status == NodeStatus.IDLE
+
+
+@pytest.mark.asyncio
+async def test_nodestore_transition_status_competing_updates_only_one_wins(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a", status="running"))
+
+    results = await asyncio.gather(
+        store.transition_status("src/app.py::a", NodeStatus.AWAITING_INPUT),
+        store.transition_status("src/app.py::a", NodeStatus.ERROR),
+    )
+
+    assert sum(1 for result in results if result) == 1
+    updated = await store.get_node("src/app.py::a")
+    assert updated is not None
+    assert updated.status in {NodeStatus.AWAITING_INPUT, NodeStatus.ERROR}
 
 
 @pytest.mark.asyncio
