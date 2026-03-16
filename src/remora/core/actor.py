@@ -371,7 +371,20 @@ class AgentTurnExecutor:
 
                 response_text = extract_response_text(result)
                 self._history.append(Message(role="assistant", content=response_text))
-                await self._complete_agent_turn(node_id, response_text, outbox, trigger, turn_log)
+                is_reflection = (
+                    trigger.event is not None
+                    and trigger.event.event_type == "AgentCompleteEvent"
+                    and "primary" in getattr(trigger.event, "tags", ())
+                )
+                turn_tags = ("reflection",) if is_reflection else ("primary",)
+                await self._complete_agent_turn(
+                    node_id,
+                    response_text,
+                    outbox,
+                    trigger,
+                    turn_log,
+                    turn_tags=turn_tags,
+                )
                 if self._metrics is not None:
                     self._metrics.agent_turns_total += 1
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
@@ -512,6 +525,8 @@ class AgentTurnExecutor:
         outbox: Outbox,
         trigger: Trigger,
         turn_log: logging.LoggerAdapter,
+        *,
+        turn_tags: tuple[str, ...] = ("primary",),
     ) -> None:
         turn_log.info(
             "Agent turn complete node=%s corr=%s response=%s",
@@ -525,6 +540,7 @@ class AgentTurnExecutor:
                 result_summary=response_text[:200],
                 full_response=response_text,
                 correlation_id=trigger.correlation_id,
+                tags=turn_tags,
             )
         )
 
