@@ -34,6 +34,30 @@ async def test_bus_mro_dispatch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_bus_does_not_dispatch_to_intermediate_base_classes() -> None:
+    bus = EventBus()
+    seen: list[str] = []
+
+    class IntermediateEvent(Event):
+        value: str
+
+    class DerivedEvent(IntermediateEvent):
+        pass
+
+    def intermediate_handler(_event: IntermediateEvent) -> None:
+        seen.append("intermediate")
+
+    def base_handler(_event: Event) -> None:
+        seen.append("base")
+
+    bus.subscribe(IntermediateEvent, intermediate_handler)
+    bus.subscribe(Event, base_handler)
+    await bus.emit(DerivedEvent(value="x"))
+
+    assert seen == ["base"]
+
+
+@pytest.mark.asyncio
 async def test_bus_subscribe_all() -> None:
     bus = EventBus()
     seen: list[str] = []

@@ -12,7 +12,9 @@ Current status:
 - Added tests for stale depth eviction and timestamp cleanup on reset.
 - Item 4 complete: FileReconciler now tracks file locks by reconcile generation and evicts stale unlocked entries.
 - Added test coverage proving unused file locks are removed on subsequent cycles.
+- Item 5 complete: EventBus emit now dispatches to exact type handlers plus base `Event` handlers only.
+- Added regression test ensuring intermediate inheritance handlers are not invoked.
 
 Next:
-- Implement item 5: Event bus dispatch fix.
+- Implement item 6: Atomic `transition_status`.
 - Keep one-item-per-commit and push after each item.

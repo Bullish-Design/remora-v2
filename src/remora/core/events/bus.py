@@ -14,16 +14,18 @@ logger = logging.getLogger(__name__)
 
 
 class EventBus:
-    """In-memory event dispatch with inheritance-aware subscriptions."""
+    """In-memory event dispatch with exact-type subscriptions."""
 
     def __init__(self) -> None:
         self._handlers: dict[type[Event], list[EventHandler]] = {}
         self._all_handlers: list[EventHandler] = []
 
     async def emit(self, event: Event) -> None:
-        """Emit an event to all specific and global handlers."""
-        for event_type in type(event).__mro__:
-            await self._dispatch_handlers(self._handlers.get(event_type, []), event)
+        """Emit an event to exact-type, base Event, and global handlers."""
+        event_type = type(event)
+        await self._dispatch_handlers(self._handlers.get(event_type, []), event)
+        if event_type is not Event:
+            await self._dispatch_handlers(self._handlers.get(Event, []), event)
         await self._dispatch_handlers(self._all_handlers, event)
 
     @staticmethod

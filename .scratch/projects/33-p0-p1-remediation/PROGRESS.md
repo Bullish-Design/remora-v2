@@ -4,7 +4,7 @@
 - [x] 2. CSRF middleware (P0)
 - [x] 3. Actor `_depths` TTL cleanup (P0)
 - [x] 4. FileReconciler `_file_locks` eviction (P0)
-- [ ] 5. Event bus dispatch fix (P0)
+- [x] 5. Event bus dispatch fix (P0)
 - [ ] 6. Atomic `transition_status` (P0)
 - [ ] 7. `graph_set_status` transition validation (P1)
 - [ ] 8. Batch SQLite commits (P1)

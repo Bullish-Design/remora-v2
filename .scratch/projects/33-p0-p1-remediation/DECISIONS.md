@@ -15,3 +15,7 @@
 ## 2026-03-15 - Reconciler file-lock lifecycle
 - Decision: Track file locks per reconcile generation and evict unlocked locks unused by the latest generation.
 - Rationale: Prevent unbounded lock-map growth while preserving per-file mutual exclusion during active reconciliation.
+
+## 2026-03-15 - EventBus dispatch semantics
+- Decision: Replace MRO-based dispatch with exact event-type dispatch plus explicit `Event` base dispatch.
+- Rationale: Avoid accidental delivery to intermediate base-class subscribers while preserving global/base handler behavior.
