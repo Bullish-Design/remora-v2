@@ -87,6 +87,7 @@ def create_app(
     metrics: Metrics | None = None,
     actor_pool: ActorPool | None = None,
     workspace_service: CairnWorkspaceService | None = None,
+    search_service: object | None = None,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     shutdown_event = asyncio.Event()
@@ -376,6 +377,43 @@ def create_app(
             return JSONResponse({"error": "invalid limit"}, status_code=400)
         return JSONResponse(await event_store.get_events(limit=limit))
 
+    async def api_search(request: Request) -> JSONResponse:
+        if search_service is None or not getattr(search_service, "available", False):
+            return JSONResponse({"error": "Semantic search is not configured"}, status_code=503)
+
+        data = await request.json()
+        query = str(data.get("query", "")).strip()
+        if not query:
+            return JSONResponse({"error": "query is required"}, status_code=400)
+
+        collection = data.get("collection") or "code"
+        try:
+            top_k = min(100, max(1, int(data.get("top_k", 10))))
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "top_k must be an integer"}, status_code=400)
+
+        mode = str(data.get("mode", "hybrid"))
+        if mode not in {"vector", "fulltext", "hybrid"}:
+            return JSONResponse(
+                {"error": "mode must be vector, fulltext, or hybrid"},
+                status_code=400,
+            )
+
+        start = time.perf_counter()
+        results = await search_service.search(query, collection, top_k, mode)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        return JSONResponse(
+            {
+                "results": results,
+                "query": query,
+                "collection": collection,
+                "mode": mode,
+                "total_results": len(results),
+                "elapsed_ms": round(elapsed_ms, 1),
+            }
+        )
+
     async def api_health(_request: Request) -> JSONResponse:
         cursor = await node_store._db.execute("SELECT COUNT(*) FROM nodes")
         row = await cursor.fetchone()
@@ -535,6 +573,7 @@ def create_app(
         ),
         Route("/api/events", endpoint=api_events),
         Route("/api/health", endpoint=api_health),
+        Route("/api/search", endpoint=api_search, methods=["POST"]),
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),
         Route("/sse", endpoint=sse_stream),
     ]

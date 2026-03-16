@@ -57,6 +57,15 @@ Completed:
   - Verification:
     - `devenv shell -- pytest tests/unit/test_reconciler.py -q` (18 passed)
     - `devenv shell -- pytest tests/unit/test_services.py tests/unit/test_runner.py tests/unit/test_reconciler.py -q` (30 passed)
+- Step 8 web search API:
+  - Updated `src/remora/web/server.py` `create_app(...)` signature to accept optional `search_service`.
+  - Added `POST /api/search` endpoint with validation and top_k clamping.
+  - Endpoint returns 503 when search is unavailable, 400 for bad inputs, and search result payload on success.
+  - Updated `src/remora/core/lifecycle.py` to pass `services.search_service` into `create_app(...)`.
+  - Extended `tests/unit/test_web_server.py` with `/api/search` endpoint coverage.
+  - Verification:
+    - `devenv shell -- pytest tests/unit/test_web_server.py -q` (43 passed)
+    - `devenv shell -- pytest tests/unit/test_services.py tests/unit/test_web_server.py -q` (45 passed)
 
 ## Deliverable Summary
 
@@ -82,4 +91,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 8: Add web `POST /api/search` endpoint and tests.
+- Step 9: Add CLI `remora index` command and tests.

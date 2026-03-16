@@ -110,6 +110,7 @@ class RemoraLifecycle:
                 metrics=services.metrics,
                 actor_pool=services.runner,
                 workspace_service=services.workspace_service,
+                search_service=services.search_service,
             )
             logger.info("Starting web server on %s:%d", self._bind, self._port)
             web_config = uvicorn.Config(

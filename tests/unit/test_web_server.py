@@ -421,6 +421,116 @@ async def test_api_events(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_search_returns_503_when_unconfigured(web_env) -> None:
+    client, *_rest = web_env
+    response = await client.post("/api/search", json={"query": "auth"})
+    assert response.status_code == 503
+    assert "not configured" in response.json()["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_api_search_requires_query(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeSearchService:
+        available = True
+
+        async def search(self, query, collection, top_k, mode):  # noqa: ANN001, ANN202
+            del query, collection, top_k, mode
+            return []
+
+    app = create_app(event_store, node_store, EventBus(), search_service=FakeSearchService())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/api/search", json={})
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_api_search_rejects_invalid_mode(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeSearchService:
+        available = True
+
+        async def search(self, query, collection, top_k, mode):  # noqa: ANN001, ANN202
+            del query, collection, top_k, mode
+            return []
+
+    app = create_app(event_store, node_store, EventBus(), search_service=FakeSearchService())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/search",
+            json={"query": "auth", "mode": "invalid"},
+        )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_api_search_happy_path(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeSearchService:
+        available = True
+        calls: list[tuple[str, str | None, int, str]] = []
+
+        async def search(
+            self,
+            query: str,
+            collection: str | None,
+            top_k: int,
+            mode: str,
+        ) -> list[dict]:
+            self.calls.append((query, collection, top_k, mode))
+            return [{"chunk_id": "c1", "score": 0.9}]
+
+    search_service = FakeSearchService()
+    app = create_app(event_store, node_store, EventBus(), search_service=search_service)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/search",
+            json={"query": "auth", "collection": "code", "top_k": 5, "mode": "hybrid"},
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "auth"
+    assert payload["collection"] == "code"
+    assert payload["mode"] == "hybrid"
+    assert payload["total_results"] == 1
+    assert payload["results"] == [{"chunk_id": "c1", "score": 0.9}]
+    assert search_service.calls == [("auth", "code", 5, "hybrid")]
+
+
+@pytest.mark.asyncio
+async def test_api_search_clamps_top_k(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeSearchService:
+        available = True
+        last_call: tuple[str, str | None, int, str] | None = None
+
+        async def search(
+            self,
+            query: str,
+            collection: str | None,
+            top_k: int,
+            mode: str,
+        ) -> list[dict]:
+            self.last_call = (query, collection, top_k, mode)
+            return []
+
+    search_service = FakeSearchService()
+    app = create_app(event_store, node_store, EventBus(), search_service=search_service)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/api/search", json={"query": "auth", "top_k": 9999})
+    assert response.status_code == 200
+    assert search_service.last_call == ("auth", "code", 100, "hybrid")
+
+
+@pytest.mark.asyncio
 async def test_health_endpoint_returns_ok(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
     response = await client.get("/api/health")
