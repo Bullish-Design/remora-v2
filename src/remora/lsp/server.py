@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -66,13 +67,37 @@ class DocumentStore:
         return text
 
 
+@dataclass(frozen=True)
+class RemoraLSPHandlers:
+    """Typed references to test-facing handler callables and document state."""
+
+    code_lens: Any
+    hover: Any
+    did_save: Any
+    did_open: Any
+    did_close: Any
+    did_change: Any
+    code_action: Any
+    chat_command: Any
+    trigger_command: Any
+    documents: DocumentStore
+
+
+class RemoraLanguageServer(LanguageServer):
+    """LanguageServer with an explicit test handler abstraction slot."""
+
+    def __init__(self, name: str, version: str) -> None:
+        super().__init__(name, version)
+        self.remora_handlers: RemoraLSPHandlers | None = None
+
+
 def create_lsp_server(
     node_store: NodeStore | None = None,
     event_store: EventStore | None = None,
     db_path: Path | None = None,
 ) -> LanguageServer:
     """Create an LSP server from shared stores or a standalone sqlite path."""
-    server = LanguageServer("remora", "2.0.0")
+    server = RemoraLanguageServer("remora", "2.0.0")
     documents = DocumentStore()
     stores: dict[str, Any] = {}
 
@@ -174,18 +199,18 @@ def create_lsp_server(
         )
 
     # Expose handlers for direct unit testing without spinning up an LSP transport.
-    server._remora_handlers = {  # type: ignore[attr-defined]
-        "code_lens": code_lens,
-        "hover": hover,
-        "did_save": did_save,
-        "did_open": did_open,
-        "did_close": did_close,
-        "did_change": did_change,
-        "code_action": code_action,
-        "chat_command": chat_command,
-        "trigger_command": trigger_command,
-        "documents": documents,
-    }
+    server.remora_handlers = RemoraLSPHandlers(
+        code_lens=code_lens,
+        hover=hover,
+        did_save=did_save,
+        did_open=did_open,
+        did_close=did_close,
+        did_change=did_change,
+        code_action=code_action,
+        chat_command=chat_command,
+        trigger_command=trigger_command,
+        documents=documents,
+    )
 
     return server
 

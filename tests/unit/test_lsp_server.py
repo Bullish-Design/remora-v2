@@ -31,6 +31,12 @@ async def lsp_env(tmp_path: Path):
     await db.close()
 
 
+def _handlers(server: LanguageServer):
+    handlers = getattr(server, "remora_handlers", None)
+    assert handlers is not None
+    return handlers
+
+
 @pytest.mark.asyncio
 async def test_lsp_server_creates(lsp_env) -> None:
     node_store, event_store = lsp_env
@@ -42,8 +48,8 @@ async def test_lsp_server_creates(lsp_env) -> None:
 async def test_lsp_server_accepts_shared_services(lsp_env, tmp_path: Path) -> None:
     node_store, event_store = lsp_env
     server = create_lsp_server(node_store=node_store, event_store=event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    did_save = handlers["did_save"]
+    handlers = _handlers(server)
+    did_save = handlers.did_save
 
     file_path = tmp_path / "src" / "shared.py"
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,8 +79,8 @@ async def test_lsp_server_accepts_db_path(tmp_path: Path) -> None:
     await db.close()
 
     server = create_lsp_server(db_path=db_path)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    did_save = handlers["did_save"]
+    handlers = _handlers(server)
+    did_save = handlers.did_save
 
     file_path = tmp_path / "src" / "standalone.py"
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -138,8 +144,8 @@ def test_find_node_at_line() -> None:
 async def test_lsp_did_save_emits_event(lsp_env, tmp_path: Path) -> None:
     node_store, event_store = lsp_env
     server = create_lsp_server(node_store, event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    did_save = handlers["did_save"]
+    handlers = _handlers(server)
+    did_save = handlers.did_save
 
     file_path = tmp_path / "src" / "app.py"
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -162,8 +168,8 @@ async def test_lsp_did_change_writes_file_and_emits_event(
 ) -> None:
     node_store, event_store = lsp_env
     server = create_lsp_server(node_store, event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    did_change = handlers["did_change"]
+    handlers = _handlers(server)
+    did_change = handlers.did_change
 
     file_path = tmp_path / "src" / "app.py"
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,7 +186,7 @@ async def test_lsp_did_change_writes_file_and_emits_event(
     )
 
     await did_change(params)
-    documents = handlers["documents"]
+    documents = handlers.documents
     assert isinstance(documents, DocumentStore)
     assert documents.get(f"file://{file_path}") == "print('goodbye')\n"
     events = await event_store.get_events(limit=5)
@@ -196,11 +202,11 @@ async def test_lsp_did_change_writes_file_and_emits_event(
 async def test_lsp_open_change_save_lifecycle(lsp_env, tmp_path: Path) -> None:
     node_store, event_store = lsp_env
     server = create_lsp_server(node_store, event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    did_open = handlers["did_open"]
-    did_change = handlers["did_change"]
-    did_save = handlers["did_save"]
-    documents = handlers["documents"]
+    handlers = _handlers(server)
+    did_open = handlers.did_open
+    did_change = handlers.did_change
+    did_save = handlers.did_save
+    documents = handlers.documents
 
     file_path = tmp_path / "src" / "lifecycle.py"
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -255,8 +261,8 @@ async def test_lsp_code_action_returns_chat_and_trigger(lsp_env, tmp_path: Path)
     )
 
     server = create_lsp_server(node_store, event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    code_action = handlers["code_action"]
+    handlers = _handlers(server)
+    code_action = handlers.code_action
 
     result = await code_action(
         lsp.CodeActionParams(
@@ -280,8 +286,8 @@ async def test_lsp_code_action_returns_chat_and_trigger(lsp_env, tmp_path: Path)
 async def test_lsp_trigger_command_emits_agent_message_event(lsp_env) -> None:
     node_store, event_store = lsp_env
     server = create_lsp_server(node_store, event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    trigger_command = handlers["trigger_command"]
+    handlers = _handlers(server)
+    trigger_command = handlers.trigger_command
 
     await trigger_command(server, ["src/app.py::a"])
     events = await event_store.get_events(limit=5)
@@ -297,8 +303,8 @@ async def test_lsp_trigger_command_emits_agent_message_event(lsp_env) -> None:
 async def test_lsp_chat_command_requests_external_document(lsp_env) -> None:
     node_store, event_store = lsp_env
     server = create_lsp_server(node_store, event_store)
-    handlers = server._remora_handlers  # type: ignore[attr-defined]
-    chat_command = handlers["chat_command"]
+    handlers = _handlers(server)
+    chat_command = handlers.chat_command
 
     shown: dict[str, object] = {}
 
