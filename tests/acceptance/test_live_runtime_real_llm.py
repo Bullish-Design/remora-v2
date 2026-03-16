@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import socket
+import sys
 import time
 import uuid
 from collections.abc import Callable
@@ -264,6 +266,37 @@ def _write_reactive_mode_project(
     return RuntimeProject(config_path=config_path, source_path=source_path)
 
 
+def _write_lsp_smoke_project(root: Path) -> RuntimeProject:
+    source_path = root / "src" / "app.py"
+    write_file(source_path, "def alpha():\n    return 1\n")
+
+    bundles_root = root / "bundles"
+    system = bundles_root / "system"
+    code = bundles_root / "code-agent"
+    (system / "tools").mkdir(parents=True, exist_ok=True)
+    (code / "tools").mkdir(parents=True, exist_ok=True)
+    write_file(system / "bundle.yaml", "name: system\nmax_turns: 4\n")
+    write_file(code / "bundle.yaml", "name: code-agent\nmax_turns: 4\n")
+
+    config_path = root / "remora.yaml"
+    config_path.write_text(
+        (
+            "discovery_paths:\n"
+            "  - src\n"
+            "discovery_languages:\n"
+            "  - python\n"
+            "language_map:\n"
+            "  .py: python\n"
+            "query_paths: []\n"
+            "workspace_root: .remora-acceptance\n"
+            f"bundle_root: {bundles_root}\n"
+            "max_turns: 4\n"
+        ),
+        encoding="utf-8",
+    )
+    return RuntimeProject(config_path=config_path, source_path=source_path)
+
+
 async def _wait_for_health(base_url: str, timeout_s: float = _READINESS_TIMEOUT_S) -> None:
     deadline = time.monotonic() + timeout_s
     async with httpx.AsyncClient(base_url=base_url, timeout=2.0) as client:
@@ -367,6 +400,104 @@ async def _wait_for_pending_proposal(
     raise AssertionError(f"Timed out waiting for pending proposal on node {node_id}")
 
 
+def _encode_lsp_message(payload: dict[str, Any]) -> bytes:
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+
+
+async def _read_lsp_message(
+    stream: asyncio.StreamReader,
+    *,
+    timeout_s: float = 10.0,
+) -> dict[str, Any]:
+    headers: dict[str, str] = {}
+    while True:
+        line = await asyncio.wait_for(stream.readline(), timeout=timeout_s)
+        if not line:
+            raise AssertionError("LSP process closed stdout before header terminator")
+        if line in {b"\r\n", b"\n"}:
+            break
+        decoded = line.decode("ascii", errors="replace").strip()
+        if ":" in decoded:
+            key, value = decoded.split(":", maxsplit=1)
+            headers[key.strip().lower()] = value.strip()
+    content_length = int(headers.get("content-length", "0"))
+    if content_length <= 0:
+        raise AssertionError(f"Invalid LSP Content-Length header: {headers!r}")
+    body = await asyncio.wait_for(stream.readexactly(content_length), timeout=timeout_s)
+    return json.loads(body.decode("utf-8"))
+
+
+@contextlib.asynccontextmanager
+async def _running_lsp_process(project_root: Path, *, config_path: Path):
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "remora",
+        "lsp",
+        "--project-root",
+        str(project_root),
+        "--config",
+        str(config_path),
+        "--log-level",
+        "INFO",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        if process.stdin is None or process.stdout is None:
+            raise AssertionError("LSP subprocess missing stdio pipes")
+        yield process
+    finally:
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=10.0)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+
+
+async def _initialize_lsp(process: asyncio.subprocess.Process) -> None:
+    if process.stdin is None or process.stdout is None:
+        raise AssertionError("LSP subprocess missing stdio pipes")
+
+    init_request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "processId": None,
+            "rootUri": None,
+            "capabilities": {},
+        },
+    }
+    process.stdin.write(_encode_lsp_message(init_request))
+    await process.stdin.drain()
+
+    init_response = await _read_lsp_message(process.stdout, timeout_s=15.0)
+    assert init_response.get("id") == 1
+    assert "result" in init_response
+
+    initialized = {"jsonrpc": "2.0", "method": "initialized", "params": {}}
+    process.stdin.write(_encode_lsp_message(initialized))
+    await process.stdin.drain()
+
+
+async def _send_lsp_notification(
+    process: asyncio.subprocess.Process,
+    *,
+    method: str,
+    params: dict[str, Any],
+) -> None:
+    if process.stdin is None:
+        raise AssertionError("LSP subprocess missing stdin pipe")
+    payload = {"jsonrpc": "2.0", "method": method, "params": params}
+    process.stdin.write(_encode_lsp_message(payload))
+    await process.stdin.drain()
+
+
 @contextlib.asynccontextmanager
 async def _running_runtime(*, project_root: Path, config_path: Path, port: int):
     task = asyncio.create_task(
@@ -460,6 +591,57 @@ async def test_acceptance_live_web_chat_routes_through_dispatcher_actorpool_and_
                 and event.get("correlation_id") == correlation_id
             ]
             assert errors == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
+async def test_acceptance_process_lsp_open_save_emits_content_changed_event(
+    tmp_path: Path,
+) -> None:
+    runtime_project = _write_lsp_smoke_project(tmp_path)
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=runtime_project.config_path,
+        port=port,
+    ) as base_url:
+        async with _running_lsp_process(
+            tmp_path,
+            config_path=runtime_project.config_path,
+        ) as lsp_process:
+            await _initialize_lsp(lsp_process)
+            file_uri = runtime_project.source_path.resolve().as_uri()
+
+            await _send_lsp_notification(
+                lsp_process,
+                method="textDocument/didOpen",
+                params={
+                    "textDocument": {
+                        "uri": file_uri,
+                        "languageId": "python",
+                        "version": 1,
+                        "text": runtime_project.source_path.read_text(encoding="utf-8"),
+                    }
+                },
+            )
+            await _send_lsp_notification(
+                lsp_process,
+                method="textDocument/didSave",
+                params={"textDocument": {"uri": file_uri}},
+            )
+
+            async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+                await _wait_for_event(
+                    client,
+                    lambda event: (
+                        event.get("event_type") == "ContentChangedEvent"
+                        and event.get("payload", {}).get("path")
+                        == str(runtime_project.source_path.resolve())
+                        and event.get("payload", {}).get("change_type") == "modified"
+                    ),
+                    timeout_s=30.0,
+                )
 
 
 @pytest.mark.asyncio
