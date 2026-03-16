@@ -34,3 +34,13 @@ Next action:
 
 Next action:
 - Step 2.2: remove Actor compatibility property shims and compatibility trigger wrappers.
+- Step 2.2 completed:
+  - removed Actor compatibility properties exposing TriggerPolicy internals
+  - removed `_should_trigger` and `_cleanup_depth_state` wrappers
+  - switched Actor loop trigger check to direct `TriggerPolicy.should_trigger(...)`
+  - verified actor sanity tests:
+    - `tests/unit/test_actor.py::test_actor_start_stop`
+    - `tests/unit/test_actor.py::test_actor_processes_inbox_message`
+
+Next action:
+- Step 2.3: rewrite actor/runner tests that depended on removed compatibility APIs.

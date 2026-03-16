@@ -758,38 +758,6 @@ class Actor:
         )
 
     @property
-    def _last_trigger_ms(self) -> float:
-        return self._trigger_policy.last_trigger_ms
-
-    @_last_trigger_ms.setter
-    def _last_trigger_ms(self, value: float) -> None:
-        self._trigger_policy.last_trigger_ms = value
-
-    @property
-    def _depths(self) -> dict[str, int]:
-        return self._trigger_policy.depths
-
-    @_depths.setter
-    def _depths(self, value: dict[str, int]) -> None:
-        self._trigger_policy.depths = value
-
-    @property
-    def _depth_timestamps(self) -> dict[str, float]:
-        return self._trigger_policy.depth_timestamps
-
-    @_depth_timestamps.setter
-    def _depth_timestamps(self, value: dict[str, float]) -> None:
-        self._trigger_policy.depth_timestamps = value
-
-    @property
-    def _trigger_checks(self) -> int:
-        return self._trigger_policy.trigger_checks
-
-    @_trigger_checks.setter
-    def _trigger_checks(self, value: int) -> None:
-        self._trigger_policy.trigger_checks = value
-
-    @property
     def last_active(self) -> float:
         return self._last_active
 
@@ -824,7 +792,7 @@ class Actor:
                     break
                 self._last_active = time.time()
                 correlation_id = event.correlation_id or str(uuid.uuid4())
-                if not self._should_trigger(correlation_id):
+                if not self._trigger_policy.should_trigger(correlation_id):
                     continue
 
                 outbox = Outbox(
@@ -840,14 +808,6 @@ class Actor:
                 await self._execute_turn(trigger, outbox)
         except asyncio.CancelledError:
             return
-
-    def _should_trigger(self, correlation_id: str) -> bool:
-        """Compatibility wrapper for trigger policy."""
-        return self._trigger_policy.should_trigger(correlation_id)
-
-    def _cleanup_depth_state(self, now_ms: float) -> None:
-        """Compatibility wrapper for trigger policy depth cleanup."""
-        self._trigger_policy.cleanup_depth_state(now_ms)
 
     async def _execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         await self._turn_executor.execute_turn(trigger, outbox)

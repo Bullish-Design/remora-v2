@@ -31,6 +31,6 @@
 
 ### Phase 2
 - [x] Step 2.1 Delete Actor delegation wrappers
-- [ ] Step 2.2 Delete Actor compatibility property shims
+- [x] Step 2.2 Delete Actor compatibility property shims
 - [ ] Step 2.3 Update tests for deleted Actor compatibility APIs
 - [ ] Step 2.4 Fix reconciler `_normalize_dir_id` no-op
