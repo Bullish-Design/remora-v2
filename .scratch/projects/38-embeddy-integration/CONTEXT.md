@@ -45,6 +45,10 @@ Completed:
   - Extended `tests/unit/test_externals.py` and `tests/unit/test_runner.py` for new search capabilities/plumbing.
   - Verification:
     - `devenv shell -- pytest tests/unit/test_externals.py tests/unit/test_runner.py tests/unit/test_actor.py -q` (63 passed)
+- Step 6 Grail tool:
+  - Added `bundles/system/tools/semantic_search.pym` using `@external semantic_search(...)`.
+  - Tool supports `query`, optional `collection`, and `top_k` inputs and renders readable ranked output.
+  - Verification: `devenv shell -- pytest tests/unit/test_system_tools.py tests/unit/test_grail.py -q` (18 passed)
 
 ## Deliverable Summary
 
@@ -70,4 +74,4 @@ The plan covers:
 - Use `embeddy[server]` for `search`/`dev` extras instead of plain `embeddy` because current `embeddy` package import path executes `embeddy.__init__`, which imports server modules requiring FastAPI.
 
 ## Next Step
-- Step 6: Add system Grail tool `bundles/system/tools/semantic_search.pym`.
+- Step 7: Add reconciler indexing/deindexing hooks and tests.
