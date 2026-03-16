@@ -194,132 +194,166 @@ class Trigger:
     event: Event | None = None
 
 
-class Actor:
-    """Per-agent actor with inbox, outbox, and sequential processing loop.
+class TriggerPolicy:
+    """Cooldown/depth trigger policy with bounded state cleanup."""
 
-    Each actor processes one inbox message at a time. Cooldown and depth
-    policies are local to the actor, not shared globally.
-    """
+    def __init__(self, config: Config) -> None:
+        self._config = config
+        self.last_trigger_ms: float = 0.0
+        self.depths: dict[str, int] = {}
+        self.depth_timestamps: dict[str, float] = {}
+        self.trigger_checks = 0
+
+    def should_trigger(self, correlation_id: str) -> bool:
+        """Return True when cooldown and depth constraints allow triggering."""
+        now_ms = time.time() * 1000.0
+        self.trigger_checks += 1
+        if self.trigger_checks >= _DEPTH_CLEANUP_INTERVAL:
+            self.cleanup_depth_state(now_ms)
+            self.trigger_checks = 0
+
+        if now_ms - self.last_trigger_ms < self._config.trigger_cooldown_ms:
+            return False
+        self.last_trigger_ms = now_ms
+
+        depth = self.depths.get(correlation_id, 0)
+        if depth >= self._config.max_trigger_depth:
+            return False
+        self.depths[correlation_id] = depth + 1
+        self.depth_timestamps[correlation_id] = now_ms
+        return True
+
+    def cleanup_depth_state(self, now_ms: float) -> None:
+        cutoff = now_ms - _DEPTH_TTL_MS
+        stale_ids = [
+            correlation_id
+            for correlation_id, timestamp_ms in self.depth_timestamps.items()
+            if timestamp_ms < cutoff
+        ]
+        for correlation_id in stale_ids:
+            self.depth_timestamps.pop(correlation_id, None)
+            self.depths.pop(correlation_id, None)
+
+    def release_depth(self, correlation_id: str | None) -> None:
+        if correlation_id is None:
+            return
+        remaining = self.depths.get(correlation_id, 1) - 1
+        if remaining <= 0:
+            self.depths.pop(correlation_id, None)
+            self.depth_timestamps.pop(correlation_id, None)
+        else:
+            self.depths[correlation_id] = remaining
+            self.depth_timestamps[correlation_id] = time.time() * 1000.0
+
+
+class PromptBuilder:
+    """Build system/user prompts from bundle config, node state, and trigger context."""
+
+    def __init__(self, config: Config) -> None:
+        self._config = config
+
+    def build_system_prompt(
+        self,
+        bundle_config: dict[str, Any],
+        trigger_event: Event | None,
+    ) -> tuple[str, str, int]:
+        system_prompt = bundle_config.get(
+            "system_prompt",
+            "You are an autonomous code agent.",
+        )
+        prompt_extension = bundle_config.get("system_prompt_extension", "")
+        if prompt_extension:
+            system_prompt = f"{system_prompt}\n\n{prompt_extension}"
+        mode = self.turn_mode(trigger_event)
+        prompts = bundle_config.get("prompts")
+        mode_prompt = prompts.get(mode, "") if isinstance(prompts, dict) else ""
+        if mode_prompt:
+            system_prompt = f"{system_prompt}\n\n{mode_prompt}"
+        model_name = bundle_config.get("model", self._config.model_default)
+        max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
+        return system_prompt, model_name, max_turns
+
+    @staticmethod
+    def build_prompt(node: Node, trigger_event: Event | None) -> str:
+        """Build the turn prompt from node identity and trigger details."""
+        node_type = (
+            node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
+        )
+        parts = [
+            f"# Node: {node.full_name}",
+            f"Type: {node_type} | File: {node.file_path}",
+        ]
+        if node.node_type == NodeType.VIRTUAL:
+            parts.extend(
+                [
+                    "",
+                    "## Role",
+                    f"You are a {node.role or 'virtual'} agent.",
+                    "Use your tools and incoming events to coordinate work.",
+                ]
+            )
+        elif node.source_code:
+            parts.extend(
+                [
+                    "",
+                    "## Source Code",
+                    "```",
+                    node.source_code,
+                    "```",
+                ]
+            )
+        else:
+            parts.extend(
+                [
+                    "",
+                    "## Structure",
+                    "This is a directory node. Use your tools to inspect children and subtree.",
+                ]
+            )
+        if trigger_event is not None:
+            parts.extend(["", "## Trigger", f"Event: {trigger_event.event_type}"])
+            content = _event_content(trigger_event)
+            if content:
+                parts.append(f"Content: {content}")
+        return "\n".join(parts)
+
+    @staticmethod
+    def turn_mode(event: Event | None) -> str:
+        from_agent = getattr(event, "from_agent", None) if event is not None else None
+        return "chat" if from_agent == "user" else "reactive"
+
+
+class AgentTurnExecutor:
+    """Execute a single agent turn including workspace, tools, and kernel calls."""
 
     def __init__(
         self,
-        node_id: str,
-        event_store: EventStore,
+        *,
         node_store: NodeStore,
+        event_store: EventStore,
         workspace_service: CairnWorkspaceService,
         config: Config,
         semaphore: asyncio.Semaphore,
-        metrics: Metrics | None = None,
+        metrics: Metrics | None,
+        history: list[Message],
+        prompt_builder: PromptBuilder,
+        trigger_policy: TriggerPolicy,
     ) -> None:
-        self.node_id = node_id
-        self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
-        self._event_store = event_store
         self._node_store = node_store
+        self._event_store = event_store
         self._workspace_service = workspace_service
         self._config = config
         self._semaphore = semaphore
         self._metrics = metrics
-        self._task: asyncio.Task | None = None
-        self._last_active: float = time.time()
-        self._history: list[Message] = []
+        self._history = history
+        self._prompt_builder = prompt_builder
+        self._trigger_policy = trigger_policy
 
-        # Per-actor policy state (moved from global runner dicts)
-        self._last_trigger_ms: float = 0.0
-        self._depths: dict[str, int] = {}
-        self._depth_timestamps: dict[str, float] = {}
-        self._trigger_checks = 0
-
-    @property
-    def last_active(self) -> float:
-        return self._last_active
-
-    @property
-    def is_running(self) -> bool:
-        return self._task is not None and not self._task.done()
-
-    @property
-    def history(self) -> list[Message]:
-        """Read-only access to conversation history for observability."""
-        return list(self._history)
-
-    def start(self) -> None:
-        """Launch the actor's processing loop as a managed asyncio.Task."""
-        if self._task is not None and not self._task.done():
-            return
-        self._task = asyncio.create_task(self._run(), name=f"actor-{self.node_id}")
-
-    async def stop(self) -> None:
-        """Stop the processing loop and wait for it to finish."""
-        if self._task is not None and not self._task.done():
-            # Sentinel event allows current in-flight turn to finish before exit.
-            self.inbox.put_nowait(None)
-            await self._task
-        self._task = None
-
-    async def _run(self) -> None:
-        """Main processing loop: consume inbox events one at a time."""
-        try:
-            while True:
-                event = await self.inbox.get()
-                if event is None:
-                    break
-                self._last_active = time.time()
-                correlation_id = event.correlation_id or str(uuid.uuid4())
-
-                if not self._should_trigger(correlation_id):
-                    continue
-
-                outbox = Outbox(
-                    actor_id=self.node_id,
-                    event_store=self._event_store,
-                    correlation_id=correlation_id,
-                )
-                trigger = Trigger(
-                    node_id=self.node_id,
-                    correlation_id=correlation_id,
-                    event=event,
-                )
-                await self._execute_turn(trigger, outbox)
-        except asyncio.CancelledError:
-            return
-
-    def _should_trigger(self, correlation_id: str) -> bool:
-        """Check cooldown and depth policies. Returns True if trigger should proceed."""
-        now_ms = time.time() * 1000.0
-        self._trigger_checks += 1
-        if self._trigger_checks >= _DEPTH_CLEANUP_INTERVAL:
-            self._cleanup_depth_state(now_ms)
-            self._trigger_checks = 0
-
-        # Cooldown check
-        if now_ms - self._last_trigger_ms < self._config.trigger_cooldown_ms:
-            return False
-        self._last_trigger_ms = now_ms
-
-        # Depth check
-        depth = self._depths.get(correlation_id, 0)
-        if depth >= self._config.max_trigger_depth:
-            return False
-        self._depths[correlation_id] = depth + 1
-        self._depth_timestamps[correlation_id] = now_ms
-        return True
-
-    def _cleanup_depth_state(self, now_ms: float) -> None:
-        cutoff = now_ms - _DEPTH_TTL_MS
-        stale_ids = [
-            correlation_id
-            for correlation_id, timestamp_ms in self._depth_timestamps.items()
-            if timestamp_ms < cutoff
-        ]
-        for correlation_id in stale_ids:
-            self._depth_timestamps.pop(correlation_id, None)
-            self._depths.pop(correlation_id, None)
-
-    async def _execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
+    async def execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
         node_id = trigger.node_id
         depth_key = trigger.correlation_id
-        turn_number = max(1, self._depths.get(depth_key, 1))
+        turn_number = max(1, self._trigger_policy.depths.get(depth_key, 1))
         turn_log = _turn_logger(node_id, trigger.correlation_id, turn_number)
 
         async with self._semaphore:
@@ -329,9 +363,9 @@ class Actor:
                     return
                 node, workspace, bundle_config = start_result
 
-                system_prompt, model_name, max_turns = self._build_system_prompt(
+                system_prompt, model_name, max_turns = self._prompt_builder.build_system_prompt(
                     bundle_config,
-                    trigger,
+                    trigger.event,
                 )
 
                 _, tools = await self._prepare_turn_context(
@@ -353,7 +387,10 @@ class Actor:
 
                 messages = [
                     Message(role="system", content=system_prompt),
-                    Message(role="user", content=self._build_prompt(node, trigger)),
+                    Message(
+                        role="user",
+                        content=self._prompt_builder.build_prompt(node, trigger.event),
+                    ),
                 ]
                 self._history.extend(messages)
 
@@ -416,27 +453,6 @@ class Actor:
         workspace = await self._workspace_service.get_agent_workspace(node_id)
         bundle_config = await self._read_bundle_config(workspace)
         return node, workspace, bundle_config
-
-    def _build_system_prompt(
-        self,
-        bundle_config: dict[str, Any],
-        trigger: Trigger,
-    ) -> tuple[str, str, int]:
-        system_prompt = bundle_config.get(
-            "system_prompt",
-            "You are an autonomous code agent.",
-        )
-        prompt_extension = bundle_config.get("system_prompt_extension", "")
-        if prompt_extension:
-            system_prompt = f"{system_prompt}\n\n{prompt_extension}"
-        mode = self._turn_mode(trigger.event)
-        prompts = bundle_config.get("prompts") or {}
-        mode_prompt = prompts.get(mode, "") if hasattr(prompts, "get") else ""
-        if mode_prompt:
-            system_prompt = f"{system_prompt}\n\n{mode_prompt}"
-        model_name = bundle_config.get("model", self._config.model_default)
-        max_turns = int(bundle_config.get("max_turns", self._config.max_turns))
-        return system_prompt, model_name, max_turns
 
     async def _prepare_turn_context(
         self, node_id: str, workspace: AgentWorkspace, trigger: Trigger, outbox: Outbox
@@ -557,58 +573,7 @@ class Actor:
                 await self._node_store.transition_status(node_id, NodeStatus.IDLE)
         except Exception:  # noqa: BLE001 - best effort cleanup
             turn_log.exception("Failed to reset node status")
-        if depth_key is not None:
-            remaining = self._depths.get(depth_key, 1) - 1
-            if remaining <= 0:
-                self._depths.pop(depth_key, None)
-                self._depth_timestamps.pop(depth_key, None)
-            else:
-                self._depths[depth_key] = remaining
-                self._depth_timestamps[depth_key] = time.time() * 1000.0
-
-    @staticmethod
-    def _build_prompt(node: Node, trigger: Trigger) -> str:
-        """Build the turn prompt from node identity and trigger details."""
-        node_type = (
-            node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type)
-        )
-        parts = [
-            f"# Node: {node.full_name}",
-            f"Type: {node_type} | File: {node.file_path}",
-        ]
-        if node.node_type == NodeType.VIRTUAL:
-            parts.extend(
-                [
-                    "",
-                    "## Role",
-                    f"You are a {node.role or 'virtual'} agent.",
-                    "Use your tools and incoming events to coordinate work.",
-                ]
-            )
-        elif node.source_code:
-            parts.extend(
-                [
-                    "",
-                    "## Source Code",
-                    "```",
-                    node.source_code,
-                    "```",
-                ]
-            )
-        else:
-            parts.extend(
-                [
-                    "",
-                    "## Structure",
-                    "This is a directory node. Use your tools to inspect children and subtree.",
-                ]
-            )
-        if trigger.event is not None:
-            parts.extend(["", "## Trigger", f"Event: {trigger.event.event_type}"])
-            content = _event_content(trigger.event)
-            if content:
-                parts.append(f"Content: {content}")
-        return "\n".join(parts)
+        self._trigger_policy.release_depth(depth_key)
 
     @staticmethod
     async def _resolve_maybe_awaitable(value: Any) -> Any:
@@ -659,10 +624,217 @@ class Actor:
 
         return validated
 
+
+class Actor:
+    """Per-agent actor with inbox, outbox, and sequential processing loop."""
+
+    def __init__(
+        self,
+        node_id: str,
+        event_store: EventStore,
+        node_store: NodeStore,
+        workspace_service: CairnWorkspaceService,
+        config: Config,
+        semaphore: asyncio.Semaphore,
+        metrics: Metrics | None = None,
+    ) -> None:
+        self.node_id = node_id
+        self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
+        self._event_store = event_store
+        self._task: asyncio.Task | None = None
+        self._last_active: float = time.time()
+        self._history: list[Message] = []
+
+        self._trigger_policy = TriggerPolicy(config)
+        self._prompt_builder = PromptBuilder(config)
+        self._turn_executor = AgentTurnExecutor(
+            node_store=node_store,
+            event_store=event_store,
+            workspace_service=workspace_service,
+            config=config,
+            semaphore=semaphore,
+            metrics=metrics,
+            history=self._history,
+            prompt_builder=self._prompt_builder,
+            trigger_policy=self._trigger_policy,
+        )
+
+    @property
+    def _last_trigger_ms(self) -> float:
+        return self._trigger_policy.last_trigger_ms
+
+    @_last_trigger_ms.setter
+    def _last_trigger_ms(self, value: float) -> None:
+        self._trigger_policy.last_trigger_ms = value
+
+    @property
+    def _depths(self) -> dict[str, int]:
+        return self._trigger_policy.depths
+
+    @_depths.setter
+    def _depths(self, value: dict[str, int]) -> None:
+        self._trigger_policy.depths = value
+
+    @property
+    def _depth_timestamps(self) -> dict[str, float]:
+        return self._trigger_policy.depth_timestamps
+
+    @_depth_timestamps.setter
+    def _depth_timestamps(self, value: dict[str, float]) -> None:
+        self._trigger_policy.depth_timestamps = value
+
+    @property
+    def _trigger_checks(self) -> int:
+        return self._trigger_policy.trigger_checks
+
+    @_trigger_checks.setter
+    def _trigger_checks(self, value: int) -> None:
+        self._trigger_policy.trigger_checks = value
+
+    @property
+    def last_active(self) -> float:
+        return self._last_active
+
+    @property
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    @property
+    def history(self) -> list[Message]:
+        """Read-only access to conversation history for observability."""
+        return list(self._history)
+
+    def start(self) -> None:
+        """Launch the actor's processing loop as a managed asyncio.Task."""
+        if self._task is not None and not self._task.done():
+            return
+        self._task = asyncio.create_task(self._run(), name=f"actor-{self.node_id}")
+
+    async def stop(self) -> None:
+        """Stop the processing loop and wait for it to finish."""
+        if self._task is not None and not self._task.done():
+            self.inbox.put_nowait(None)
+            await self._task
+        self._task = None
+
+    async def _run(self) -> None:
+        """Main processing loop: consume inbox events one at a time."""
+        try:
+            while True:
+                event = await self.inbox.get()
+                if event is None:
+                    break
+                self._last_active = time.time()
+                correlation_id = event.correlation_id or str(uuid.uuid4())
+                if not self._should_trigger(correlation_id):
+                    continue
+
+                outbox = Outbox(
+                    actor_id=self.node_id,
+                    event_store=self._event_store,
+                    correlation_id=correlation_id,
+                )
+                trigger = Trigger(
+                    node_id=self.node_id,
+                    correlation_id=correlation_id,
+                    event=event,
+                )
+                await self._execute_turn(trigger, outbox)
+        except asyncio.CancelledError:
+            return
+
+    def _should_trigger(self, correlation_id: str) -> bool:
+        """Compatibility wrapper for trigger policy."""
+        return self._trigger_policy.should_trigger(correlation_id)
+
+    def _cleanup_depth_state(self, now_ms: float) -> None:
+        """Compatibility wrapper for trigger policy depth cleanup."""
+        self._trigger_policy.cleanup_depth_state(now_ms)
+
+    async def _execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
+        await self._turn_executor.execute_turn(trigger, outbox)
+
+    async def _start_agent_turn(
+        self,
+        node_id: str,
+        trigger: Trigger,
+        outbox: Outbox,
+        turn_log: logging.LoggerAdapter,
+    ) -> tuple[Node, AgentWorkspace, dict[str, Any]] | None:
+        return await self._turn_executor._start_agent_turn(node_id, trigger, outbox, turn_log)
+
+    def _build_system_prompt(
+        self,
+        bundle_config: dict[str, Any],
+        trigger: Trigger,
+    ) -> tuple[str, str, int]:
+        return self._prompt_builder.build_system_prompt(bundle_config, trigger.event)
+
+    async def _prepare_turn_context(
+        self, node_id: str, workspace: AgentWorkspace, trigger: Trigger, outbox: Outbox
+    ) -> tuple[TurnContext, list[GrailTool]]:
+        return await self._turn_executor._prepare_turn_context(node_id, workspace, trigger, outbox)
+
+    async def _run_kernel(
+        self,
+        node_id: str,
+        trigger: Trigger,
+        system_prompt: str,
+        messages: list[Message],
+        model_name: str,
+        tools: list[GrailTool],
+        max_turns: int,
+        outbox: Outbox,
+        turn_log: logging.LoggerAdapter,
+    ) -> Any:
+        return await self._turn_executor._run_kernel(
+            node_id,
+            trigger,
+            system_prompt,
+            messages,
+            model_name,
+            tools,
+            max_turns,
+            outbox,
+            turn_log,
+        )
+
+    async def _complete_agent_turn(
+        self,
+        node_id: str,
+        response_text: str,
+        outbox: Outbox,
+        trigger: Trigger,
+        turn_log: logging.LoggerAdapter,
+    ) -> None:
+        await self._turn_executor._complete_agent_turn(
+            node_id,
+            response_text,
+            outbox,
+            trigger,
+            turn_log,
+        )
+
+    async def _reset_agent_state(
+        self, node_id: str, depth_key: str | None, turn_log: logging.LoggerAdapter
+    ) -> None:
+        await self._turn_executor._reset_agent_state(node_id, depth_key, turn_log)
+
+    @staticmethod
+    def _build_prompt(node: Node, trigger: Trigger) -> str:
+        return PromptBuilder.build_prompt(node, trigger.event)
+
+    @staticmethod
+    async def _resolve_maybe_awaitable(value: Any) -> Any:
+        return await AgentTurnExecutor._resolve_maybe_awaitable(value)
+
+    @staticmethod
+    async def _read_bundle_config(workspace: AgentWorkspace) -> dict[str, Any]:
+        return await AgentTurnExecutor._read_bundle_config(workspace)
+
     @staticmethod
     def _turn_mode(event: Event | None) -> str:
-        from_agent = getattr(event, "from_agent", None) if event is not None else None
-        return "chat" if from_agent == "user" else "reactive"
+        return PromptBuilder.turn_mode(event)
 
 
 def _event_content(event: Event) -> str:
@@ -671,4 +843,13 @@ def _event_content(event: Event) -> str:
     return ""
 
 
-__all__ = ["Outbox", "RecordingOutbox", "OutboxObserver", "Trigger", "Actor"]
+__all__ = [
+    "Outbox",
+    "RecordingOutbox",
+    "OutboxObserver",
+    "Trigger",
+    "TriggerPolicy",
+    "PromptBuilder",
+    "AgentTurnExecutor",
+    "Actor",
+]
