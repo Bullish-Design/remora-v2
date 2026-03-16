@@ -18,7 +18,9 @@ Current status:
 - Added concurrency-oriented test for competing transitions from `running`.
 - Item 7 complete: `TurnContext.graph_set_status` now validates `NodeStatus` and routes through transition rules.
 - Added tests for invalid status values and invalid transitions.
+- Item 8 complete: `NodeStore.batch()` added and integrated into reconciler write-heavy paths.
+- Added test proving grouped node writes issue a single commit.
 
 Next:
-- Implement item 8: Batch SQLite commits.
+- Implement item 9: Subscription cache incremental update.
 - Keep one-item-per-commit and push after each item.

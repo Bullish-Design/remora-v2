@@ -27,3 +27,7 @@
 ## 2026-03-15 - External status writes must respect transition rules
 - Decision: Route `graph_set_status` through `transition_status` and enum-validate `new_status`.
 - Rationale: Prevent tools from bypassing node lifecycle constraints via direct status mutation.
+
+## 2026-03-15 - Batched graph writes
+- Decision: Add `NodeStore.batch()` with deferred commit behavior and apply it around reconciler mutation bursts.
+- Rationale: Reduce commit frequency during reconciliation while keeping single-operation call sites unchanged.

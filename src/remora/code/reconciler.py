@@ -219,95 +219,96 @@ class FileReconciler:
         existing_by_id = {node.node_id: node for node in existing_dirs}
         desired_ids = set(dir_paths)
 
-        stale_ids = sorted(
-            set(existing_by_id) - desired_ids,
-            key=lambda node_id: node_id.count("/"),
-            reverse=True,
-        )
-        for node_id in stale_ids:
-            await self._remove_node(node_id)
-
-        for dir_id in sorted(dir_paths):
-            parent_id = None if dir_id == "." else self._parent_dir_id(dir_id)
-            name = "." if dir_id == "." else Path(dir_id).name
-            children = sorted(children_by_dir.get(dir_id, []))
-            source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
-            existing = existing_by_id.get(dir_id)
-            mapped_bundle = self._config.resolve_bundle(NodeType.DIRECTORY.value, name)
-            refresh_subscriptions = not self._subscriptions_bootstrapped
-            refresh_bundle = sync_existing_bundles
-
-            directory_node = Node(
-                node_id=dir_id,
-                node_type=NodeType.DIRECTORY,
-                name=name,
-                full_name=dir_id,
-                file_path=dir_id,
-                start_line=0,
-                end_line=0,
-                source_code="",
-                source_hash=source_hash,
-                parent_id=parent_id,
-                status=existing.status if existing is not None else "idle",
-                role=(
-                    mapped_bundle
-                    if mapped_bundle is not None
-                    else (existing.role if existing is not None else None)
-                ),
+        async with self._node_store.batch():
+            stale_ids = sorted(
+                set(existing_by_id) - desired_ids,
+                key=lambda node_id: node_id.count("/"),
+                reverse=True,
             )
+            for node_id in stale_ids:
+                await self._remove_node(node_id)
 
-            if existing is None:
-                await self._node_store.upsert_node(directory_node)
-                if directory_node.parent_id is not None:
-                    await self._node_store.add_edge(
-                        directory_node.parent_id,
-                        directory_node.node_id,
-                        "contains",
-                    )
-                await self._register_subscriptions(directory_node)
-                await self._provision_bundle(directory_node.node_id, directory_node.role)
-                await self._event_store.append(
-                    NodeDiscoveredEvent(
-                        node_id=directory_node.node_id,
-                        node_type=directory_node.node_type,
-                        file_path=directory_node.file_path,
-                        name=directory_node.name,
-                    )
+            for dir_id in sorted(dir_paths):
+                parent_id = None if dir_id == "." else self._parent_dir_id(dir_id)
+                name = "." if dir_id == "." else Path(dir_id).name
+                children = sorted(children_by_dir.get(dir_id, []))
+                source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
+                existing = existing_by_id.get(dir_id)
+                mapped_bundle = self._config.resolve_bundle(NodeType.DIRECTORY.value, name)
+                refresh_subscriptions = not self._subscriptions_bootstrapped
+                refresh_bundle = sync_existing_bundles
+
+                directory_node = Node(
+                    node_id=dir_id,
+                    node_type=NodeType.DIRECTORY,
+                    name=name,
+                    full_name=dir_id,
+                    file_path=dir_id,
+                    start_line=0,
+                    end_line=0,
+                    source_code="",
+                    source_hash=source_hash,
+                    parent_id=parent_id,
+                    status=existing.status if existing is not None else "idle",
+                    role=(
+                        mapped_bundle
+                        if mapped_bundle is not None
+                        else (existing.role if existing is not None else None)
+                    ),
                 )
-                continue
 
-            metadata_changed = (
-                existing.parent_id != directory_node.parent_id
-                or existing.file_path != directory_node.file_path
-                or existing.name != directory_node.name
-                or existing.full_name != directory_node.full_name
-                or existing.role != directory_node.role
-            )
-            hash_changed = existing.source_hash != source_hash
-            if metadata_changed or hash_changed:
-                await self._node_store.upsert_node(directory_node)
-                if directory_node.parent_id is not None:
-                    await self._node_store.add_edge(
-                        directory_node.parent_id,
-                        directory_node.node_id,
-                        "contains",
+                if existing is None:
+                    await self._node_store.upsert_node(directory_node)
+                    if directory_node.parent_id is not None:
+                        await self._node_store.add_edge(
+                            directory_node.parent_id,
+                            directory_node.node_id,
+                            "contains",
+                        )
+                    await self._register_subscriptions(directory_node)
+                    await self._provision_bundle(directory_node.node_id, directory_node.role)
+                    await self._event_store.append(
+                        NodeDiscoveredEvent(
+                            node_id=directory_node.node_id,
+                            node_type=directory_node.node_type,
+                            file_path=directory_node.file_path,
+                            name=directory_node.name,
+                        )
                     )
+                    continue
 
-            if refresh_subscriptions:
-                await self._register_subscriptions(directory_node)
-            if refresh_bundle:
-                await self._provision_bundle(directory_node.node_id, directory_node.role)
-
-            if hash_changed:
-                await self._register_subscriptions(directory_node)
-                await self._event_store.append(
-                    NodeChangedEvent(
-                        node_id=directory_node.node_id,
-                        old_hash=existing.source_hash,
-                        new_hash=directory_node.source_hash,
-                        file_path=directory_node.file_path,
-                    )
+                metadata_changed = (
+                    existing.parent_id != directory_node.parent_id
+                    or existing.file_path != directory_node.file_path
+                    or existing.name != directory_node.name
+                    or existing.full_name != directory_node.full_name
+                    or existing.role != directory_node.role
                 )
+                hash_changed = existing.source_hash != source_hash
+                if metadata_changed or hash_changed:
+                    await self._node_store.upsert_node(directory_node)
+                    if directory_node.parent_id is not None:
+                        await self._node_store.add_edge(
+                            directory_node.parent_id,
+                            directory_node.node_id,
+                            "contains",
+                        )
+
+                if refresh_subscriptions:
+                    await self._register_subscriptions(directory_node)
+                if refresh_bundle:
+                    await self._provision_bundle(directory_node.node_id, directory_node.role)
+
+                if hash_changed:
+                    await self._register_subscriptions(directory_node)
+                    await self._event_store.append(
+                        NodeChangedEvent(
+                            node_id=directory_node.node_id,
+                            old_hash=existing.source_hash,
+                            new_hash=directory_node.source_hash,
+                            file_path=directory_node.file_path,
+                        )
+                    )
 
         self._subscriptions_bootstrapped = True
 
@@ -398,49 +399,50 @@ class FileReconciler:
             sync_existing_bundles=sync_existing_bundles,
         )
 
-        dir_node_id = self._directory_id_for_file(file_path)
-        for node in projected:
-            if node.parent_id is None:
-                node.parent_id = dir_node_id
-                await self._node_store.upsert_node(node)
-            if node.parent_id is not None:
-                await self._node_store.add_edge(node.parent_id, node.node_id, "contains")
+        async with self._node_store.batch():
+            dir_node_id = self._directory_id_for_file(file_path)
+            for node in projected:
+                if node.parent_id is None:
+                    node.parent_id = dir_node_id
+                    await self._node_store.upsert_node(node)
+                if node.parent_id is not None:
+                    await self._node_store.add_edge(node.parent_id, node.node_id, "contains")
 
-        projected_by_id = {node.node_id: node for node in projected}
+            projected_by_id = {node.node_id: node for node in projected}
 
-        additions = sorted(new_ids - old_ids)
-        removals = sorted(old_ids - new_ids)
-        updates = sorted(new_ids & old_ids)
+            additions = sorted(new_ids - old_ids)
+            removals = sorted(old_ids - new_ids)
+            updates = sorted(new_ids & old_ids)
 
-        for node_id in additions:
-            node = projected_by_id[node_id]
-            await self._register_subscriptions(node)
-            await self._event_store.append(
-                NodeDiscoveredEvent(
-                    node_id=node.node_id,
-                    node_type=node.node_type,
-                    file_path=node.file_path,
-                    name=node.name,
-                )
-            )
-
-        for node_id in updates:
-            node = projected_by_id[node_id]
-            old_hash = old_hashes.get(node_id)
-            new_hash = node.source_hash
-            if old_hash is not None and old_hash != new_hash:
+            for node_id in additions:
+                node = projected_by_id[node_id]
                 await self._register_subscriptions(node)
                 await self._event_store.append(
-                    NodeChangedEvent(
-                        node_id=node_id,
-                        old_hash=old_hash,
-                        new_hash=new_hash,
+                    NodeDiscoveredEvent(
+                        node_id=node.node_id,
+                        node_type=node.node_type,
                         file_path=node.file_path,
+                        name=node.name,
                     )
                 )
 
-        for node_id in removals:
-            await self._remove_node(node_id)
+            for node_id in updates:
+                node = projected_by_id[node_id]
+                old_hash = old_hashes.get(node_id)
+                new_hash = node.source_hash
+                if old_hash is not None and old_hash != new_hash:
+                    await self._register_subscriptions(node)
+                    await self._event_store.append(
+                        NodeChangedEvent(
+                            node_id=node_id,
+                            old_hash=old_hash,
+                            new_hash=new_hash,
+                            file_path=node.file_path,
+                        )
+                    )
+
+            for node_id in removals:
+                await self._remove_node(node_id)
 
         self._file_state[file_path] = (mtime_ns, new_ids)
 
@@ -535,71 +537,72 @@ class FileReconciler:
         existing_by_id = {node.node_id: node for node in existing}
         desired_ids = {item.id for item in specs}
 
-        stale_ids = sorted(set(existing_by_id) - desired_ids)
-        for node_id in stale_ids:
-            await self._remove_node(node_id)
+        async with self._node_store.batch():
+            stale_ids = sorted(set(existing_by_id) - desired_ids)
+            for node_id in stale_ids:
+                await self._remove_node(node_id)
 
-        for spec in specs:
-            existing_node = existing_by_id.get(spec.id)
-            source_hash = self._virtual_agent_hash(spec)
-            virtual_node = Node(
-                node_id=spec.id,
-                node_type=NodeType.VIRTUAL,
-                name=spec.id,
-                full_name=spec.id,
-                file_path="",
-                start_line=0,
-                end_line=0,
-                start_byte=0,
-                end_byte=0,
-                source_code="",
-                source_hash=source_hash,
-                parent_id=None,
-                status=existing_node.status if existing_node is not None else "idle",
-                role=spec.role,
-            )
-            patterns = self._virtual_patterns(spec)
+            for spec in specs:
+                existing_node = existing_by_id.get(spec.id)
+                source_hash = self._virtual_agent_hash(spec)
+                virtual_node = Node(
+                    node_id=spec.id,
+                    node_type=NodeType.VIRTUAL,
+                    name=spec.id,
+                    full_name=spec.id,
+                    file_path="",
+                    start_line=0,
+                    end_line=0,
+                    start_byte=0,
+                    end_byte=0,
+                    source_code="",
+                    source_hash=source_hash,
+                    parent_id=None,
+                    status=existing_node.status if existing_node is not None else "idle",
+                    role=spec.role,
+                )
+                patterns = self._virtual_patterns(spec)
 
-            if existing_node is None:
-                await self._node_store.upsert_node(virtual_node)
+                if existing_node is None:
+                    await self._node_store.upsert_node(virtual_node)
+                    await self._register_subscriptions(
+                        virtual_node,
+                        virtual_subscriptions=patterns,
+                    )
+                    await self._provision_bundle(virtual_node.node_id, virtual_node.role)
+                    await self._event_store.append(
+                        NodeDiscoveredEvent(
+                            node_id=virtual_node.node_id,
+                            node_type=virtual_node.node_type,
+                            file_path=virtual_node.file_path,
+                            name=virtual_node.name,
+                        )
+                    )
+                    continue
+
+                metadata_changed = (
+                    existing_node.name != virtual_node.name
+                    or existing_node.full_name != virtual_node.full_name
+                    or existing_node.file_path != virtual_node.file_path
+                    or existing_node.parent_id != virtual_node.parent_id
+                    or existing_node.role != virtual_node.role
+                )
+                hash_changed = existing_node.source_hash != virtual_node.source_hash
+                if metadata_changed or hash_changed:
+                    await self._node_store.upsert_node(virtual_node)
                 await self._register_subscriptions(
                     virtual_node,
                     virtual_subscriptions=patterns,
                 )
                 await self._provision_bundle(virtual_node.node_id, virtual_node.role)
-                await self._event_store.append(
-                    NodeDiscoveredEvent(
-                        node_id=virtual_node.node_id,
-                        node_type=virtual_node.node_type,
-                        file_path=virtual_node.file_path,
-                        name=virtual_node.name,
+                if hash_changed:
+                    await self._event_store.append(
+                        NodeChangedEvent(
+                            node_id=virtual_node.node_id,
+                            old_hash=existing_node.source_hash,
+                            new_hash=virtual_node.source_hash,
+                        )
                     )
-                )
-                continue
-
-            metadata_changed = (
-                existing_node.name != virtual_node.name
-                or existing_node.full_name != virtual_node.full_name
-                or existing_node.file_path != virtual_node.file_path
-                or existing_node.parent_id != virtual_node.parent_id
-                or existing_node.role != virtual_node.role
-            )
-            hash_changed = existing_node.source_hash != virtual_node.source_hash
-            if metadata_changed or hash_changed:
-                await self._node_store.upsert_node(virtual_node)
-            await self._register_subscriptions(
-                virtual_node,
-                virtual_subscriptions=patterns,
-            )
-            await self._provision_bundle(virtual_node.node_id, virtual_node.role)
-            if hash_changed:
-                await self._event_store.append(
-                    NodeChangedEvent(
-                        node_id=virtual_node.node_id,
-                        old_hash=existing_node.source_hash,
-                        new_hash=virtual_node.source_hash,
-                    )
-                )
 
     @staticmethod
     def _virtual_patterns(spec: VirtualAgentConfig) -> tuple[SubscriptionPattern, ...]:

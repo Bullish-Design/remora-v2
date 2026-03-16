@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from contextlib import asynccontextmanager
 from typing import Any
 
 import aiosqlite
@@ -27,6 +28,22 @@ class NodeStore:
 
     def __init__(self, db: aiosqlite.Connection):
         self._db = db
+        self._batch_depth = 0
+
+    @asynccontextmanager
+    async def batch(self):  # noqa: ANN201
+        """Group multiple node mutations into a single commit."""
+        self._batch_depth += 1
+        try:
+            yield
+        finally:
+            self._batch_depth -= 1
+            if self._batch_depth == 0:
+                await self._db.commit()
+
+    async def _maybe_commit(self) -> None:
+        if self._batch_depth == 0:
+            await self._db.commit()
 
     async def create_tables(self) -> None:
         """Create nodes and edges tables with indexes."""
@@ -74,7 +91,7 @@ class NodeStore:
             f"INSERT OR REPLACE INTO nodes ({columns}) VALUES ({placeholders})",
             tuple(row.values()),
         )
-        await self._db.commit()
+        await self._maybe_commit()
 
     async def get_node(self, node_id: str) -> Node | None:
         """Fetch a single node by ID."""
@@ -129,7 +146,7 @@ class NodeStore:
             "DELETE FROM nodes WHERE node_id = ?",
             (node_id,),
         )
-        await self._db.commit()
+        await self._maybe_commit()
         return cursor.rowcount > 0
 
     async def set_status(self, node_id: str, status: str | NodeStatus) -> None:
@@ -139,7 +156,7 @@ class NodeStore:
             "UPDATE nodes SET status = ? WHERE node_id = ?",
             (status_value, node_id),
         )
-        await self._db.commit()
+        await self._maybe_commit()
 
     async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
         """Transition node status atomically when the transition is valid."""
@@ -152,7 +169,7 @@ class NodeStore:
             f"UPDATE nodes SET status = ? WHERE node_id = ? AND status IN ({placeholders})",
             (target.value, node_id, *[source.value for source in valid_sources]),
         )
-        await self._db.commit()
+        await self._maybe_commit()
         if cursor.rowcount > 0:
             return True
 
@@ -176,7 +193,7 @@ class NodeStore:
             """,
             (from_id, to_id, edge_type),
         )
-        await self._db.commit()
+        await self._maybe_commit()
 
     async def get_edges(self, node_id: str, direction: str = "both") -> list[Edge]:
         """Get edges for a node in outgoing, incoming, or both directions."""
@@ -212,7 +229,7 @@ class NodeStore:
             "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
             (node_id, node_id),
         )
-        await self._db.commit()
+        await self._maybe_commit()
         return cursor.rowcount
 
     async def list_all_edges(self) -> list[Edge]:

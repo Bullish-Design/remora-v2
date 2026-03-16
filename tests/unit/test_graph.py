@@ -231,3 +231,26 @@ async def test_nodestore_get_children(db) -> None:
 
     children = await store.get_children("src")
     assert [node.node_id for node in children] == ["src/app.py::a", "src/lib"]
+
+
+@pytest.mark.asyncio
+async def test_nodestore_batch_commits_once_for_grouped_writes(db, monkeypatch) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+
+    commit_calls = 0
+    real_commit = db.commit
+
+    async def counted_commit() -> None:
+        nonlocal commit_calls
+        commit_calls += 1
+        await real_commit()
+
+    monkeypatch.setattr(db, "commit", counted_commit)
+
+    async with store.batch():
+        await store.upsert_node(make_node("src/app.py::a"))
+        await store.upsert_node(make_node("src/app.py::b"))
+        await store.add_edge("src/app.py::a", "src/app.py::b", "calls")
+
+    assert commit_calls == 1
