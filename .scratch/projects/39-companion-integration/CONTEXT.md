@@ -81,9 +81,13 @@ Completed:
   - Added `bundles/companion/tools/aggregate_digest.pym` to maintain project activity/tag/agent/insight KV keys.
   - Extended `tests/unit/test_companion_tools.py` with bundle/tool existence and content checks.
   - Verification: `devenv shell -- pytest tests/unit/test_companion_tools.py -v` (5 passed).
+- Step 13: Updated example configuration docs for Layer 2.
+  - Added companion observer comments and example `virtual_agents` snippet to `remora.yaml.example`.
+  - Manually validated YAML parse for `remora.yaml.example`.
+  - Verification: `devenv shell -- python -c "import yaml; yaml.safe_load(open('remora.yaml.example'))"` (success).
 
 ## Notes
 - Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
 ## Next Step
-- Step 13: Add companion system Layer 2 example config comments to `remora.yaml.example` and validate YAML.
+- Project complete: all implementation-guide steps (1-13) are implemented, tested, committed, and pushed.

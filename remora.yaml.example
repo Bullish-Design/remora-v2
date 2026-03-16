@@ -26,6 +26,22 @@ bundle_overlays:
 #       - event_types: ["NodeChangedEvent"]
 #         path_glob: "src/**"
 
+# --- Companion System (Layer 2: Project-Level Observer) ---
+# The companion observer tracks activity across all agents and builds
+# project-level insights. It subscribes to TurnDigestedEvent, which is
+# emitted after each agent's self-reflection (Layer 1) completes.
+#
+# Layer 1 (per-agent self-reflection) is configured in bundle.yaml
+# via the self_reflect section. See bundles/code-agent/bundle.yaml.
+#
+# To enable Layer 2, uncomment the virtual agent below:
+#
+# virtual_agents:
+#   - id: companion-observer
+#     role: companion
+#     subscriptions:
+#       - event_types: ["TurnDigestedEvent"]
+
 model_base_url: "http://localhost:8000/v1"
 model_default: "Qwen/Qwen3-4B"
 model_api_key: "${OPENAI_API_KEY:-}"
