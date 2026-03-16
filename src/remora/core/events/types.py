@@ -189,6 +189,16 @@ class TurnCompleteEvent(Event):
     errors_count: int = 0
 
 
+class TurnDigestedEvent(Event):
+    """Emitted after Layer 1 reflection completes for an agent turn."""
+
+    agent_id: str
+    summary: str = ""
+    tags: tuple[str, ...] = ()
+    has_reflection: bool = False
+    has_links: bool = False
+
+
 class CustomEvent(Event):
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -236,6 +246,7 @@ __all__ = [
     "RemoraToolCallEvent",
     "RemoraToolResultEvent",
     "TurnCompleteEvent",
+    "TurnDigestedEvent",
     "CustomEvent",
     "ToolResultEvent",
     "CursorFocusEvent",

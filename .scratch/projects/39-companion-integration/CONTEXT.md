@@ -1,30 +1,17 @@
 # Context — Companion Integration
 
 ## Current State
-Comparison analysis complete at `APPROACH_COMPARISON.md` with 9 sections + Appendix A.
+Implementation has started from `IMPLEMENTATION_GUIDE.md`.
 
-Appendix A explores four first-principles observer designs (A-D).
+Completed:
+- Step 1: Added `TurnDigestedEvent` to the event system.
+  - Updated `src/remora/core/events/types.py` with new event model and export.
+  - Updated `src/remora/core/events/__init__.py` exports.
+  - Extended `tests/unit/test_events.py` with default/full/envelope coverage and instantiation coverage.
+  - Verification: `devenv shell -- pytest tests/unit/test_events.py -q` (11 passed).
 
-CONCEPT.md expands Designs A, C, and A+C in detail:
-- Design A: Self-directed companion (~183 lines). Self-subscription via bundle config, tag-based loop prevention, KV-native companion tools, reflection prompt, system prompt injection.
-- Design C: Scoped delegation (~206 lines). WorkspaceDelegation config model, delegated_kv_set/get on TurnContext, not_from_agents subscription filter, observer bundle, AgentCompleteEvent enrichment with user_message.
-- A+C Combined (~230 lines). Layer 1 = self-directed per-agent reflection. Layer 2 = observer subscribes to TurnDigestedEvent for cross-agent analysis. No cross-workspace writes needed in combined design (observer reads events, writes to own workspace).
+## Notes
+- Pydantic emits a warning for `TurnDigestedEvent.summary` because `Event` also has a `summary()` method; behavior is correct and tests pass.
 
-Key insight: The combined design eliminates Design C's biggest problem (cross-workspace writes) while adding cross-agent intelligence that Design A alone can't provide.
-
-Awaiting user review and approach decision before writing the implementation plan.
-
-## Source Document
-`.scratch/projects/31-companion-and-vector-integration/COMPANION_BRAINSTORMING.md`
-
-## Key Files Studied
-- `core/actor.py` — AgentTurnExecutor.execute_turn(), _complete_agent_turn(), PromptBuilder
-- `core/externals.py` — TurnContext API, workspace sandboxing, KV methods
-- `core/events/types.py` — AgentCompleteEvent (has full_response, lacks user_message)
-- `core/events/dispatcher.py` — TriggerDispatcher.dispatch()
-- `core/events/subscriptions.py` — SubscriptionPattern.matches(), from_agent matching
-- `core/runner.py` — ActorPool, semaphore, _route_to_actor
-- `core/services.py` — RuntimeServices container
-- `core/config.py` — VirtualAgentConfig, Config
-- `code/reconciler.py` — _sync_virtual_agents(), subscription registration
-- `core/workspace.py` — AgentWorkspace KV methods
+## Next Step
+- Step 2: Implement tag-based turn classification in actor completion flow, with unit tests.

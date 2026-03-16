@@ -23,6 +23,7 @@ from remora.core.events import (
     RewriteRejectedEvent,
     ToolResultEvent,
     TurnCompleteEvent,
+    TurnDigestedEvent,
 )
 from remora.core.events.subscriptions import SubscriptionPattern
 
@@ -161,6 +162,7 @@ def test_all_event_types_instantiate() -> None:
             turn=1,
         ),
         TurnCompleteEvent(agent_id="a", turn=1, tool_calls_count=1, errors_count=0),
+        TurnDigestedEvent(agent_id="a", summary="digest"),
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
         CursorFocusEvent(file_path="src/app.py", line=3, character=0, node_id="src/app.py::a"),
     ]
@@ -176,3 +178,33 @@ def test_agent_complete_event_preserves_full_response() -> None:
     )
     assert len(event.result_summary) == 200
     assert len(event.full_response) == 500
+
+
+def test_turn_digested_event_defaults() -> None:
+    event = TurnDigestedEvent(agent_id="agent-a")
+    assert event.event_type == "TurnDigestedEvent"
+    assert event.summary == ""
+    assert event.tags == ()
+    assert event.has_reflection is False
+    assert event.has_links is False
+
+
+def test_turn_digested_event_full() -> None:
+    event = TurnDigestedEvent(
+        agent_id="agent-a",
+        summary="Discussed validation",
+        tags=("bug", "edge_case"),
+        has_reflection=True,
+        has_links=True,
+    )
+    assert event.agent_id == "agent-a"
+    assert event.summary == "Discussed validation"
+    assert event.tags == ("bug", "edge_case")
+
+
+def test_turn_digested_event_envelope() -> None:
+    event = TurnDigestedEvent(agent_id="agent-a", summary="test")
+    envelope = event.to_envelope()
+    assert envelope["event_type"] == "TurnDigestedEvent"
+    assert envelope["payload"]["agent_id"] == "agent-a"
+    assert envelope["payload"]["summary"] == "test"

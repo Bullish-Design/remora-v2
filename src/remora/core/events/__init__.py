@@ -31,6 +31,7 @@ from remora.core.events.types import (
     RewriteRejectedEvent,
     ToolResultEvent,
     TurnCompleteEvent,
+    TurnDigestedEvent,
 )
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "RemoraToolCallEvent",
     "RemoraToolResultEvent",
     "TurnCompleteEvent",
+    "TurnDigestedEvent",
     "RewriteProposalEvent",
     "RewriteAcceptedEvent",
     "RewriteRejectedEvent",
