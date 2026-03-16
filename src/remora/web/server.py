@@ -394,7 +394,7 @@ def create_app(
         return JSONResponse(await event_store.get_events(limit=limit))
 
     async def api_search(request: Request) -> JSONResponse:
-        if search_service is None or not getattr(search_service, "available", False):
+        if search_service is None or not search_service.available:
             return JSONResponse({"error": "Semantic search is not configured"}, status_code=503)
 
         data = await request.json()

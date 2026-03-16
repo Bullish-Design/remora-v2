@@ -471,7 +471,7 @@ class FileReconciler:
 
     async def _index_file_for_search(self, file_path: str) -> None:
         """Index a file for semantic search, logging failures without raising."""
-        if self._search_service is None or not getattr(self._search_service, "available", False):
+        if self._search_service is None or not self._search_service.available:
             return
         try:
             await self._search_service.index_file(file_path)
@@ -480,7 +480,7 @@ class FileReconciler:
 
     async def _deindex_file_for_search(self, file_path: str) -> None:
         """Remove a file from semantic search, logging failures without raising."""
-        if self._search_service is None or not getattr(self._search_service, "available", False):
+        if self._search_service is None or not self._search_service.available:
             return
         try:
             await self._search_service.delete_source(file_path)

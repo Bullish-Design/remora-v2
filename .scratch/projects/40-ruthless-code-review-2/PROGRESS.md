@@ -38,5 +38,5 @@
 ### Phase 3
 - [x] Step 3.1 Create `SearchServiceProtocol`
 - [x] Step 3.2 Replace search_service `object|Any` usages with protocol typing
-- [ ] Step 3.3 Replace search_service getattr duck-typing checks
+- [x] Step 3.3 Replace search_service getattr duck-typing checks
 - [ ] Step 3.4 Type remaining `Any` parameters (externals/workspace/lifecycle)

@@ -85,3 +85,11 @@ Next action:
 
 Next action:
 - Step 3.3: replace `getattr(..., \"available\", False)` checks with protocol-backed attribute access.
+- Step 3.3 completed:
+  - replaced duck-typed availability checks with direct protocol property access in:
+    - `code/reconciler.py`
+    - `web/server.py`
+  - verification: `tests/unit/test_reconciler.py tests/unit/test_web_server.py` passed
+
+Next action:
+- Step 3.4: type remaining `Any` parameters (`TurnContext.outbox`, lifecycle callable, workspace typing note).
