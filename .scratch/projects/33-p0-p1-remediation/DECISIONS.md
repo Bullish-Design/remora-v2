@@ -11,3 +11,7 @@
 ## 2026-03-15 - Actor depth-state memory hygiene
 - Decision: Add timestamped depth entries with a 5-minute TTL and periodic cleanup every 100 trigger checks.
 - Rationale: Bound long-lived correlation-id memory growth without introducing background tasks.
+
+## 2026-03-15 - Reconciler file-lock lifecycle
+- Decision: Track file locks per reconcile generation and evict unlocked locks unused by the latest generation.
+- Rationale: Prevent unbounded lock-map growth while preserving per-file mutual exclusion during active reconciliation.

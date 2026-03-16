@@ -10,7 +10,9 @@ Current status:
 - Added unit tests for rejected non-local origin and allowed localhost origin.
 - Item 3 complete: Actor now tracks depth timestamps with periodic TTL cleanup.
 - Added tests for stale depth eviction and timestamp cleanup on reset.
+- Item 4 complete: FileReconciler now tracks file locks by reconcile generation and evicts stale unlocked entries.
+- Added test coverage proving unused file locks are removed on subsequent cycles.
 
 Next:
-- Implement item 4: FileReconciler `_file_locks` eviction.
+- Implement item 5: Event bus dispatch fix.
 - Keep one-item-per-commit and push after each item.

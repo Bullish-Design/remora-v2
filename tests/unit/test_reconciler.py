@@ -229,6 +229,26 @@ async def test_reconciler_content_changed_event_triggers_reconcile(
 
 
 @pytest.mark.asyncio
+async def test_file_lock_cache_evicts_unused_entries(reconcile_env, tmp_path: Path) -> None:
+    _node_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
+    file_a = tmp_path / "src" / "a.py"
+    file_b = tmp_path / "src" / "b.py"
+    write_file(file_a, "def a():\n    return 1\n")
+    write_file(file_b, "def b():\n    return 1\n")
+
+    await reconciler.reconcile_cycle()
+    assert str(file_a) in reconciler._file_locks
+    assert str(file_b) in reconciler._file_locks
+
+    write_file(file_a, "def a():\n    return 2\n")
+    await asyncio.sleep(0.001)
+    await reconciler.reconcile_cycle()
+
+    assert str(file_a) in reconciler._file_locks
+    assert str(file_b) not in reconciler._file_locks
+
+
+@pytest.mark.asyncio
 async def test_reconciler_handles_malformed_source(reconcile_env, tmp_path: Path) -> None:
     node_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
     bad_source = tmp_path / "src" / "broken.py"

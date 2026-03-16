@@ -47,6 +47,8 @@ class FileReconciler:
         self._project_root = project_root.resolve()
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
+        self._file_lock_generations: dict[str, int] = {}
+        self._reconcile_generation = 0
         self._running = False
         # Re-register directory subscriptions once after startup to ensure
         # subscription state is consistent with current directory projections.
@@ -63,6 +65,7 @@ class FileReconciler:
 
     async def reconcile_cycle(self) -> None:
         """Run one reconciliation cycle over changed/new/deleted files."""
+        generation = self._next_reconcile_generation()
         await self._sync_virtual_agents()
         current_mtimes = self._collect_file_mtimes()
         sync_existing_bundles = not self._bundles_bootstrapped
@@ -82,6 +85,7 @@ class FileReconciler:
             await self._reconcile_file(
                 file_path,
                 current_mtimes[file_path],
+                generation=generation,
                 sync_existing_bundles=sync_existing_bundles,
             )
 
@@ -91,6 +95,7 @@ class FileReconciler:
                 await self._remove_node(node_id)
             self._file_state.pop(file_path, None)
         self._bundles_bootstrapped = True
+        self._evict_stale_file_locks(generation)
 
     async def run_forever(self) -> None:
         """Continuously reconcile changed files using watchfiles."""
@@ -124,18 +129,20 @@ class FileReconciler:
         async for changes in watchfiles.awatch(*watch_paths, stop_event=self._stop_event()):
             if not self._running:
                 break
+            generation = self._next_reconcile_generation()
             changed_files = {str(Path(path)) for _change_type, path in changes}
             try:
                 for file_path in sorted(changed_files):
                     p = Path(file_path)
                     if p.exists() and p.is_file():
                         mtime = p.stat().st_mtime_ns
-                        await self._reconcile_file(str(p), mtime)
+                        await self._reconcile_file(str(p), mtime, generation=generation)
                     elif str(p) in self._file_state:
                         _mtime, node_ids = self._file_state[str(p)]
                         for node_id in sorted(node_ids):
                             await self._remove_node(node_id)
                         self._file_state.pop(str(p), None)
+                self._evict_stale_file_locks(generation)
             except Exception:  # noqa: BLE001 - isolate one watch batch failure
                 logger.exception("Watch-triggered reconcile failed")
 
@@ -343,14 +350,18 @@ class FileReconciler:
         file_path: str,
         mtime_ns: int,
         *,
+        generation: int | None = None,
         sync_existing_bundles: bool = False,
     ) -> None:
-        async with self._file_lock(file_path):
+        lock_generation = generation if generation is not None else self._next_reconcile_generation()
+        async with self._file_lock(file_path, lock_generation):
             await self._do_reconcile_file(
                 file_path,
                 mtime_ns,
                 sync_existing_bundles=sync_existing_bundles,
             )
+        if generation is None:
+            self._evict_stale_file_locks(lock_generation)
 
     async def _do_reconcile_file(
         self,
@@ -433,12 +444,29 @@ class FileReconciler:
 
         self._file_state[file_path] = (mtime_ns, new_ids)
 
-    def _file_lock(self, file_path: str) -> asyncio.Lock:
+    def _file_lock(self, file_path: str, generation: int) -> asyncio.Lock:
         lock = self._file_locks.get(file_path)
         if lock is None:
             lock = asyncio.Lock()
             self._file_locks[file_path] = lock
+        self._file_lock_generations[file_path] = generation
         return lock
+
+    def _next_reconcile_generation(self) -> int:
+        self._reconcile_generation += 1
+        return self._reconcile_generation
+
+    def _evict_stale_file_locks(self, generation: int) -> None:
+        stale_paths = [
+            file_path
+            for file_path, lock_generation in self._file_lock_generations.items()
+            if lock_generation < generation
+            and file_path in self._file_locks
+            and not self._file_locks[file_path].locked()
+        ]
+        for file_path in stale_paths:
+            self._file_locks.pop(file_path, None)
+            self._file_lock_generations.pop(file_path, None)
 
     async def _remove_node(self, node_id: str) -> None:
         node = await self._node_store.get_node(node_id)
@@ -611,7 +639,9 @@ class FileReconciler:
         if p.exists() and p.is_file():
             try:
                 mtime = p.stat().st_mtime_ns
-                await self._reconcile_file(str(p), mtime)
+                generation = self._next_reconcile_generation()
+                await self._reconcile_file(str(p), mtime, generation=generation)
+                self._evict_stale_file_locks(generation)
             except Exception:  # noqa: BLE001 - isolate event failures
                 logger.exception("Event-triggered reconcile failed for %s", file_path)
 
