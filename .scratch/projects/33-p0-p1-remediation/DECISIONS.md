@@ -7,3 +7,7 @@
 ## 2026-03-15 - CSRF scope and allowlist
 - Decision: Apply Origin validation middleware to POST/PUT/DELETE and allow only localhost/127.0.0.1 browser origins.
 - Rationale: Keep local-web UX working while blocking cross-site browser writes from external origins.
+
+## 2026-03-15 - Actor depth-state memory hygiene
+- Decision: Add timestamped depth entries with a 5-minute TTL and periodic cleanup every 100 trigger checks.
+- Rationale: Bound long-lived correlation-id memory growth without introducing background tasks.

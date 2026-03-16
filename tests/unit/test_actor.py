@@ -173,6 +173,36 @@ async def test_actor_depth_limit(actor_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_actor_depth_cleanup_removes_stale_entries(actor_env, monkeypatch) -> None:
+    actor = _make_actor(actor_env)
+    now_seconds = 1_700_000.0
+    now_ms = now_seconds * 1000.0
+    actor._depths["stale-corr"] = 1
+    actor._depth_timestamps["stale-corr"] = now_ms - (5 * 60 * 1000) - 1
+    actor._depths["fresh-corr"] = 1
+    actor._depth_timestamps["fresh-corr"] = now_ms
+    actor._trigger_checks = 99
+    monkeypatch.setattr("remora.core.actor.time.time", lambda: now_seconds)
+
+    assert actor._should_trigger("new-corr")
+    assert "stale-corr" not in actor._depths
+    assert "stale-corr" not in actor._depth_timestamps
+    assert "fresh-corr" in actor._depths
+
+
+@pytest.mark.asyncio
+async def test_actor_reset_clears_depth_timestamp(actor_env) -> None:
+    actor = _make_actor(actor_env)
+    assert actor._should_trigger("corr-reset")
+    turn_log = logging.LoggerAdapter(logging.getLogger(__name__), {})
+
+    await actor._reset_agent_state(actor.node_id, "corr-reset", turn_log)
+
+    assert "corr-reset" not in actor._depths
+    assert "corr-reset" not in actor._depth_timestamps
+
+
+@pytest.mark.asyncio
 async def test_actor_processes_inbox_message(actor_env, monkeypatch) -> None:
     env = actor_env
     node = make_node("src/app.py::a")

@@ -35,6 +35,9 @@ from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
 
+_DEPTH_TTL_MS = 5 * 60 * 1000
+_DEPTH_CLEANUP_INTERVAL = 100
+
 
 def _turn_logger(node_id: str, correlation_id: str, turn_number: int) -> logging.LoggerAdapter:
     """Create a logger adapter with per-turn context fields."""
@@ -223,6 +226,8 @@ class Actor:
         # Per-actor policy state (moved from global runner dicts)
         self._last_trigger_ms: float = 0.0
         self._depths: dict[str, int] = {}
+        self._depth_timestamps: dict[str, float] = {}
+        self._trigger_checks = 0
 
     @property
     def last_active(self) -> float:
@@ -281,6 +286,10 @@ class Actor:
     def _should_trigger(self, correlation_id: str) -> bool:
         """Check cooldown and depth policies. Returns True if trigger should proceed."""
         now_ms = time.time() * 1000.0
+        self._trigger_checks += 1
+        if self._trigger_checks >= _DEPTH_CLEANUP_INTERVAL:
+            self._cleanup_depth_state(now_ms)
+            self._trigger_checks = 0
 
         # Cooldown check
         if now_ms - self._last_trigger_ms < self._config.trigger_cooldown_ms:
@@ -292,10 +301,19 @@ class Actor:
         if depth >= self._config.max_trigger_depth:
             return False
         self._depths[correlation_id] = depth + 1
-
-        # Clean stale depth entries
-        # (done here rather than on a timer to keep it simple)
+        self._depth_timestamps[correlation_id] = now_ms
         return True
+
+    def _cleanup_depth_state(self, now_ms: float) -> None:
+        cutoff = now_ms - _DEPTH_TTL_MS
+        stale_ids = [
+            correlation_id
+            for correlation_id, timestamp_ms in self._depth_timestamps.items()
+            if timestamp_ms < cutoff
+        ]
+        for correlation_id in stale_ids:
+            self._depth_timestamps.pop(correlation_id, None)
+            self._depths.pop(correlation_id, None)
 
     async def _execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
@@ -539,8 +557,10 @@ class Actor:
             remaining = self._depths.get(depth_key, 1) - 1
             if remaining <= 0:
                 self._depths.pop(depth_key, None)
+                self._depth_timestamps.pop(depth_key, None)
             else:
                 self._depths[depth_key] = remaining
+                self._depth_timestamps[depth_key] = time.time() * 1000.0
 
     @staticmethod
     def _build_prompt(node: Node, trigger: Trigger) -> str:

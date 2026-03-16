@@ -8,7 +8,9 @@ Current status:
 - Added unit tests for traversal attempts in both diff and accept endpoints.
 - Item 2 complete: CSRF Origin validation middleware for mutating web API methods.
 - Added unit tests for rejected non-local origin and allowed localhost origin.
+- Item 3 complete: Actor now tracks depth timestamps with periodic TTL cleanup.
+- Added tests for stale depth eviction and timestamp cleanup on reset.
 
 Next:
-- Implement item 3: Actor `_depths` TTL cleanup.
+- Implement item 4: FileReconciler `_file_locks` eviction.
 - Keep one-item-per-commit and push after each item.
