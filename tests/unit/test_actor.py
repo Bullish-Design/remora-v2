@@ -13,7 +13,14 @@ from structured_agents import Message
 from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
-from remora.core.actor import Actor, Outbox, PromptBuilder, Trigger
+from remora.core.actor import (
+    Actor,
+    AgentTurnExecutor,
+    Outbox,
+    PromptBuilder,
+    Trigger,
+    TriggerPolicy,
+)
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import (
@@ -158,49 +165,49 @@ async def test_actor_start_stop(actor_env) -> None:
 
 @pytest.mark.asyncio
 async def test_actor_cooldown(actor_env) -> None:
-    actor = _make_actor(actor_env)
-    assert actor._should_trigger("c1")
-    assert not actor._should_trigger("c1")
+    policy = TriggerPolicy(actor_env["config"])
+    assert policy.should_trigger("c1")
+    assert not policy.should_trigger("c1")
 
 
 @pytest.mark.asyncio
 async def test_actor_depth_limit(actor_env) -> None:
-    actor = _make_actor(actor_env)
-    assert actor._should_trigger("c1")
-    actor._last_trigger_ms = 0.0
-    assert actor._should_trigger("c1")
-    actor._last_trigger_ms = 0.0
-    assert not actor._should_trigger("c1")
+    policy = TriggerPolicy(actor_env["config"])
+    assert policy.should_trigger("c1")
+    policy.last_trigger_ms = 0.0
+    assert policy.should_trigger("c1")
+    policy.last_trigger_ms = 0.0
+    assert not policy.should_trigger("c1")
 
 
 @pytest.mark.asyncio
 async def test_actor_depth_cleanup_removes_stale_entries(actor_env, monkeypatch) -> None:
-    actor = _make_actor(actor_env)
+    policy = TriggerPolicy(actor_env["config"])
     now_seconds = 1_700_000.0
     now_ms = now_seconds * 1000.0
-    actor._depths["stale-corr"] = 1
-    actor._depth_timestamps["stale-corr"] = now_ms - (5 * 60 * 1000) - 1
-    actor._depths["fresh-corr"] = 1
-    actor._depth_timestamps["fresh-corr"] = now_ms
-    actor._trigger_checks = 99
+    policy.depths["stale-corr"] = 1
+    policy.depth_timestamps["stale-corr"] = now_ms - (5 * 60 * 1000) - 1
+    policy.depths["fresh-corr"] = 1
+    policy.depth_timestamps["fresh-corr"] = now_ms
+    policy.trigger_checks = 99
     monkeypatch.setattr("remora.core.actor.time.time", lambda: now_seconds)
 
-    assert actor._should_trigger("new-corr")
-    assert "stale-corr" not in actor._depths
-    assert "stale-corr" not in actor._depth_timestamps
-    assert "fresh-corr" in actor._depths
+    assert policy.should_trigger("new-corr")
+    assert "stale-corr" not in policy.depths
+    assert "stale-corr" not in policy.depth_timestamps
+    assert "fresh-corr" in policy.depths
 
 
 @pytest.mark.asyncio
 async def test_actor_reset_clears_depth_timestamp(actor_env) -> None:
     actor = _make_actor(actor_env)
-    assert actor._should_trigger("corr-reset")
+    assert actor._trigger_policy.should_trigger("corr-reset")
     turn_log = logging.LoggerAdapter(logging.getLogger(__name__), {})
 
-    await actor._reset_agent_state(actor.node_id, "corr-reset", turn_log)
+    await actor._turn_executor._reset_agent_state(actor.node_id, "corr-reset", turn_log)
 
-    assert "corr-reset" not in actor._depths
-    assert "corr-reset" not in actor._depth_timestamps
+    assert "corr-reset" not in actor._trigger_policy.depths
+    assert "corr-reset" not in actor._trigger_policy.depth_timestamps
 
 
 @pytest.mark.asyncio
@@ -414,8 +421,6 @@ def test_prompt_builder_reflection_tag_must_be_primary() -> None:
 
 @pytest.mark.asyncio
 async def test_build_companion_context_empty(actor_env) -> None:
-    from remora.core.actor import AgentTurnExecutor
-
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-empty")
     result = await AgentTurnExecutor._build_companion_context(workspace)
     assert result == ""
@@ -423,8 +428,6 @@ async def test_build_companion_context_empty(actor_env) -> None:
 
 @pytest.mark.asyncio
 async def test_build_companion_context_with_data(actor_env) -> None:
-    from remora.core.actor import AgentTurnExecutor
-
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-data")
     await workspace.kv_set(
         "companion/reflections",
@@ -568,7 +571,7 @@ async def test_read_bundle_config_expands_model_from_env_default(actor_env, monk
         'model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"\n',
     )
 
-    bundle_config = await Actor._read_bundle_config(workspace)
+    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
     assert bundle_config["model"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
 
 
@@ -581,7 +584,7 @@ async def test_read_bundle_config_allows_env_override_for_placeholder(
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::g")
     await workspace.write("_bundle/bundle.yaml", 'model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"\n')
 
-    bundle_config = await Actor._read_bundle_config(workspace)
+    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
     assert bundle_config["model"] == "my-org/custom-model"
 
 
@@ -591,7 +594,7 @@ async def test_read_bundle_config_literal_model_overrides_env(actor_env, monkeyp
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::h")
     await workspace.write("_bundle/bundle.yaml", "model: pinned/model\n")
 
-    bundle_config = await Actor._read_bundle_config(workspace)
+    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
     assert bundle_config["model"] == "pinned/model"
 
 
@@ -600,7 +603,7 @@ async def test_read_bundle_config_malformed_yaml_returns_empty(actor_env) -> Non
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::bad")
     await workspace.write("_bundle/bundle.yaml", "system_prompt: [oops\n")
 
-    bundle_config = await Actor._read_bundle_config(workspace)
+    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
     assert bundle_config == {}
 
 
@@ -619,7 +622,7 @@ async def test_read_bundle_config_parses_self_reflect(actor_env) -> None:
         ),
     )
 
-    bundle_config = await Actor._read_bundle_config(workspace)
+    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
     assert bundle_config["self_reflect"]["enabled"] is True
     assert bundle_config["self_reflect"]["model"] == "Qwen/Qwen3-1.7B"
     assert bundle_config["self_reflect"]["max_turns"] == 2
@@ -640,7 +643,7 @@ async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> No
         ),
     )
 
-    bundle_config = await Actor._read_bundle_config(workspace)
+    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
     assert "self_reflect" not in bundle_config
 
 

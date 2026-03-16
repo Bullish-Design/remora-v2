@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from tests.factories import make_node
 
-from remora.core.actor import Actor
+from remora.core.actor import Actor, PromptBuilder, TriggerPolicy
 from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import (
@@ -114,16 +114,9 @@ async def test_runner_build_prompt_via_actor(runner_env) -> None:
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    from remora.core.actor import Trigger
-
-    actor = runner.get_or_create_actor(node.node_id)
-    prompt = actor._build_prompt(
+    prompt = PromptBuilder.build_prompt(
         node,
-        Trigger(
-            node_id=node.node_id,
-            correlation_id="c1",
-            event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
-        ),
+        AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
     )
     assert node.full_name in prompt
     assert "hello" in prompt
@@ -148,16 +141,9 @@ async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    from remora.core.actor import Trigger
-
-    actor = runner.get_or_create_actor(node.node_id)
-    prompt = actor._build_prompt(
+    prompt = PromptBuilder.build_prompt(
         node,
-        Trigger(
-            node_id=node.node_id,
-            correlation_id="c1",
-            event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
-        ),
+        AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
     )
     assert "Type: virtual | File: " in prompt
     assert "## Role" in prompt
@@ -181,7 +167,7 @@ async def test_runner_handles_concurrent_triggers_across_agents(runner_env, monk
     in_flight = 0
     max_in_flight = 0
 
-    monkeypatch.setattr(Actor, "_should_trigger", lambda _self, _corr: True)
+    monkeypatch.setattr(TriggerPolicy, "should_trigger", lambda _self, _corr: True)
 
     async def fake_execute_turn(self, trigger, outbox):  # noqa: ANN001, ANN202
         del trigger, outbox

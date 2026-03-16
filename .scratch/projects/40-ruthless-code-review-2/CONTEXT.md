@@ -44,3 +44,13 @@ Next action:
 
 Next action:
 - Step 2.3: rewrite actor/runner tests that depended on removed compatibility APIs.
+- Step 2.3 completed:
+  - rewrote trigger/cooldown/depth tests to target `TriggerPolicy` directly
+  - updated reset-state test to call `AgentTurnExecutor` directly
+  - migrated prompt tests to `PromptBuilder.build_prompt(...)`
+  - updated bundle config tests to call `AgentTurnExecutor._read_bundle_config(...)`
+  - updated concurrent runner test to patch `TriggerPolicy.should_trigger`
+  - verification: `tests/unit/test_actor.py tests/unit/test_runner.py` passed
+
+Next action:
+- Step 2.4: simplify `FileReconciler._normalize_dir_id`.
