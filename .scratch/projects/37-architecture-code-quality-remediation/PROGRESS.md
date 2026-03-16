@@ -9,7 +9,7 @@
 - [x] 5.1 Fix Ruff violations
 - [x] 5.2 Starlette lifespan migration
 - [x] 5.3 Replace production `assert`
-- [ ] 5.4 Add type checking config to CI/project config
+- [x] 5.4 Add type checking config to CI/project config
 - [ ] 5.5 Standardize enum handling
 - [ ] 5.6 Health check imports `__version__`
 
@@ -21,4 +21,5 @@
 - [x] `d34fcc9` 4.5 Replace `_remora_handlers` monkey patch with `RemoraLSPHandlers` abstraction
 - [x] `d151bcb` 5.1 Run Ruff autofix and clear remaining lint violations
 - [x] `667e15a` 5.2 Enforce lifespan API via typed context + regression test
-- [pending push] 5.3 Add regression guard preventing production `assert` statements
+- [x] `6ca539e` 5.3 Add regression guard preventing production `assert` statements
+- [pending push] 5.4 Add Pyright config and dev dependency in project config

@@ -13,6 +13,7 @@
 - Completed item `5.1` by running Ruff autofix on `src/remora/` and confirming lint-clean state.
 - Completed item `5.2` by making lifespan typing explicit in web app setup and adding a regression test that verifies shutdown event signaling through Starlette lifespan context.
 - Completed item `5.3` by adding a regression test that enforces zero `assert` statements in production code under `src/remora/`.
+- Completed item `5.4` by adding Pyright config in `pyproject.toml` and adding `pyright` to dev dependencies.
 - Verification run for 4.1:
   - `devenv shell -- uv sync --extra dev`
   - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_runner.py -q`
@@ -34,4 +35,7 @@
   - `devenv shell -- ruff check src/remora/`
 - Verification run for 5.3:
   - `devenv shell -- pytest tests/unit/test_no_production_asserts.py -q`
-- Next action: commit+push item 5.3, then implement item `5.4` (type checking config).
+- Verification run for 5.4:
+  - `devenv shell -- uv sync --extra dev`
+  - `devenv shell -- pyright src/remora` (reports 18 existing baseline issues; config enablement complete)
+- Next action: commit+push item 5.4, then implement item `5.5` (enum handling standardization).
