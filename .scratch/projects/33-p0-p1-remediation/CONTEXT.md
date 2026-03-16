@@ -32,5 +32,4 @@ Current status:
 - Verified lint state remains clean with `devenv shell -- ruff check src/remora`.
 
 Next:
-- Item 14 complete: health endpoint now uses `SELECT COUNT(*)` and has a regression test.
-- Implement additional P1 item 15: `_cached_script` cache-key truncation.
+- All P0 and P1 recommendation items are complete, including the extra P1 performance items from section 3.

@@ -14,4 +14,4 @@
 - [x] 12. Starlette lifespan migration (P1)
 - [x] 13. Replace production asserts (P1)
 - [x] 14. Health check uses `SELECT COUNT(*)` (P1)
-- [ ] 15. Truncate `_cached_script` cache key (P1)
+- [x] 15. Truncate `_cached_script` cache key (P1)

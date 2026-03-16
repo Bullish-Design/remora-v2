@@ -25,6 +25,7 @@ _TYPE_MAP = {
     "float": "number",
     "bool": "boolean",
 }
+_SCRIPT_SOURCE_CACHE: dict[tuple[str, str], str] = {}
 
 def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
     """Build JSON Schema parameters from Grail input declarations."""
@@ -44,7 +45,11 @@ def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=256)
-def _cached_script(content_hash: str, normalized_name: str, source: str) -> grail.GrailScript:
+def _cached_script(content_hash: str, normalized_name: str) -> grail.GrailScript:
+    cache_key = (content_hash, normalized_name)
+    source = _SCRIPT_SOURCE_CACHE.get(cache_key)
+    if source is None:
+        raise ValueError(f"Missing script source for cache key {normalized_name}:{content_hash}")
     with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
         script_path = Path(temp_dir) / normalized_name
         script_path.write_text(source, encoding="utf-8")
@@ -54,7 +59,8 @@ def _cached_script(content_hash: str, normalized_name: str, source: str) -> grai
 def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
     content_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
     filename = f"{name}.pym" if not name.endswith(".pym") else name
-    return _cached_script(content_hash, filename, source)
+    _SCRIPT_SOURCE_CACHE[(content_hash, filename)] = source
+    return _cached_script(content_hash, filename)
 
 
 def _extract_description(script: grail.GrailScript, source: str | None = None) -> str:

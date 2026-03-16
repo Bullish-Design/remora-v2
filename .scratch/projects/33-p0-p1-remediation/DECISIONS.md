@@ -55,3 +55,7 @@
 ## 2026-03-15 - Health endpoint node count query
 - Decision: Query node count with `SELECT COUNT(*)` directly instead of loading all nodes.
 - Rationale: Avoid unnecessary row materialization for O(1) health checks under larger graphs.
+
+## 2026-03-15 - Grail script cache key shape
+- Decision: Remove raw `source` from `_cached_script` cache key and key cache lookups by `(content_hash, normalized_name)` only.
+- Rationale: Preserve cache hit behavior while preventing key bloat from large source strings.
