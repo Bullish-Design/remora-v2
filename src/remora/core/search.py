@@ -64,7 +64,8 @@ class SearchService:
 
         if EmbeddyClient is None:
             logger.warning(
-                "Search enabled but embeddy is not installed. Install with: pip install remora[search]"
+                "Search enabled but embeddy is not installed. "
+                "Install with: pip install remora[search]"
             )
             return
 

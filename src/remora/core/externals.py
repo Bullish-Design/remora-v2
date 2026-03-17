@@ -31,7 +31,12 @@ if TYPE_CHECKING:
 class FileCapabilities:
     """File system operations for agent tools."""
 
-    def __init__(self, workspace: AgentWorkspace, *, search_content_max_matches: int = 1000) -> None:
+    def __init__(
+        self,
+        workspace: AgentWorkspace,
+        *,
+        search_content_max_matches: int = 1000,
+    ) -> None:
         self._workspace = workspace
         self._search_content_max_matches = max(1, int(search_content_max_matches))
 

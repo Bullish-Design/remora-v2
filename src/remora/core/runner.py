@@ -106,13 +106,18 @@ class ActorPool:
         self._actors.clear()
         self._refresh_actor_gauges()
 
-    async def _evict_idle(self, max_idle_seconds: float = 300.0) -> None:
+    async def _evict_idle(self, max_idle_seconds: float | None = None) -> None:
         """Stop and remove actors that have been idle longer than threshold."""
+        idle_timeout = (
+            self._config.actor_idle_timeout_s
+            if max_idle_seconds is None
+            else max_idle_seconds
+        )
         now = time.time()
         to_evict = [
             node_id
             for node_id, actor in self._actors.items()
-            if now - actor.last_active > max_idle_seconds and actor.inbox.empty()
+            if now - actor.last_active > idle_timeout and actor.inbox.empty()
         ]
         for node_id in to_evict:
             actor = self._actors.pop(node_id)

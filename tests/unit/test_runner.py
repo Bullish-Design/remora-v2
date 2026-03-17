@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from pathlib import Path
+import time
 
 import pytest
 import pytest_asyncio
@@ -81,7 +82,7 @@ async def test_runner_evicts_idle_actors(runner_env) -> None:
     runner, _ns, _es, _ws = runner_env
     actor = runner.get_or_create_actor("idle-agent")
     actor._last_active = 0.0
-    await runner._evict_idle(max_idle_seconds=1.0)
+    await runner._evict_idle()
     assert "idle-agent" not in runner.actors
     assert not actor.is_running
 
@@ -236,3 +237,29 @@ async def test_runner_passes_search_service_to_actor(runner_env, monkeypatch) ->
     actor = runner.get_or_create_actor("agent-search")
     assert actor is not None
     assert FakeActor.captured_search_service is sentinel
+
+
+@pytest.mark.asyncio
+async def test_runner_evict_idle_uses_config_timeout(tmp_path: Path) -> None:
+    db = await open_database(tmp_path / "runner-timeout.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    config = Config(
+        workspace_root=".remora-runner-timeout",
+        actor_idle_timeout_s=1.0,
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+    runner = ActorPool(event_store, node_store, workspace_service, config)
+
+    try:
+        actor = runner.get_or_create_actor("idle-timeout-agent")
+        actor._last_active = time.time() - 2.0
+        await runner._evict_idle()
+        assert "idle-timeout-agent" not in runner.actors
+    finally:
+        await runner.stop_and_wait()
+        await workspace_service.close()
+        await db.close()

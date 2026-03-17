@@ -13,7 +13,6 @@ from remora.code.languages import LanguagePlugin, LanguageRegistry
 from remora.code.paths import walk_source_files
 from remora.core.node import Node
 
-
 _DEFAULT_LANGUAGE_MAP: dict[str, str] = {
     ".py": "python",
     ".md": "markdown",

@@ -15,7 +15,8 @@ Use your companion tools:
 - companion_reflect: Record one key insight or observation
 - companion_link: If you referenced another code element, record the link
 
-Tag vocabulary: bug, question, refactor, explanation, test, performance, design, insight, todo, review
+Tag vocabulary: bug, question, refactor, explanation, test, performance,
+design, insight, todo, review
 
 Be specific. Skip trivial exchanges."""
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from enum import StrEnum
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
@@ -60,11 +61,16 @@ class BundleOverlayRule(BaseModel):
         return cleaned
 
 
+class SearchMode(StrEnum):
+    REMOTE = "remote"
+    LOCAL = "local"
+
+
 class SearchConfig(BaseModel):
     """Configuration for semantic search via embeddy."""
 
     enabled: bool = False
-    mode: str = "remote"
+    mode: SearchMode = SearchMode.REMOTE
     embeddy_url: str = "http://localhost:8585"
     timeout: float = 30.0
     default_collection: str = "code"
@@ -82,13 +88,6 @@ class SearchConfig(BaseModel):
     db_path: str = ".remora/embeddy.db"
     model_name: str = "Qwen/Qwen3-VL-Embedding-2B"
     embedding_dimension: int = 2048
-
-    @field_validator("mode")
-    @classmethod
-    def _validate_mode(cls, value: str) -> str:
-        if value not in {"remote", "local"}:
-            raise ValueError("search mode must be 'remote' or 'local'")
-        return value
 
 
 class SelfReflectConfig(BaseModel):
@@ -176,6 +175,7 @@ class Config(BaseSettings):
     human_input_timeout_s: float = 300.0
     search_content_max_matches: int = 1000
     broadcast_max_targets: int = 50
+    actor_idle_timeout_s: float = 300.0
     send_message_rate_limit: int = 10
     send_message_rate_window_s: float = 1.0
 
@@ -300,6 +300,7 @@ __all__ = [
     "BundleConfig",
     "BundleOverlayRule",
     "SearchConfig",
+    "SearchMode",
     "SelfReflectConfig",
     "VirtualSubscriptionConfig",
     "VirtualAgentConfig",

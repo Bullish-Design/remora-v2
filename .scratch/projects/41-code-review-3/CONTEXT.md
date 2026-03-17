@@ -165,7 +165,29 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - sync handlers now run inline with isolated exception logging; async handlers are tasked and gathered as before.
   - targeted verification:
     - `devenv shell -- pytest tests/unit/test_event_bus.py -q` (`9 passed`).
+- Completed section 5.5 (misc polish bundle):
+  - added `Config.actor_idle_timeout_s` and updated `ActorPool._evict_idle()` to default to config timeout.
+  - added `SearchMode` `StrEnum` and migrated `SearchConfig.mode` to enum-based validation.
+  - increased workspace safe-id digest length from 10 to 16 hex chars in `CairnWorkspaceService._safe_id`.
+  - renamed CLI logging filter class in `src/remora/__main__.py`:
+    - `_ContextFilter` -> `_StructuredFieldInjector`.
+  - targeted verification:
+    - `devenv shell -- pytest tests/unit/test_config.py tests/unit/test_workspace.py tests/unit/test_runner.py tests/unit/test_cli.py -q` (`52 passed`).
+- Final verification checklist completed:
+  - full suite:
+    - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q`
+    - result: `369 passed, 8 skipped`.
+  - lint/type gate:
+    - `devenv shell -- ruff check src/` -> `All checks passed` after import/line-length cleanup.
+  - stale-symbol / migration sanity checks:
+    - `rg "CSTNode|project_nodes|clear_caches|_expand_env_vars" src/remora/` -> no matches
+    - `rg "\\._project_root" src/remora/web/` -> no matches
+    - `rg '"AgentCompleteEvent"|"NodeChangedEvent"|"ContentChangedEvent"|"AgentStartEvent"|"NodeDiscoveredEvent"|"NodeRemovedEvent"' src/ --glob '!src/remora/core/events/__init__.py' --glob '!src/remora/core/events/types.py'` -> no matches
+    - `rg "lambda \\*\\*kwargs: create_kernel" src/` -> no matches
+    - `rg "_send_message_timestamps" src/` -> no matches
+  - post-lint regression spot-check:
+    - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_grail.py tests/unit/test_config.py -q` (`72 passed`).
 
 ## Next Action
-- Commit and push section 5.4 checkpoint.
-- Begin section 5.5 implementation (misc polish set).
+- Commit and push section 5.5 + final verification checkpoint.
+- Project 41 implementation complete.

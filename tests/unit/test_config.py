@@ -9,6 +9,7 @@ from remora.core.config import (
     BundleConfig,
     Config,
     SearchConfig,
+    SearchMode,
     _find_config_file,
     expand_env_vars,
     load_config,
@@ -25,6 +26,7 @@ def test_default_config(monkeypatch) -> None:
     assert "file" not in config.bundle_overlays
     assert config.language_map[".py"] == "python"
     assert "queries/" in config.query_paths
+    assert config.actor_idle_timeout_s == 300.0
 
 
 def test_legacy_bundle_mapping_key_rejected() -> None:
@@ -125,7 +127,7 @@ def test_bundle_rules_override_type_overlays() -> None:
 def test_search_config_defaults() -> None:
     search = SearchConfig()
     assert search.enabled is False
-    assert search.mode == "remote"
+    assert search.mode == SearchMode.REMOTE
     assert search.embeddy_url == "http://localhost:8585"
     assert search.timeout == 30.0
     assert search.default_collection == "code"
@@ -157,7 +159,7 @@ def test_config_parses_search_dict() -> None:
         }
     )
     assert config.search.enabled is True
-    assert config.search.mode == "remote"
+    assert config.search.mode == SearchMode.REMOTE
     assert config.search.timeout == 45.0
     assert config.search.collection_map[".py"] == "python-code"
 
@@ -178,7 +180,7 @@ def test_load_from_yaml_with_search_section(tmp_path: Path) -> None:
     )
     config = load_config(yaml_path)
     assert config.search.enabled is True
-    assert config.search.mode == "remote"
+    assert config.search.mode == SearchMode.REMOTE
     assert config.search.embeddy_url == "http://localhost:9595"
     assert config.search.timeout == 60.0
     assert config.search.collection_map[".md"] == "docs"

@@ -11,7 +11,8 @@ from typing import Any
 
 import yaml
 from cairn.runtime import workspace_manager as cairn_wm
-from fsdantic import FileNotFoundError as FsdFileNotFoundError, ViewQuery, Workspace
+from fsdantic import FileNotFoundError as FsdFileNotFoundError
+from fsdantic import ViewQuery, Workspace
 from pydantic import ValidationError
 
 from remora.core.config import BundleConfig, Config, expand_env_vars
@@ -286,7 +287,7 @@ class CairnWorkspaceService:
     def _safe_id(node_id: str) -> str:
         """Convert node ID to a filesystem-safe deterministic name."""
         normalized = re.sub(r"[^a-zA-Z0-9._-]+", "_", node_id).strip("._-")
-        digest = hashlib.sha256(node_id.encode("utf-8")).hexdigest()[:10]
+        digest = hashlib.sha256(node_id.encode("utf-8")).hexdigest()[:16]
         prefix = normalized[:80] if normalized else "node"
         return f"{prefix}-{digest}"
 

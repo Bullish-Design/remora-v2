@@ -26,7 +26,7 @@ app = typer.Typer(
 )
 
 
-class _ContextFilter(logging.Filter):
+class _StructuredFieldInjector(logging.Filter):
     """Inject default structured context fields for non-actor log records."""
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -285,7 +285,7 @@ def _configure_logging(level_name: str, *, lsp_mode: bool = False) -> None:
 
     stream = sys.stderr if lsp_mode else sys.stdout
     stream_handler = logging.StreamHandler(stream)
-    stream_handler.addFilter(_ContextFilter())
+    stream_handler.addFilter(_StructuredFieldInjector())
     log_format = (
         "%(asctime)s %(levelname)s %(name)s "
         "[%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
@@ -322,7 +322,7 @@ def _configure_file_logging(log_path: Path) -> None:
         backupCount=3,
         encoding="utf-8",
     )
-    file_handler.addFilter(_ContextFilter())
+    file_handler.addFilter(_StructuredFieldInjector())
     file_handler.setLevel(root_logger.level)
     log_format = (
         "%(asctime)s %(levelname)s %(name)s "

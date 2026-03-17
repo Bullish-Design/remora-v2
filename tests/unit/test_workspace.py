@@ -247,3 +247,4 @@ async def test_service_provision_layering(tmp_path: Path) -> None:
 def test_safe_id() -> None:
     safe = CairnWorkspaceService._safe_id("src/auth/service.py::AuthService.validate_token")
     assert re.fullmatch(r"[a-zA-Z0-9._-]+", safe)
+    assert len(safe.rsplit("-", maxsplit=1)[1]) == 16
