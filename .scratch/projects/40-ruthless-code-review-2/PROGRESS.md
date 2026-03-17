@@ -70,5 +70,5 @@
 
 ### Phase 8
 - [x] Step 8.1 Extract helper methods from `_materialize_directories`
-- [ ] Step 8.2 Simplify `_materialize_directories` orchestration
+- [x] Step 8.2 Simplify `_materialize_directories` orchestration
 - [ ] Step 8.3 Verify/commit checkpoint

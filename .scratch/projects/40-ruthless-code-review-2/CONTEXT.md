@@ -263,3 +263,14 @@ Next action:
 
 Next action:
 - Step 8.2: simplify `_materialize_directories` to orchestrate via the extracted helper methods.
+- Step 8.2 completed:
+  - simplified `_materialize_directories` into orchestration-only flow:
+    - compute hierarchy
+    - load existing directories
+    - remove stale directories
+    - upsert each directory via `_upsert_directory_node`
+  - removed the inlined per-directory mutation logic from `_materialize_directories`
+  - verification: `devenv shell -- python -m pytest tests/unit/test_reconciler.py -q` passed (`22 passed`)
+
+Next action:
+- Step 8.3: run the phase checkpoint verification and commit/push Phase 8 completion.
