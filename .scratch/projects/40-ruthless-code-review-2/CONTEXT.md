@@ -350,3 +350,11 @@ Next action:
 
 Next action:
 - Step 10.3: evaluate structured-agents event-type exports and update `OutboxObserver` translation dispatch accordingly.
+- Step 10.3 completed:
+  - verified `structured_agents.events` exports required event classes
+  - switched `OutboxObserver` translation from string-name matching to `isinstance` dispatch against structured-agents event types
+  - updated actor observability test to emit real structured-agents event objects
+  - verification: `devenv shell -- python -m pytest tests/unit/test_actor.py -q` passed (`41 passed`)
+
+Next action:
+- Step 10.4: run phase checkpoint suite (`test_web_server` + `test_actor`) and commit/push Phase 10 completion.

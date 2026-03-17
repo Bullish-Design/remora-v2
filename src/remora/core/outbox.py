@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from structured_agents.events import (
+    ModelRequestEvent as SAModelRequestEvent,
+    ModelResponseEvent as SAModelResponseEvent,
+    ToolCallEvent as SAToolCallEvent,
+    ToolResultEvent as SAToolResultEvent,
+    TurnCompleteEvent as SATurnCompleteEvent,
+)
+
 from remora.core.events.store import EventStore
 from remora.core.events.types import (
     Event,
@@ -70,15 +78,14 @@ class OutboxObserver:
             await self._outbox.emit(remora_event)
 
     def _translate(self, event: Any) -> Event | None:
-        event_name = type(event).__name__
-        if event_name == "ModelRequestEvent":
+        if isinstance(event, SAModelRequestEvent):
             return ModelRequestEvent(
                 agent_id=self._agent_id,
                 model=str(getattr(event, "model", "")),
                 tool_count=int(getattr(event, "tools_count", 0) or 0),
                 turn=int(getattr(event, "turn", 0) or 0),
             )
-        if event_name == "ModelResponseEvent":
+        if isinstance(event, SAModelResponseEvent):
             return ModelResponseEvent(
                 agent_id=self._agent_id,
                 response_preview=str(getattr(event, "content", "") or "")[:200],
@@ -86,14 +93,14 @@ class OutboxObserver:
                 tool_calls_count=int(getattr(event, "tool_calls_count", 0) or 0),
                 turn=int(getattr(event, "turn", 0) or 0),
             )
-        if event_name == "ToolCallEvent":
+        if isinstance(event, SAToolCallEvent):
             return RemoraToolCallEvent(
                 agent_id=self._agent_id,
                 tool_name=str(getattr(event, "tool_name", "")),
                 arguments_summary=str(getattr(event, "arguments", {}))[:200],
                 turn=int(getattr(event, "turn", 0) or 0),
             )
-        if event_name == "ToolResultEvent":
+        if isinstance(event, SAToolResultEvent):
             return RemoraToolResultEvent(
                 agent_id=self._agent_id,
                 tool_name=str(getattr(event, "tool_name", "")),
@@ -102,7 +109,7 @@ class OutboxObserver:
                 output_preview=str(getattr(event, "output_preview", "") or "")[:200],
                 turn=int(getattr(event, "turn", 0) or 0),
             )
-        if event_name == "TurnCompleteEvent":
+        if isinstance(event, SATurnCompleteEvent):
             return TurnCompleteEvent(
                 agent_id=self._agent_id,
                 turn=int(getattr(event, "turn", 0) or 0),

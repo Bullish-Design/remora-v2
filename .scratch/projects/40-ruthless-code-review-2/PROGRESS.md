@@ -85,5 +85,5 @@
 ### Phase 10
 - [x] Step 10.1 Add `NodeStore.count_nodes()`
 - [x] Step 10.2 Use `count_nodes()` in web health endpoint
-- [ ] Step 10.3 Update OutboxObserver dispatch strategy
+- [x] Step 10.3 Update OutboxObserver dispatch strategy
 - [ ] Step 10.4 Verify/commit checkpoint

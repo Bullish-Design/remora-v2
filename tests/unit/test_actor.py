@@ -10,6 +10,13 @@ from types import SimpleNamespace
 import pytest
 import pytest_asyncio
 from structured_agents import Message
+from structured_agents.events import (
+    ModelRequestEvent as SAModelRequestEvent,
+    ModelResponseEvent as SAModelResponseEvent,
+    ToolCallEvent as SAToolCallEvent,
+    ToolResultEvent as SAToolResultEvent,
+    TurnCompleteEvent as SATurnCompleteEvent,
+)
 from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
@@ -1081,55 +1088,50 @@ async def test_actor_emits_kernel_observability_events(actor_env, monkeypatch) -
     ws = await env["workspace_service"].get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    class ModelRequestEvent:
-        def __init__(self) -> None:
-            self.turn = 1
-            self.messages_count = 2
-            self.tools_count = 1
-            self.model = "mock"
-
-    class ModelResponseEvent:
-        def __init__(self) -> None:
-            self.turn = 1
-            self.duration_ms = 12
-            self.content = "hello"
-            self.tool_calls_count = 1
-            self.usage = None
-
-    class ToolCallEvent:
-        def __init__(self) -> None:
-            self.turn = 1
-            self.tool_name = "send_message"
-            self.call_id = "call-1"
-            self.arguments = {"to_node_id": "user"}
-
-    class ToolResultEvent:
-        def __init__(self) -> None:
-            self.turn = 1
-            self.tool_name = "send_message"
-            self.call_id = "call-1"
-            self.is_error = False
-            self.duration_ms = 3
-            self.output_preview = "sent"
-
-    class TurnCompleteEvent:
-        def __init__(self) -> None:
-            self.turn = 1
-            self.tool_calls_count = 1
-            self.tool_results_count = 1
-            self.errors_count = 0
-
     class ObservedKernel:
         def __init__(self, observer):
             self._observer = observer
 
         async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
             del max_turns
-            await self._observer.emit(ModelRequestEvent())
-            await self._observer.emit(ModelResponseEvent())
-            await self._observer.emit(ToolCallEvent())
-            await self._observer.emit(ToolResultEvent())
-            await self._observer.emit(TurnCompleteEvent())
+            await self._observer.emit(
+                SAModelRequestEvent(turn=1, messages_count=2, tools_count=1, model="mock")
+            )
+            await self._observer.emit(
+                SAModelResponseEvent(
+                    turn=1,
+                    duration_ms=12,
+                    content="hello",
+                    tool_calls_count=1,
+                    usage=None,
+                )
+            )
+            await self._observer.emit(
+                SAToolCallEvent(
+                    turn=1,
+                    tool_name="send_message",
+                    call_id="call-1",
+                    arguments={"to_node_id": "user"},
+                )
+            )
+            await self._observer.emit(
+                SAToolResultEvent(
+                    turn=1,
+                    tool_name="send_message",
+                    call_id="call-1",
+                    is_error=False,
+                    duration_ms=3,
+                    output_preview="sent",
+                )
+            )
+            await self._observer.emit(
+                SATurnCompleteEvent(
+                    turn=1,
+                    tool_calls_count=1,
+                    tool_results_count=1,
+                    errors_count=0,
+                )
+            )
             return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
 
         async def close(self) -> None:
