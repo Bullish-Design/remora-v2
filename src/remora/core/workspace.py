@@ -16,13 +16,10 @@ from fsdantic import ViewQuery, Workspace
 from pydantic import ValidationError
 
 from remora.core.config import BundleConfig, Config, expand_env_vars
+from remora.core.errors import IncompatibleBundleError
 from remora.core.metrics import Metrics
 
 logger = logging.getLogger(__name__)
-
-
-class IncompatibleBundleError(Exception):
-    """Raised when a bundle requires a newer externals version than core provides."""
 
 
 class AgentWorkspace:

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import tree_sitter_python
-from tree_sitter import Language
+from tree_sitter import Language, Query
 
 
 class LanguagePlugin(Protocol):
@@ -21,6 +21,8 @@ class LanguagePlugin(Protocol):
 
     def get_default_query_path(self) -> Path: ...
 
+    def get_query(self, query_paths: list[Path]) -> Query: ...
+
     def resolve_node_type(self, ts_node: Any) -> str: ...
 
 
@@ -30,6 +32,9 @@ class PythonPlugin:
     def __init__(self, query_path: Path, extensions: list[str] | None = None) -> None:
         self._query_path = query_path
         self._extensions = list(extensions or [".py"])
+        self._language: Language | None = None
+        self._query: Query | None = None
+        self._query_paths: list[Path] | None = None
 
     @property
     def name(self) -> str:
@@ -40,9 +45,26 @@ class PythonPlugin:
         return self._extensions
 
     def get_language(self) -> Language:
-        return Language(tree_sitter_python.language())
+        if self._language is None:
+            self._language = Language(tree_sitter_python.language())
+        return self._language
 
     def get_default_query_path(self) -> Path:
+        return self._query_path
+
+    def get_query(self, query_paths: list[Path]) -> Query:
+        if self._query is None or self._query_paths != query_paths:
+            query_file = self._resolve_query_file(query_paths)
+            query_text = query_file.read_text(encoding="utf-8")
+            self._query = Query(self.get_language(), query_text)
+            self._query_paths = query_paths
+        return self._query
+
+    def _resolve_query_file(self, query_paths: list[Path]) -> Path:
+        for query_dir in query_paths:
+            candidate = query_dir / f"{self.name}.scm"
+            if candidate.exists():
+                return candidate
         return self._query_path
 
     def resolve_node_type(self, ts_node: Any) -> str:
@@ -95,6 +117,9 @@ class GenericLanguagePlugin:
         self._query_path = query_path
         self._node_type_rules = node_type_rules or {}
         self._default_node_type = default_node_type
+        self._language: Language | None = None
+        self._query: Query | None = None
+        self._query_paths: list[Path] | None = None
 
     @property
     def name(self) -> str:
@@ -105,10 +130,27 @@ class GenericLanguagePlugin:
         return self._extensions
 
     def get_language(self) -> Language:
-        mod = importlib.import_module(f"tree_sitter_{self._name}")
-        return Language(mod.language())
+        if self._language is None:
+            mod = importlib.import_module(f"tree_sitter_{self._name}")
+            self._language = Language(mod.language())
+        return self._language
 
     def get_default_query_path(self) -> Path:
+        return self._query_path
+
+    def get_query(self, query_paths: list[Path]) -> Query:
+        if self._query is None or self._query_paths != query_paths:
+            query_file = self._resolve_query_file(query_paths)
+            query_text = query_file.read_text(encoding="utf-8")
+            self._query = Query(self.get_language(), query_text)
+            self._query_paths = query_paths
+        return self._query
+
+    def _resolve_query_file(self, query_paths: list[Path]) -> Path:
+        for query_dir in query_paths:
+            candidate = query_dir / f"{self._name}.scm"
+            if candidate.exists():
+                return candidate
         return self._query_path
 
     def resolve_node_type(self, ts_node: Any) -> str:

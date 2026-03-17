@@ -63,9 +63,7 @@ def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> 
     parser = Parser(plugin.get_language())
     tree = parser.parse(source_bytes)
 
-    query_file = _resolve_query_file(plugin, query_paths)
-    query_text = query_file.read_text(encoding="utf-8")
-    query = Query(plugin.get_language(), query_text)
+    query = plugin.get_query(query_paths)
     matches = QueryCursor(query).matches(tree.root_node)
 
     entries: list[dict[str, Any]] = []

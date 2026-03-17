@@ -23,7 +23,8 @@ from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.types import EventType, NodeStatus
-from remora.core.workspace import AgentWorkspace, CairnWorkspaceService, IncompatibleBundleError
+from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
+from remora.core.errors import IncompatibleBundleError
 from remora.core.externals import EXTERNALS_VERSION
 
 logger = logging.getLogger(__name__)

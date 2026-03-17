@@ -18,6 +18,17 @@ from remora.core.node import Node
 from remora.core.types import NodeType
 
 
+class RegisterSubscriptionsFn:
+    """Protocol for subscription registration callbacks."""
+
+    async def __call__(
+        self,
+        node: Node,
+        *,
+        virtual_subscriptions: tuple[SubscriptionPattern, ...] = (),
+    ) -> None: ...
+
+
 class VirtualAgentManager:
     """Keeps declarative virtual agents synchronized in the node graph."""
 
@@ -28,9 +39,7 @@ class VirtualAgentManager:
         event_store: EventStore,
         *,
         remove_node: Callable[[str], Awaitable[None]],
-        register_subscriptions: Callable[
-            [Node], Awaitable[None]
-        ],  # virtual patterns passed as kwarg
+        register_subscriptions: RegisterSubscriptionsFn,
         provision_bundle: Callable[[str, str | None], Awaitable[None]],
     ) -> None:
         self._config = config

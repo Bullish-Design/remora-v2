@@ -246,52 +246,65 @@ class FileReconciler:
 
         if self._tx is not None:
             async with self._tx.batch():
-                dir_node_id = self._directory_manager.directory_id_for_file(file_path)
-                for node in projected:
-                    if node.parent_id is None:
-                        node.parent_id = dir_node_id
-                        await self._node_store.upsert_node(node)
-                    if node.parent_id is not None:
-                        await self._node_store.add_edge(node.parent_id, node.node_id, "contains")
-
-                projected_by_id = {node.node_id: node for node in projected}
-
-                additions = sorted(new_ids - old_ids)
-                removals = sorted(old_ids - new_ids)
-                updates = sorted(new_ids & old_ids)
-
-                for node_id in additions:
-                    node = projected_by_id[node_id]
-                    await self._subscription_manager.register_for_node(node)
-                    await self._event_store.append(
-                        NodeDiscoveredEvent(
-                            node_id=node.node_id,
-                            node_type=node.node_type,
-                            file_path=node.file_path,
-                            name=node.name,
-                        )
-                    )
-
-                for node_id in updates:
-                    node = projected_by_id[node_id]
-                    old_hash = old_hashes.get(node_id)
-                    new_hash = node.source_hash
-                    if old_hash is not None and old_hash != new_hash:
-                        await self._subscription_manager.register_for_node(node)
-                        await self._event_store.append(
-                            NodeChangedEvent(
-                                node_id=node_id,
-                                old_hash=old_hash,
-                                new_hash=new_hash,
-                                file_path=node.file_path,
-                            )
-                        )
-
-                for node_id in removals:
-                    await self._remove_node(node_id)
+                await self._reconcile_events(projected, old_ids, new_ids, old_hashes, file_path)
+        else:
+            await self._reconcile_events(projected, old_ids, new_ids, old_hashes, file_path)
 
         self._file_state[file_path] = (mtime_ns, new_ids)
         await self._index_file_for_search(file_path)
+
+    async def _reconcile_events(
+        self,
+        projected: list[Node],
+        old_ids: set[str],
+        new_ids: set[str],
+        old_hashes: dict[str, str],
+        file_path: str,
+    ) -> None:
+        """Handle edges, subscriptions, and events for reconciled nodes."""
+        dir_node_id = self._directory_manager.directory_id_for_file(file_path)
+        for node in projected:
+            if node.parent_id is None:
+                node.parent_id = dir_node_id
+                await self._node_store.upsert_node(node)
+            if node.parent_id is not None:
+                await self._node_store.add_edge(node.parent_id, node.node_id, "contains")
+
+        projected_by_id = {node.node_id: node for node in projected}
+
+        additions = sorted(new_ids - old_ids)
+        removals = sorted(old_ids - new_ids)
+        updates = sorted(new_ids & old_ids)
+
+        for node_id in additions:
+            node = projected_by_id[node_id]
+            await self._subscription_manager.register_for_node(node)
+            await self._event_store.append(
+                NodeDiscoveredEvent(
+                    node_id=node.node_id,
+                    node_type=node.node_type,
+                    file_path=node.file_path,
+                    name=node.name,
+                )
+            )
+
+        for node_id in updates:
+            node = projected_by_id[node_id]
+            old_hash = old_hashes.get(node_id)
+            new_hash = node.source_hash
+            if old_hash is not None and old_hash != new_hash:
+                await self._subscription_manager.register_for_node(node)
+                await self._event_store.append(
+                    NodeChangedEvent(
+                        node_id=node_id,
+                        old_hash=old_hash,
+                        new_hash=new_hash,
+                        file_path=node.file_path,
+                    )
+                )
+
+        for node_id in removals:
+            await self._remove_node(node_id)
 
     async def _index_file_for_search(self, file_path: str) -> None:
         """Index a file for semantic search, logging failures without raising."""
