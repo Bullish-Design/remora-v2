@@ -343,3 +343,10 @@ Next action:
 
 Next action:
 - Step 10.2: update web health endpoint to call `node_store.count_nodes()` instead of reaching into `node_store._db`.
+- Step 10.2 completed:
+  - updated `api_health` in `web/server.py` to use `deps.node_store.count_nodes()`
+  - removed direct access to `node_store._db` from web layer
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
+
+Next action:
+- Step 10.3: evaluate structured-agents event-type exports and update `OutboxObserver` translation dispatch accordingly.

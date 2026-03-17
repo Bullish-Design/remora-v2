@@ -490,9 +490,7 @@ async def api_events(request: Request) -> JSONResponse:
 
 async def api_health(request: Request) -> JSONResponse:
     deps = _deps_from_request(request)
-    cursor = await deps.node_store._db.execute("SELECT COUNT(*) FROM nodes")
-    row = await cursor.fetchone()
-    node_count = int(row[0]) if row is not None else 0
+    node_count = await deps.node_store.count_nodes()
     health: dict[str, object] = {
         "status": "ok",
         "version": __version__,
