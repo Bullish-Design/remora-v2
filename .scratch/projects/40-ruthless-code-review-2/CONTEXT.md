@@ -325,3 +325,14 @@ Next action:
 
 Next action:
 - Step 9.7: run the full Phase 9 verification checkpoint, then commit/push Phase 9 completion.
+- Step 9.7 completed:
+  - full checkpoint verification command:
+    - `devenv shell -- python -m pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q`
+    - result: `357 passed, 8 skipped, 3 warnings`
+  - during checkpoint verification, fixed two test expectations uncovered by prior refactors:
+    - `tests/unit/test_externals.py::test_externals_event_ops` now asserts flattened `CustomEvent` payload shape
+    - `tests/integration/test_e2e.py::test_e2e_two_agents_interact_via_send_message_tool` now waits for both completion events (not only ping/pong messages)
+  - Phase 9 is complete.
+
+Next action:
+- Start Phase 10 Step 10.1: add `NodeStore.count_nodes()` and remove direct DB counting from web health endpoint.

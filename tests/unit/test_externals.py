@@ -231,7 +231,7 @@ async def test_externals_event_ops(context_env) -> None:
     assert await externals["event_emit"]("CustomEvent", {"value": "x"}, tags=["scaffold"])
     stored = await event_store.get_events(limit=10)
     custom = next(event for event in stored if event["event_type"] == "CustomEvent")
-    assert custom["payload"]["payload"]["value"] == "x"
+    assert custom["payload"]["value"] == "x"
     assert custom["tags"] == ["scaffold"]
     history = await externals["event_get_history"](node.node_id, limit=10)
     assert isinstance(history, list)

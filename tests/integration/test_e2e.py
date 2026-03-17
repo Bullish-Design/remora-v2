@@ -303,6 +303,11 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
             message_events = [
                 event for event in events if event["event_type"] == "AgentMessageEvent"
             ]
+            complete_agents = {
+                event["payload"].get("agent_id")
+                for event in events
+                if event["event_type"] == "AgentCompleteEvent"
+            }
             ping_seen = any(
                 event["payload"].get("from_agent") == alpha.node_id
                 and event["payload"].get("to_agent") == beta.node_id
@@ -315,7 +320,12 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
                 and event["payload"].get("content") == "pong"
                 for event in message_events
             )
-            if ping_seen and pong_seen:
+            if (
+                ping_seen
+                and pong_seen
+                and alpha.node_id in complete_agents
+                and beta.node_id in complete_agents
+            ):
                 return events
             await asyncio.sleep(0.02)
         pytest.fail("Timed out waiting for alpha/beta message exchange")
