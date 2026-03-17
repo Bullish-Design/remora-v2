@@ -25,7 +25,16 @@ _TYPE_MAP = {
     "float": "number",
     "bool": "boolean",
 }
+_MAX_SCRIPT_CACHE = 256
 _SCRIPT_SOURCE_CACHE: dict[tuple[str, str], str] = {}
+
+
+def _evict_source_cache() -> None:
+    """Evict oldest entries when source cache exceeds the max size."""
+    while len(_SCRIPT_SOURCE_CACHE) > _MAX_SCRIPT_CACHE:
+        oldest_key = next(iter(_SCRIPT_SOURCE_CACHE))
+        del _SCRIPT_SOURCE_CACHE[oldest_key]
+
 
 def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
     """Build JSON Schema parameters from Grail input declarations."""
@@ -60,6 +69,7 @@ def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
     content_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
     filename = f"{name}.pym" if not name.endswith(".pym") else name
     _SCRIPT_SOURCE_CACHE[(content_hash, filename)] = source
+    _evict_source_cache()
     return _cached_script(content_hash, filename)
 
 

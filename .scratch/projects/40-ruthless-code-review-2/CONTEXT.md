@@ -366,3 +366,11 @@ Next action:
 
 Next action:
 - Start Phase 11 Step 11.1: review and clean up Grail cache globals per guide recommendations.
+- Step 11.1 completed:
+  - added bounded source-cache eviction for Grail script source cache
+  - introduced `_MAX_SCRIPT_CACHE` and `_evict_source_cache()` in `core/grail.py`
+  - added unit coverage ensuring source cache does not grow unbounded
+  - verification (with Step 11.2 tests): `devenv shell -- python -m pytest tests/unit/test_grail.py tests/unit/test_discovery.py -q` passed (`31 passed`)
+
+Next action:
+- Step 11.2: add `clear_caches()` helper in `code/discovery.py` and migrate tests to use it.

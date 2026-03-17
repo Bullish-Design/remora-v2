@@ -8,6 +8,7 @@ import grail
 import pytest
 from structured_agents.types import ToolCall
 
+import remora.core.grail as grail_module
 from remora.core.grail import GrailTool, _build_parameters, _load_script_from_source, discover_tools
 
 SCRIPT_SOURCE = """
@@ -156,6 +157,23 @@ def test_load_script_from_source_uses_cache() -> None:
     first = _load_script_from_source(SCRIPT_SOURCE, "demo")
     second = _load_script_from_source(SCRIPT_SOURCE, "demo")
     assert first is second
+
+
+def test_script_source_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    grail_module._SCRIPT_SOURCE_CACHE.clear()
+    grail_module._cached_script.cache_clear()
+    monkeypatch.setattr(grail_module, "_MAX_SCRIPT_CACHE", 2)
+
+    _load_script_from_source(SCRIPT_SOURCE + "\n# one", "demo_one")
+    _load_script_from_source(SCRIPT_SOURCE + "\n# two", "demo_two")
+    _load_script_from_source(SCRIPT_SOURCE + "\n# three", "demo_three")
+
+    assert len(grail_module._SCRIPT_SOURCE_CACHE) == 2
+    cache_filenames = {filename for _hash, filename in grail_module._SCRIPT_SOURCE_CACHE.keys()}
+    assert "demo_one.pym" not in cache_filenames
+
+    grail_module._SCRIPT_SOURCE_CACHE.clear()
+    grail_module._cached_script.cache_clear()
 
 
 @pytest.mark.asyncio

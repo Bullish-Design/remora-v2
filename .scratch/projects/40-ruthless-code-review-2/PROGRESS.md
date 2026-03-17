@@ -87,3 +87,8 @@
 - [x] Step 10.2 Use `count_nodes()` in web health endpoint
 - [x] Step 10.3 Update OutboxObserver dispatch strategy
 - [x] Step 10.4 Verify/commit checkpoint
+
+### Phase 11
+- [x] Step 11.1 Bound Grail script source cache
+- [ ] Step 11.2 Add discovery cache clear helper
+- [ ] Step 11.3 Verify/commit checkpoint
