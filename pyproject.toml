@@ -67,7 +67,9 @@ packages = ["src/remora"]
 include = [
   "src",
   "tests",
-  "bundles",
+  "src/remora/defaults/defaults.yaml",
+  "src/remora/defaults/bundles/**",
+  "src/remora/defaults/queries/**",
   "README.md",
   "remora.yaml.example",
   "pyproject.toml",

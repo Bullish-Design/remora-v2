@@ -7,16 +7,25 @@ import yaml
 
 
 def test_code_tools_parse() -> None:
-    tools_dir = Path("bundles/code-agent/tools")
+    tools_dir = Path("src/remora/defaults/bundles/code-agent/tools")
     tool_files = sorted(tools_dir.glob("*.pym"))
     assert tool_files
+    expected = {
+        "read_file",
+        "write_file",
+        "find_occurrences",
+        "execute",
+        "search_symbols",
+    }
+    names = {tool_file.stem for tool_file in tool_files}
+    assert expected.issubset(names)
     for tool_file in tool_files:
         script = grail.load(tool_file)
         assert script.name == tool_file.stem
 
 
 def test_code_bundle_yaml_valid() -> None:
-    bundle_path = Path("bundles/code-agent/bundle.yaml")
+    bundle_path = Path("src/remora/defaults/bundles/code-agent/bundle.yaml")
     data = yaml.safe_load(bundle_path.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
     assert "system_prompt" not in data

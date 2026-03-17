@@ -271,20 +271,20 @@ async def test_grail_tool_logging_preserves_newlines_in_output(caplog) -> None:
 
 
 def test_review_diff_script_parses() -> None:
-    script = grail.load(Path("bundles/review-agent/tools/review_diff.pym"))
+    script = grail.load(Path("src/remora/defaults/bundles/review-agent/tools/review_diff.pym"))
     assert script.name == "review_diff"
 
 
 def test_submit_review_script_parses() -> None:
-    script = grail.load(Path("bundles/review-agent/tools/submit_review.pym"))
+    script = grail.load(Path("src/remora/defaults/bundles/review-agent/tools/submit_review.pym"))
     assert script.name == "submit_review"
 
 
 def test_suggest_tests_script_parses() -> None:
-    script = grail.load(Path("bundles/test-agent/tools/suggest_tests.pym"))
+    script = grail.load(Path("src/remora/defaults/bundles/test-agent/tools/suggest_tests.pym"))
     assert script.name == "suggest_tests"
 
 
 def test_ask_human_script_parses() -> None:
-    script = grail.load(Path("bundles/system/tools/ask_human.pym"))
+    script = grail.load(Path("src/remora/defaults/bundles/system/tools/ask_human.pym"))
     assert script.name == "ask_human"

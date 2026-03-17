@@ -16,6 +16,7 @@ from remora.code.watcher import FileWatcher
 from remora.core.config import Config
 from remora.core.events import (
     ContentChangedEvent,
+    Event,
     EventBus,
     EventStore,
     NodeChangedEvent,
@@ -26,7 +27,7 @@ from remora.core.events import (
 from remora.core.graph import NodeStore
 from remora.core.node import Node
 from remora.core.search import SearchServiceProtocol
-from remora.core.types import EventType, NodeType
+from remora.core.types import EventType, NodeType, NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -189,9 +190,7 @@ class FileReconciler:
             query_paths=resolve_query_paths(self._config, self._project_root),
             ignore_patterns=self._config.workspace_ignore_patterns,
             languages=(
-                list(self._config.discovery_languages)
-                if self._config.discovery_languages
-                else None
+                list(self._config.discovery_languages) if self._config.discovery_languages else None
             ),
         )
         old_ids = self._file_state.get(file_path, (0, set()))[1]
@@ -201,23 +200,22 @@ class FileReconciler:
         existing_by_id = {node.node_id: node for node in existing_nodes}
         old_hashes = {node.node_id: node.source_hash for node in existing_nodes}
         projected: list[Node] = []
-        bundle_root = Path(self._config.bundle_root)
         for node in discovered:
             existing = existing_by_id.get(node.node_id)
 
             if existing is not None and existing.source_hash == node.source_hash:
                 if sync_existing_bundles:
-                    template_dirs = [bundle_root / "system"]
+                    template_dirs = self._resolve_bundle_template_dirs("system")
                     mapped_bundle = self._config.resolve_bundle(node.node_type, node.name)
                     role = mapped_bundle or existing.role
                     if role:
-                        template_dirs.append(bundle_root / role)
+                        template_dirs.extend(self._resolve_bundle_template_dirs(role))
                     await self._workspace_service.provision_bundle(node.node_id, template_dirs)
                 projected.append(existing)
                 continue
 
             mapped_bundle = self._config.resolve_bundle(node.node_type, node.name)
-            node.status = existing.status if existing is not None else "idle"
+            node.status = existing.status if existing is not None else NodeStatus.IDLE
             node.role = (
                 mapped_bundle
                 if mapped_bundle is not None
@@ -226,9 +224,9 @@ class FileReconciler:
             await self._node_store.upsert_node(node)
 
             if existing is None:
-                template_dirs = [bundle_root / "system"]
+                template_dirs = self._resolve_bundle_template_dirs("system")
                 if mapped_bundle:
-                    template_dirs.append(bundle_root / mapped_bundle)
+                    template_dirs.extend(self._resolve_bundle_template_dirs(mapped_bundle))
                 await self._workspace_service.provision_bundle(node.node_id, template_dirs)
 
             projected.append(node)
@@ -399,12 +397,25 @@ class FileReconciler:
             ),
         )
 
+    def _resolve_bundle_template_dirs(self, bundle_name: str) -> list[Path]:
+        """Resolve a bundle name to template directories using search path."""
+        from remora.defaults import default_bundles_dir
+
+        dirs = []
+        # Project-local bundle (highest priority)
+        local = Path(self._config.bundle_root) / bundle_name
+        if local.exists():
+            dirs.append(local)
+        # Package default (fallback)
+        default = default_bundles_dir() / bundle_name
+        if default.exists():
+            dirs.append(default)
+        return dirs
+
     async def _provision_bundle(self, node_id: str, role: str | None) -> None:
-        bundle_root = Path(self._config.bundle_root)
-        # System tools/config are always included; role bundle overlays them.
-        template_dirs = [bundle_root / "system"]
+        template_dirs = self._resolve_bundle_template_dirs("system")
         if role:
-            template_dirs.append(bundle_root / role)
+            template_dirs.extend(self._resolve_bundle_template_dirs(role))
         await self._workspace_service.provision_bundle(node_id, template_dirs)
 
         workspace = await self._workspace_service.get_agent_workspace(node_id)
@@ -420,8 +431,10 @@ class FileReconciler:
         except Exception:  # noqa: BLE001 - best effort bundle metadata sync
             logger.debug("Failed to sync self_reflect config for %s", node_id, exc_info=True)
 
-    async def _on_content_changed(self, event: ContentChangedEvent) -> None:
+    async def _on_content_changed(self, event: Event) -> None:
         """Immediately reconcile a file reported changed by upstream systems."""
+        if not isinstance(event, ContentChangedEvent):
+            return
         file_path = event.path
         path = Path(file_path)
         if path.exists() and path.is_file():

@@ -55,12 +55,12 @@ async def test_fixture_tools_execute_via_grail_runtime() -> None:
 
     workspace = _WorkspaceStub(_load_fixture_tools())
     tools = await discover_tools(
-            workspace,
-            capabilities={
-                "send_message": send_message,
-                "graph_get_children": graph_get_children,
-            },
-        )
+        workspace,
+        capabilities={
+            "send_message": send_message,
+            "graph_get_children": graph_get_children,
+        },
+    )
     by_name = {tool.schema.name: tool for tool in tools}
     assert {"echo_text", "send_prefixed_message", "count_children"} <= set(by_name)
 
@@ -110,21 +110,21 @@ async def test_bundle_tools_execute_via_grail_runtime() -> None:
 
     tool_files = _load_bundle_tools(
         [
-            Path("bundles/system/tools/send_message.pym"),
-            Path("bundles/directory-agent/tools/list_children.pym"),
-            Path("bundles/directory-agent/tools/get_parent.pym"),
+            Path("src/remora/defaults/bundles/system/tools/send_message.pym"),
+            Path("src/remora/defaults/bundles/directory-agent/tools/list_children.pym"),
+            Path("src/remora/defaults/bundles/directory-agent/tools/get_parent.pym"),
         ]
     )
     workspace = _WorkspaceStub(tool_files)
     tools = await discover_tools(
-            workspace,
-            capabilities={
-                "send_message": send_message,
-                "graph_get_children": graph_get_children,
-                "my_node_id": my_node_id,
-                "graph_get_node": graph_get_node,
-            },
-        )
+        workspace,
+        capabilities={
+            "send_message": send_message,
+            "graph_get_children": graph_get_children,
+            "my_node_id": my_node_id,
+            "graph_get_node": graph_get_node,
+        },
+    )
     by_name = {tool.schema.name: tool for tool in tools}
     assert {"send_message", "list_children", "get_parent"} <= set(by_name)
 

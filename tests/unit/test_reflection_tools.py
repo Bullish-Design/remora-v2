@@ -6,7 +6,7 @@ import grail
 
 
 def test_reflection_tools_parse_from_system_bundle() -> None:
-    tools_dir = Path("bundles/system/tools")
+    tools_dir = Path("src/remora/defaults/bundles/system/tools")
     expected = {"reflect", "categorize", "find_links", "summarize"}
 
     for name in expected:
@@ -17,7 +17,7 @@ def test_reflection_tools_parse_from_system_bundle() -> None:
 
 
 def test_companion_bundle_removed() -> None:
-    bundle_dir = Path("bundles/companion")
+    bundle_dir = Path("src/remora/defaults/bundles/companion")
     assert bundle_dir.exists()
     assert (bundle_dir / "bundle.yaml").exists()
     assert (bundle_dir / "tools" / "aggregate_digest.pym").exists()
