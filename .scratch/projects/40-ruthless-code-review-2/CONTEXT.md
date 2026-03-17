@@ -485,3 +485,9 @@ Next action:
 
 Next action:
 - Step 14.4: confirm existing batch rollback test coverage and add only if missing.
+- Step 14.4 completed:
+  - confirmed rollback coverage already exists in `tests/unit/test_graph.py::test_batch_rolls_back_on_exception`
+  - no additional rollback test was required
+
+Next action:
+- Step 14.5: run full final verification suite and commit/push Phase 14 completion.
