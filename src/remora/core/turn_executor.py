@@ -95,7 +95,10 @@ class AgentTurnExecutor:
                 )
                 companion_context = ""
                 if not is_reflection_turn:
-                    companion_context = await workspace.build_companion_context()
+                    companion_data = await workspace.get_companion_data()
+                    companion_context = self._prompt_builder.format_companion_context(
+                        companion_data
+                    )
                     if companion_context:
                         system_prompt = f"{system_prompt}\n{companion_context}"
 
@@ -242,7 +245,7 @@ class AgentTurnExecutor:
                 model_name=model_name,
                 base_url=self._config.infra.model_base_url,
                 api_key=self._config.infra.model_api_key,
-                timeout=self._config.timeout_s,
+                timeout=self._config.infra.timeout_s,
                 tools=tools,
                 observer=OutboxObserver(outbox=outbox, agent_id=node_id),
             )

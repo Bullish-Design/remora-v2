@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import Any
+
 from remora.core.config import BundleConfig, Config
 from remora.core.events.types import Event
 from remora.core.node import Node
 from remora.core.types import EventType, serialize_enum
+
+
+@dataclass
+class CompanionData:
+    """Raw companion memory data from agent workspace."""
+
+    reflections: list[dict[str, Any]] = field(default_factory=list)
+    chat_index: list[dict[str, Any]] = field(default_factory=list)
+    links: list[dict[str, Any]] = field(default_factory=list)
 
 
 class PromptBuilder:
@@ -116,6 +128,63 @@ class PromptBuilder:
             and trigger_event.event_type == EventType.AGENT_COMPLETE
             and "primary" in getattr(trigger_event, "tags", ())
         )
+
+    @staticmethod
+    def format_companion_context(data: CompanionData) -> str:
+        """Format raw companion data into a markdown context block."""
+        parts: list[str] = []
+
+        if data.reflections:
+            lines = []
+            for entry in data.reflections[-5:]:
+                if not isinstance(entry, dict):
+                    continue
+                insight = entry.get("insight", "")
+                if isinstance(insight, str) and insight.strip():
+                    lines.append(f"- {insight.strip()}")
+            if lines:
+                parts.append("## Prior Reflections")
+                parts.extend(lines)
+
+        if data.chat_index:
+            lines = []
+            for entry in data.chat_index[-5:]:
+                if not isinstance(entry, dict):
+                    continue
+                summary = entry.get("summary", "")
+                if not isinstance(summary, str) or not summary.strip():
+                    continue
+                raw_tags = entry.get("tags", [])
+                tags_source = raw_tags if isinstance(raw_tags, (list, tuple)) else []
+                tags = [str(tag).strip() for tag in tags_source if str(tag).strip()]
+                tag_suffix = f" [{', '.join(tags)}]" if tags else ""
+                lines.append(f"- {summary.strip()}{tag_suffix}")
+            if lines:
+                parts.append("## Recent Activity")
+                parts.extend(lines)
+
+        if data.links:
+            lines = []
+            for entry in data.links[-10:]:
+                if not isinstance(entry, dict):
+                    continue
+                target = entry.get("target", "")
+                if not isinstance(target, str) or not target.strip():
+                    continue
+                relationship = entry.get("relationship", "related")
+                rel_text = (
+                    relationship.strip()
+                    if isinstance(relationship, str) and relationship.strip()
+                    else "related"
+                )
+                lines.append(f"- {rel_text}: {target.strip()}")
+            if lines:
+                parts.append("## Known Relationships")
+                parts.extend(lines)
+
+        if not parts:
+            return ""
+        return "\n## Companion Memory\n" + "\n".join(parts)
 
 
 def _event_content(event: Event) -> str:
