@@ -19,7 +19,7 @@
 - [x] Phase 10 Fix Encapsulation Violations
 - [x] Phase 11 Clean Up Global State
 - [x] Phase 12 Logging & Error Boundary Cleanup
-- [ ] Phase 13 Minor Fixes & Polish
+- [x] Phase 13 Minor Fixes & Polish
 - [ ] Phase 14 Test Suite Improvements
 
 ## Step Tracking
@@ -106,4 +106,4 @@
 - [x] Step 13.5 Remove dead `name_node` parameter from discovery name builder
 - [x] Step 13.6 Skip language-property refactor (per guide)
 - [x] Step 13.7 Remove redundant subscriptions create_tables call
-- [ ] Step 13.8 Verify/commit checkpoint
+- [x] Step 13.8 Verify/commit checkpoint
