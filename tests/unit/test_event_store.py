@@ -117,3 +117,28 @@ async def test_eventstore_forwards_to_bus(tmp_path: Path) -> None:
     await store.append(AgentStartEvent(agent_id="a"))
     assert seen == ["agent_start"]
     await db.close()
+
+
+@pytest.mark.asyncio
+async def test_eventstore_batch_uses_single_commit(tmp_path: Path) -> None:
+    db = await open_database(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
+
+    commit_count = 0
+    original_commit = db.commit
+
+    async def counting_commit() -> None:
+        nonlocal commit_count
+        commit_count += 1
+        await original_commit()
+
+    db.commit = counting_commit  # type: ignore[method-assign]
+    commit_count = 0
+
+    async with store.batch():
+        for index in range(10):
+            await store.append(AgentStartEvent(agent_id=f"a{index}"))
+
+    assert commit_count == 1
+    await db.close()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from typing import Any
 
 import aiosqlite
@@ -30,6 +31,8 @@ class EventStore:
         self._dispatcher = dispatcher or TriggerDispatcher(SubscriptionRegistry(db))
         self._metrics = metrics
         self._pending_responses: dict[str, asyncio.Future[str]] = {}
+        self._batch_depth = 0
+        self._batch_buffer: list[Event] = []
 
     @property
     def dispatcher(self) -> TriggerDispatcher:
@@ -92,14 +95,41 @@ class EventStore:
                 summary,
             ),
         )
-        await self._db.commit()
         event_id = int(cursor.lastrowid)
         if self._metrics is not None:
             self._metrics.events_emitted_total += 1
 
+        if self._batch_depth > 0:
+            self._batch_buffer.append(event)
+            return event_id
+
+        await self._db.commit()
         await self._event_bus.emit(event)
         await self._dispatcher.dispatch(event)
         return event_id
+
+    @asynccontextmanager
+    async def batch(self):  # noqa: ANN201
+        """Batch event appends into a single DB commit and deferred fan-out."""
+        self._batch_depth += 1
+        failed = False
+        try:
+            yield
+        except BaseException:
+            failed = True
+            if self._batch_depth == 1:
+                await self._db.rollback()
+                self._batch_buffer.clear()
+            raise
+        finally:
+            self._batch_depth -= 1
+            if self._batch_depth == 0:
+                if not failed:
+                    await self._db.commit()
+                    for buffered_event in self._batch_buffer:
+                        await self._event_bus.emit(buffered_event)
+                        await self._dispatcher.dispatch(buffered_event)
+                self._batch_buffer.clear()
 
     def create_response_future(self, request_id: str) -> asyncio.Future[str]:
         """Create and register a pending human-input response future."""

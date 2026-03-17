@@ -137,7 +137,17 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
     - green phase:
       - `devenv shell -- pytest tests/unit/test_externals.py -q` (`27 passed`)
       - `devenv shell -- pytest tests/unit/test_actor.py tests/integration/test_e2e.py -q` (`45 passed`).
+- Completed section 5.1 (event store batching):
+  - added `EventStore.batch()` in `src/remora/core/events/store.py` with deferred commit + deferred bus/dispatcher fan-out.
+  - updated `EventStore.append()` to buffer events during batch scopes and emit/dispatch once on outer batch exit.
+  - wrapped event-heavy reconciliation paths with `event_store.batch()`:
+    - `src/remora/code/reconciler.py` (`_do_reconcile_file`)
+    - `src/remora/code/directories.py` (`materialize`)
+    - `src/remora/code/virtual_agents.py` (`sync`)
+  - added `test_eventstore_batch_uses_single_commit` in `tests/unit/test_event_store.py`.
+  - targeted verification:
+    - `devenv shell -- pytest tests/unit/test_event_store.py tests/unit/test_reconciler.py -q` (`30 passed`).
 
 ## Next Action
-- Commit and push section 4.2 checkpoint (Phase 4 complete).
-- Begin section 5.1 implementation (event store batching).
+- Commit and push section 5.1 checkpoint.
+- Begin section 5.2 implementation (grail cache cleanup).

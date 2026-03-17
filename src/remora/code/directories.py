@@ -76,17 +76,18 @@ class DirectoryManager:
         existing_by_id = {node.node_id: node for node in existing_dirs}
 
         async with self._node_store.batch():
-            await self._remove_stale_directories(existing_by_id, dir_paths)
-            for dir_id in sorted(dir_paths):
-                children = sorted(children_by_dir.get(dir_id, []))
-                existing = existing_by_id.get(dir_id)
-                await self._upsert_directory_node(
-                    dir_id,
-                    children,
-                    existing,
-                    sync_existing_bundles=sync_existing_bundles,
-                    refresh_subscriptions=not self._subscriptions_bootstrapped,
-                )
+            async with self._event_store.batch():
+                await self._remove_stale_directories(existing_by_id, dir_paths)
+                for dir_id in sorted(dir_paths):
+                    children = sorted(children_by_dir.get(dir_id, []))
+                    existing = existing_by_id.get(dir_id)
+                    await self._upsert_directory_node(
+                        dir_id,
+                        children,
+                        existing,
+                        sync_existing_bundles=sync_existing_bundles,
+                        refresh_subscriptions=not self._subscriptions_bootstrapped,
+                    )
         self._subscriptions_bootstrapped = True
 
     async def _remove_stale_directories(

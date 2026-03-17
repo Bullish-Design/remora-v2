@@ -35,7 +35,7 @@
 - [x] 4.2 Decompose the Externals God-Object
 
 ### Phase 5
-- [ ] 5.1 Batch Event Commits
+- [x] 5.1 Batch Event Commits
 - [ ] 5.2 Clean Up Grail Caching
 - [ ] 5.3 Fix NodeStore.batch() Transaction Management
 - [ ] 5.4 Use asyncio.iscoroutinefunction in EventBus
