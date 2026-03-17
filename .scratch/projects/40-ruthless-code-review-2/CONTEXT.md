@@ -195,4 +195,11 @@ Next action:
   - verification: `tests/unit/test_web_server.py` passed
 
 Next action:
-- Step 6.2: extract endpoint handlers into module-level function groups and read deps from `request.app.state.deps`.
+- Step 6.2 completed:
+  - moved all API/SSE handlers in `web/server.py` from `create_app` closure scope to module-level functions
+  - each handler now resolves dependencies via `request.app.state.deps` (`WebDeps`)
+  - `create_app` now wires `app.state.deps = deps` so handlers share one dependency container
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -v` passed (`45 passed`)
+
+Next action:
+- Step 6.3: move path/proposal helper routines (`_resolve_within_project_root`, `_workspace_path_to_disk_path`, `_latest_rewrite_proposal`) to module-level helpers and deduplicate proposal endpoint logic.
