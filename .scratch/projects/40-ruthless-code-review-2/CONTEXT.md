@@ -230,3 +230,10 @@ Next action:
 
 Next action:
 - Step 7.2: override `CustomEvent.to_envelope()` to flatten payload shape (`payload` should not be nested under `payload.payload`).
+- Step 7.2 completed:
+  - added `CustomEvent.to_envelope()` override to emit payload directly (no nested `payload.payload`)
+  - added regression test coverage in `tests/unit/test_events.py` for flattened envelope shape
+  - verification: `devenv shell -- python -m pytest tests/unit/test_events.py -q` passed (`15 passed`)
+
+Next action:
+- Step 7.3: fix `EventBus.unsubscribe` to remove handlers from all relevant registries and prevent stale registrations.

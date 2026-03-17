@@ -64,6 +64,6 @@
 
 ### Phase 7
 - [x] Step 7.1 Fix TurnDigestedEvent.tags shadow
-- [ ] Step 7.2 Fix CustomEvent payload nesting
+- [x] Step 7.2 Fix CustomEvent payload nesting
 - [ ] Step 7.3 Fix EventBus.unsubscribe ghost registrations
 - [ ] Step 7.4 Verify/commit checkpoint

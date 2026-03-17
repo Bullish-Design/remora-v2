@@ -8,6 +8,7 @@ from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
     ContentChangedEvent,
+    CustomEvent,
     CursorFocusEvent,
     HumanInputRequestEvent,
     HumanInputResponseEvent,
@@ -72,6 +73,14 @@ def test_event_to_envelope_shape() -> None:
         "to_agent": "b",
         "content": "hello",
     }
+
+
+def test_custom_event_to_envelope_flattens_payload() -> None:
+    event = CustomEvent(payload={"foo": "bar"}, tags=("custom",))
+    envelope = event.to_envelope()
+    assert envelope["event_type"] == "CustomEvent"
+    assert envelope["tags"] == ["custom"]
+    assert envelope["payload"] == {"foo": "bar"}
 
 
 def test_subscription_pattern_matches_tags() -> None:

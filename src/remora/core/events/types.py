@@ -202,6 +202,15 @@ class TurnDigestedEvent(Event):
 class CustomEvent(Event):
     payload: dict[str, Any] = Field(default_factory=dict)
 
+    def to_envelope(self) -> dict[str, Any]:
+        return {
+            "event_type": self.event_type,
+            "timestamp": self.timestamp,
+            "correlation_id": self.correlation_id,
+            "tags": list(self.tags),
+            "payload": self.payload,
+        }
+
 
 class ToolResultEvent(Event):
     agent_id: str
