@@ -7,7 +7,7 @@ import hashlib
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from cairn.runtime import workspace_manager as cairn_wm
@@ -18,8 +18,12 @@ from pydantic import ValidationError
 from remora.core.config import BundleConfig, Config, expand_env_vars
 from remora.core.errors import IncompatibleBundleError
 from remora.core.metrics import Metrics
+from remora.core.utils import deep_merge
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from remora.core.prompt import CompanionData
 
 
 class AgentWorkspace:
@@ -59,6 +63,12 @@ class AgentWorkspace:
             recursive=True,
             include_stats=False,
             include_content=False,
+            regex_pattern=None,
+            max_size=None,
+            min_size=None,
+            content_pattern=None,
+            content_regex=None,
+            max_matches_per_file=None,
         )
         entries = await self._workspace.files.query(query)
         return sorted(
@@ -92,7 +102,7 @@ class AgentWorkspace:
                 keys.append(str(key))
         return sorted(keys)
 
-    async def get_companion_data(self) -> "CompanionData":
+    async def get_companion_data(self) -> CompanionData:
         """Retrieve raw companion memory data from workspace KV."""
         from remora.core.prompt import CompanionData
 
@@ -201,7 +211,7 @@ class CairnWorkspaceService:
             if bundle_yaml.exists():
                 loaded = yaml.safe_load(bundle_yaml.read_text(encoding="utf-8")) or {}
                 if isinstance(loaded, dict):
-                    merged_bundle = _merge_dicts(merged_bundle, loaded)
+                    merged_bundle = deep_merge(merged_bundle, loaded)
 
             tools_dir = template_dir / "tools"
             if tools_dir.exists():
@@ -241,20 +251,6 @@ class CairnWorkspaceService:
         return self._workspace_root / "agents" / self._safe_id(node_id)
 
 
-__all__ = ["AgentWorkspace", "CairnWorkspaceService", "IncompatibleBundleError"]
-
-
-def _merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(base)
-    for key, value in overlay.items():
-        existing = merged.get(key)
-        if isinstance(existing, dict) and isinstance(value, dict):
-            merged[key] = _merge_dicts(existing, value)
-        else:
-            merged[key] = value
-    return merged
-
-
 def _bundle_template_fingerprint(template_dirs: list[Path]) -> str:
     hasher = hashlib.sha256()
     for template_dir in template_dirs:
@@ -276,3 +272,6 @@ def _bundle_template_fingerprint(template_dirs: list[Path]) -> str:
                 hasher.update(pym_file.read_bytes())
 
     return hasher.hexdigest()
+
+
+__all__ = ["AgentWorkspace", "CairnWorkspaceService", "IncompatibleBundleError"]

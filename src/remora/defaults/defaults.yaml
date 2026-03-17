@@ -34,9 +34,6 @@ language_map:
 
 # Prompt templates
 prompt_templates:
-  system: |
-    You are an autonomous AI agent embodying the {node_type} "{node_name}" in {file_path}.
-    Speak in the first person. When asked what you do, answer as if you ARE this code element.
   user: |
     # Node: {node_full_name}
     Type: {node_type} | File: {file_path}

@@ -1,4 +1,4 @@
-"""Actor orchestration and public re-exports for actor primitives."""
+"""Actor orchestration."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
-from remora.core.outbox import Outbox, OutboxObserver
+from remora.core.outbox import Outbox
 from remora.core.prompt import PromptBuilder
 from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
@@ -119,12 +119,4 @@ class Actor:
         await self._turn_executor.execute_turn(trigger, outbox)
 
 
-__all__ = [
-    "Outbox",
-    "OutboxObserver",
-    "Trigger",
-    "TriggerPolicy",
-    "PromptBuilder",
-    "AgentTurnExecutor",
-    "Actor",
-]
+__all__ = ["Actor"]

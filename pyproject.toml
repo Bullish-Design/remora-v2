@@ -8,6 +8,7 @@ license = { text = "Cooperative Source" }
 authors = [{ name = "Bullish Design" }]
 dependencies = [
   "aiosqlite>=0.20",
+  "fsdantic>=0.3",
   "pydantic>=2.0",
   "pydantic-settings>=2.0",
   "pyyaml>=6.0",

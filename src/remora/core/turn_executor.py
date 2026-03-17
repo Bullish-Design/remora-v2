@@ -9,9 +9,10 @@ from typing import Any
 from structured_agents import Message
 
 from remora.core.config import BundleConfig, Config
+from remora.core.errors import IncompatibleBundleError
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
-from remora.core.externals import TurnContext
+from remora.core.externals import EXTERNALS_VERSION, TurnContext
 from remora.core.grail import GrailTool, discover_tools
 from remora.core.graph import NodeStore
 from remora.core.kernel import create_kernel, extract_response_text
@@ -24,8 +25,6 @@ from remora.core.search import SearchServiceProtocol
 from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.types import EventType, NodeStatus
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
-from remora.core.errors import IncompatibleBundleError
-from remora.core.externals import EXTERNALS_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +132,11 @@ class AgentTurnExecutor:
                         ),
                     ),
                 ]
-                user_message = messages[1].content if len(messages) > 1 else ""
+                user_message = (
+                    messages[1].content
+                    if len(messages) > 1 and messages[1].content is not None
+                    else ""
+                )
                 self._history.extend(messages)
 
                 result = await self._run_kernel(
@@ -210,8 +213,8 @@ class AgentTurnExecutor:
             and bundle_config.externals_version > EXTERNALS_VERSION
         ):
             raise IncompatibleBundleError(
-                f"Bundle for {node_id} requires externals v{bundle_config.externals_version} "
-                f"but core provides v{EXTERNALS_VERSION}"
+                bundle_config.externals_version,
+                EXTERNALS_VERSION,
             )
 
         return node, workspace, bundle_config
@@ -345,4 +348,4 @@ class AgentTurnExecutor:
         self._trigger_policy.release_depth(depth_key)
 
 
-__all__ = ["AgentTurnExecutor", "_turn_logger"]
+__all__ = ["AgentTurnExecutor"]

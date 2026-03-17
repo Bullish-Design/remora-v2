@@ -14,20 +14,10 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from remora.core.types import NodeType, serialize_enum
+from remora.core.utils import deep_merge
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
 _VALID_PROMPT_KEYS = frozenset({"chat", "reactive"})
-
-
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge overlay into base. Overlay values win for non-dict types."""
-    result = dict(base)
-    for key, value in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = value
-    return result
 
 
 class VirtualSubscriptionConfig(BaseModel):
@@ -358,7 +348,7 @@ def load_config(path: Path | None = None) -> Config:
         user_data = {}
 
     # Defaults are lowest priority, user config overrides (deep merge)
-    merged = _deep_merge(defaults, expand_env_vars(user_data))
+    merged = deep_merge(defaults, expand_env_vars(user_data))
     nested = _nest_flat_config(merged)
     return Config(**nested)
 

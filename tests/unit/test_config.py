@@ -10,14 +10,13 @@ from remora.core.config import (
     BundleConfig,
     Config,
     ProjectConfig,
-    RuntimeConfig,
     SearchConfig,
     SearchMode,
-    _deep_merge,
     _find_config_file,
     expand_env_vars,
     load_config,
 )
+from remora.core.utils import deep_merge
 
 
 def test_default_config(monkeypatch, tmp_path: Path) -> None:
@@ -196,14 +195,14 @@ def test_load_from_yaml_with_search_section(tmp_path: Path) -> None:
 def test_deep_merge_basic() -> None:
     base = {"a": 1, "b": {"x": 10, "y": 20}}
     overlay = {"b": {"x": 99}, "c": 3}
-    result = _deep_merge(base, overlay)
+    result = deep_merge(base, overlay)
     assert result == {"a": 1, "b": {"x": 99, "y": 20}, "c": 3}
 
 
 def test_deep_merge_overlay_replaces_non_dict() -> None:
     base = {"a": [1, 2], "b": "text"}
     overlay = {"a": [3, 4]}
-    result = _deep_merge(base, overlay)
+    result = deep_merge(base, overlay)
     assert result == {"a": [3, 4], "b": "text"}
 
 

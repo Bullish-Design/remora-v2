@@ -85,7 +85,11 @@ class PromptBuilder:
     def _build_reflection(self, bundle_config: BundleConfig) -> TurnConfig:
         self_reflect = bundle_config.self_reflect
         if self_reflect is None:
-            return TurnConfig(system_prompt="", model=self._config.behavior.model_default, max_turns=1)
+            return TurnConfig(
+                system_prompt="",
+                model=self._config.behavior.model_default,
+                max_turns=1,
+            )
 
         reflection_prompt = (
             self_reflect.prompt
@@ -204,9 +208,10 @@ class PromptBuilder:
 
 
 def _event_content(event: Event) -> str:
-    if hasattr(event, "content"):
-        return str(event.content)
-    return ""
+    content = getattr(event, "content", None)
+    if content is None:
+        return ""
+    return str(content)
 
 
 __all__ = ["CompanionData", "PromptBuilder", "TurnConfig"]

@@ -32,6 +32,8 @@ def make_node(
     }
     data.update(overrides)
     return Node(**data)
+
+
 def write_file(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
