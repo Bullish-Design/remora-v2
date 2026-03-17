@@ -11,7 +11,7 @@ from remora.core.config import Config, resolve_query_search_paths
 def resolve_discovery_paths(config: Config, project_root: Path) -> list[Path]:
     """Resolve configured discovery paths relative to project root."""
     resolved: list[Path] = []
-    for configured in config.discovery_paths:
+    for configured in config.project.discovery_paths:
         candidate = Path(configured)
         if not candidate.is_absolute():
             candidate = project_root / candidate

@@ -55,7 +55,7 @@ class RemoraLifecycle:
 
     async def start(self) -> None:
         """Initialize services and launch background runtime tasks."""
-        db_path = self._project_root / self._config.workspace_root / "remora.db"
+        db_path = self._project_root / self._config.infra.workspace_root / "remora.db"
         db_path.parent.mkdir(parents=True, exist_ok=True)
         log_path = db_path.parent / "remora.log"
         self._log_path = log_path.resolve()
@@ -172,9 +172,7 @@ class RemoraLifecycle:
                     logger.warning("Actor pool did not drain within 10s, forcing shutdown")
 
             reconciler_stop_task = (
-                services.reconciler.stop_task
-                if services.reconciler is not None
-                else None
+                services.reconciler.stop_task if services.reconciler is not None else None
             )
             if self._web_server is not None:
                 self._web_server.should_exit = True

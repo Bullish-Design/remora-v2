@@ -187,11 +187,13 @@ class FileReconciler:
     ) -> None:
         discovered = discover(
             [Path(file_path)],
-            language_map=self._config.language_map,
+            language_map=self._config.behavior.language_map,
             query_paths=resolve_query_paths(self._config, self._project_root),
-            ignore_patterns=self._config.workspace_ignore_patterns,
+            ignore_patterns=self._config.project.workspace_ignore_patterns,
             languages=(
-                list(self._config.discovery_languages) if self._config.discovery_languages else None
+                list(self._config.project.discovery_languages)
+                if self._config.project.discovery_languages
+                else None
             ),
         )
         old_ids = self._file_state.get(file_path, (0, set()))[1]

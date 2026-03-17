@@ -44,7 +44,7 @@ class ActorPool:
         self._search_service = search_service
         self._running = False
         self._accepting_events = True
-        self._semaphore = asyncio.Semaphore(config.max_concurrency)
+        self._semaphore = asyncio.Semaphore(config.runtime.max_concurrency)
         self._actors: dict[str, Actor] = {}
 
         # Set ourselves as the dispatcher's router
@@ -109,7 +109,7 @@ class ActorPool:
     async def _evict_idle(self, max_idle_seconds: float | None = None) -> None:
         """Stop and remove actors that have been idle longer than threshold."""
         idle_timeout = (
-            self._config.actor_idle_timeout_s
+            self._config.runtime.actor_idle_timeout_s
             if max_idle_seconds is None
             else max_idle_seconds
         )

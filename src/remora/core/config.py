@@ -101,6 +101,89 @@ class SearchConfig(BaseModel):
     embedding_dimension: int = 2048
 
 
+class ProjectConfig(BaseModel):
+    """Paths and discovery settings."""
+
+    project_path: str = "."
+    discovery_paths: tuple[str, ...] = ("src/",)
+    discovery_languages: tuple[str, ...] | None = None
+    workspace_ignore_patterns: tuple[str, ...] = (
+        ".git",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+        ".remora",
+    )
+
+    @field_validator("discovery_paths")
+    @classmethod
+    def _validate_discovery_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            raise ValueError("discovery_paths must not be empty")
+        cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
+        if not cleaned:
+            raise ValueError("discovery_paths must contain at least one non-empty path")
+        return cleaned
+
+
+class RuntimeConfig(BaseModel):
+    """Execution engine settings."""
+
+    max_concurrency: int = 4
+    max_trigger_depth: int = 5
+    trigger_cooldown_ms: int = 1000
+    human_input_timeout_s: float = 300.0
+    actor_idle_timeout_s: float = 300.0
+    send_message_rate_limit: int = 10
+    send_message_rate_window_s: float = 1.0
+    search_content_max_matches: int = 1000
+    broadcast_max_targets: int = 50
+
+
+class InfraConfig(BaseModel):
+    """Infrastructure settings."""
+
+    model_base_url: str = "http://localhost:8000/v1"
+    model_api_key: str = ""
+    timeout_s: float = 300.0
+    workspace_root: str = ".remora"
+
+
+class BehaviorConfig(BaseModel):
+    """Defaults-layer config (from defaults.yaml, overridable in remora.yaml)."""
+
+    model_default: str = "Qwen/Qwen3-4B"
+    max_turns: int = 8
+    bundle_search_paths: tuple[str, ...] = ("bundles/", "@default")
+    query_search_paths: tuple[str, ...] = ("queries/", "@default")
+    bundle_overlays: dict[str, str] = Field(default_factory=dict)
+    bundle_rules: tuple[BundleOverlayRule, ...] = ()
+    languages: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    language_map: dict[str, str] = Field(default_factory=dict)
+    prompt_templates: dict[str, str] = Field(default_factory=dict)
+    externals_version: int = 1
+
+    @field_validator("language_map")
+    @classmethod
+    def _validate_language_map(cls, value: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for ext, language in value.items():
+            if not isinstance(ext, str) or not ext.startswith("."):
+                raise ValueError("language_map keys must be file extensions starting with '.'")
+            if not isinstance(language, str) or not language.strip():
+                raise ValueError("language_map values must be non-empty language names")
+            normalized[ext.lower()] = language.lower()
+        return normalized
+
+    @field_validator("bundle_search_paths", "query_search_paths")
+    @classmethod
+    def _validate_search_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            return value
+        cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
+        return cleaned
+
+
 class SelfReflectConfig(BaseModel):
     """Self-reflection configuration within a bundle."""
 
@@ -144,88 +227,16 @@ class BundleConfig(BaseModel):
 
 
 class Config(BaseSettings):
-    """Remora configuration loaded from remora.yaml and environment variables."""
+    """Remora configuration — composed of focused sub-models."""
 
     model_config = SettingsConfigDict(env_prefix="REMORA_", frozen=True, populate_by_name=True)
 
-    # Project
-    project_path: str = "."
-    discovery_paths: tuple[str, ...] = ("src/",)
-    discovery_languages: tuple[str, ...] | None = None
-    language_map: dict[str, str] = Field(default_factory=dict)
-    query_search_paths: tuple[str, ...] = ("queries/", "@default")
-
-    # Bundles
-    bundle_search_paths: tuple[str, ...] = ("bundles/", "@default")
-    bundle_overlays: dict[str, str] = Field(default_factory=dict)
-    bundle_rules: tuple[BundleOverlayRule, ...] = ()
-
-    # LLM
-    model_base_url: str = "http://localhost:8000/v1"
-    model_default: str = ""
-    model_api_key: str = ""
-    timeout_s: float = 300.0
-    max_turns: int = 0
-
-    # Agent execution
-    workspace_root: str = ".remora"
-    max_concurrency: int = 4
-    max_trigger_depth: int = 5
-    trigger_cooldown_ms: int = 1000
-    human_input_timeout_s: float = 300.0
-    search_content_max_matches: int = 1000
-    broadcast_max_targets: int = 50
-    actor_idle_timeout_s: float = 300.0
-    send_message_rate_limit: int = 10
-    send_message_rate_window_s: float = 1.0
-
-    # Language definitions (loaded from defaults.yaml)
-    languages: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    prompt_templates: dict[str, str] = Field(default_factory=dict)
-    externals_version: int = 0
-
-    # Search (optional embeddy integration)
+    project: ProjectConfig = Field(default_factory=ProjectConfig)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    infra: InfraConfig = Field(default_factory=InfraConfig)
+    behavior: BehaviorConfig = Field(default_factory=BehaviorConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
-
-    # Workspace
-    workspace_ignore_patterns: tuple[str, ...] = (
-        ".git",
-        ".venv",
-        "__pycache__",
-        "node_modules",
-        ".remora",
-    )
     virtual_agents: tuple[VirtualAgentConfig, ...] = ()
-
-    @field_validator("language_map")
-    @classmethod
-    def _validate_language_map(cls, value: dict[str, str]) -> dict[str, str]:
-        normalized: dict[str, str] = {}
-        for ext, language in value.items():
-            if not isinstance(ext, str) or not ext.startswith("."):
-                raise ValueError("language_map keys must be file extensions starting with '.'")
-            if not isinstance(language, str) or not language.strip():
-                raise ValueError("language_map values must be non-empty language names")
-            normalized[ext.lower()] = language.lower()
-        return normalized
-
-    @field_validator("discovery_paths")
-    @classmethod
-    def _validate_discovery_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
-            raise ValueError("discovery_paths must not be empty")
-        cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
-        if not cleaned:
-            raise ValueError("discovery_paths must contain at least one non-empty path")
-        return cleaned
-
-    @field_validator("bundle_search_paths", "query_search_paths")
-    @classmethod
-    def _validate_search_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
-            return value
-        cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
-        return cleaned
 
     @field_validator("virtual_agents")
     @classmethod
@@ -244,13 +255,13 @@ class Config(BaseSettings):
         normalized_type = serialize_enum(node_type)
         normalized_name = node_name or ""
 
-        for rule in self.bundle_rules:
+        for rule in self.behavior.bundle_rules:
             if rule.node_type != normalized_type:
                 continue
             if rule.name_pattern is None or fnmatch(normalized_name, rule.name_pattern):
                 return rule.bundle
 
-        return self.bundle_overlays.get(normalized_type)
+        return self.behavior.bundle_overlays.get(normalized_type)
 
 
 def expand_string(value: str) -> str:
@@ -291,6 +302,74 @@ def _find_config_file(start: Path | None = None) -> Path | None:
     return None
 
 
+def _nest_flat_config(flat: dict[str, Any]) -> dict[str, Any]:
+    """Map flat config keys into nested sub-model structure."""
+    nested: dict[str, Any] = {}
+
+    project_keys = {
+        "project_path",
+        "discovery_paths",
+        "discovery_languages",
+        "workspace_ignore_patterns",
+    }
+    runtime_keys = {
+        "max_concurrency",
+        "max_trigger_depth",
+        "trigger_cooldown_ms",
+        "human_input_timeout_s",
+        "actor_idle_timeout_s",
+        "send_message_rate_limit",
+        "send_message_rate_window_s",
+        "search_content_max_matches",
+        "broadcast_max_targets",
+    }
+    infra_keys = {"model_base_url", "model_api_key", "timeout_s", "workspace_root"}
+    behavior_keys = {
+        "model_default",
+        "max_turns",
+        "bundle_search_paths",
+        "query_search_paths",
+        "bundle_overlays",
+        "bundle_rules",
+        "languages",
+        "language_map",
+        "prompt_templates",
+        "externals_version",
+    }
+
+    project = {}
+    runtime = {}
+    infra = {}
+    behavior = {}
+
+    for key, value in flat.items():
+        if key in project_keys:
+            project[key] = value
+        elif key in runtime_keys:
+            runtime[key] = value
+        elif key in infra_keys:
+            infra[key] = value
+        elif key in behavior_keys:
+            behavior[key] = value
+        elif key == "search":
+            nested["search"] = value
+        elif key == "virtual_agents":
+            nested["virtual_agents"] = value
+        else:
+            nested[key] = value
+
+    if project:
+        nested["project"] = project
+    if runtime:
+        nested["runtime"] = runtime
+    if infra:
+        nested["infra"] = infra
+    if behavior:
+        nested["behavior"] = behavior
+
+    return nested
+
+
 def load_config(path: Path | None = None) -> Config:
     """Load config from remora.yaml, walking up directories when path is omitted."""
     from remora.defaults import load_defaults
@@ -307,14 +386,17 @@ def load_config(path: Path | None = None) -> Config:
 
     # Defaults are lowest priority, user config overrides (deep merge)
     merged = _deep_merge(defaults, expand_env_vars(user_data))
-    return Config(**merged)
+    nested = _nest_flat_config(merged)
+    return Config(**nested)
 
 
 def resolve_bundle_search_paths(config: Config, project_root: Path) -> list[Path]:
     """Resolve configured bundle search path entries to filesystem directories."""
     from remora.defaults import default_bundles_dir
 
-    return _resolve_search_paths(config.bundle_search_paths, project_root, default_bundles_dir())
+    return _resolve_search_paths(
+        config.behavior.bundle_search_paths, project_root, default_bundles_dir()
+    )
 
 
 def resolve_bundle_dirs(bundle_name: str, search_paths: list[Path]) -> list[Path]:
@@ -331,7 +413,9 @@ def resolve_query_search_paths(config: Config, project_root: Path) -> list[Path]
     """Resolve configured query search path entries to filesystem directories."""
     from remora.defaults import default_queries_dir
 
-    return _resolve_search_paths(config.query_search_paths, project_root, default_queries_dir())
+    return _resolve_search_paths(
+        config.behavior.query_search_paths, project_root, default_queries_dir()
+    )
 
 
 def _resolve_search_paths(

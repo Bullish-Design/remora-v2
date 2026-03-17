@@ -39,12 +39,12 @@ class TriggerPolicy:
             self.cleanup_depth_state(now_ms)
             self.trigger_checks = 0
 
-        if now_ms - self.last_trigger_ms < self._config.trigger_cooldown_ms:
+        if now_ms - self.last_trigger_ms < self._config.runtime.trigger_cooldown_ms:
             return False
         self.last_trigger_ms = now_ms
 
         depth = self.depths.get(correlation_id, 0)
-        if depth >= self._config.max_trigger_depth:
+        if depth >= self._config.runtime.max_trigger_depth:
             return False
         self.depths[correlation_id] = depth + 1
         self.depth_timestamps[correlation_id] = now_ms

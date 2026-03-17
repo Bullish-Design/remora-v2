@@ -211,9 +211,9 @@ class AgentTurnExecutor:
             node_store=self._node_store,
             event_store=self._event_store,
             outbox=outbox,
-            human_input_timeout_s=self._config.human_input_timeout_s,
-            search_content_max_matches=self._config.search_content_max_matches,
-            broadcast_max_targets=self._config.broadcast_max_targets,
+            human_input_timeout_s=self._config.runtime.human_input_timeout_s,
+            search_content_max_matches=self._config.runtime.search_content_max_matches,
+            broadcast_max_targets=self._config.runtime.broadcast_max_targets,
             send_message_limiter=self._send_message_limiter,
             search_service=self._search_service,
         )
@@ -240,8 +240,8 @@ class AgentTurnExecutor:
         for attempt in range(max_retries + 1):
             kernel = create_kernel(
                 model_name=model_name,
-                base_url=self._config.model_base_url,
-                api_key=self._config.model_api_key,
+                base_url=self._config.infra.model_base_url,
+                api_key=self._config.infra.model_api_key,
                 timeout=self._config.timeout_s,
                 tools=tools,
                 observer=OutboxObserver(outbox=outbox, agent_id=node_id),
@@ -255,7 +255,7 @@ class AgentTurnExecutor:
                         ),
                         node_id,
                         trigger.correlation_id,
-                        self._config.model_base_url,
+                        self._config.infra.model_base_url,
                         model_name,
                         [schema.name for schema in tool_schemas],
                         system_prompt,
@@ -328,7 +328,6 @@ class AgentTurnExecutor:
         except Exception:  # noqa: BLE001 - best effort cleanup
             turn_log.exception("Failed to reset node status")
         self._trigger_policy.release_depth(depth_key)
-
 
 
 __all__ = ["AgentTurnExecutor", "_turn_logger"]

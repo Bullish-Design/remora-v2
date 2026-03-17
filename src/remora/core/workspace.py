@@ -158,7 +158,7 @@ class CairnWorkspaceService:
     def __init__(self, config: Config, project_root: Path, metrics: Metrics | None = None):
         self._config = config
         self._project_root = project_root.resolve()
-        self._workspace_root = self._project_root / config.workspace_root
+        self._workspace_root = self._project_root / config.infra.workspace_root
         self._manager = cairn_wm.WorkspaceManager()
         self._agent_workspaces: dict[str, AgentWorkspace] = {}
         self._raw_agent_workspaces: dict[str, Workspace] = {}

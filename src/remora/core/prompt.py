@@ -13,7 +13,7 @@ class PromptBuilder:
 
     def __init__(self, config: Config) -> None:
         self._config = config
-        self._default_templates = dict(config.prompt_templates)
+        self._default_templates = dict(config.behavior.prompt_templates)
 
     def build_system_prompt(
         self,
@@ -33,7 +33,7 @@ class PromptBuilder:
         if mode_prompt:
             system_prompt = f"{system_prompt}\n\n{mode_prompt}"
 
-        model_name = bundle_config.model or self._config.model_default
+        model_name = bundle_config.model or self._config.behavior.model_default
         max_turns = bundle_config.max_turns
         return system_prompt, model_name, max_turns
 
@@ -63,14 +63,16 @@ class PromptBuilder:
     def _build_reflection(self, bundle_config: BundleConfig) -> tuple[str, str, int]:
         self_reflect = bundle_config.self_reflect
         if self_reflect is None:
-            return "", self._config.model_default, 1
+            return "", self._config.behavior.model_default, 1
 
         reflection_prompt = (
             self_reflect.prompt
             or bundle_config.prompt_templates.get("reflection", "")
             or self._default_templates.get("reflection", "")
         )
-        model_name = self_reflect.model or bundle_config.model or self._config.model_default
+        model_name = (
+            self_reflect.model or bundle_config.model or self._config.behavior.model_default
+        )
         max_turns = self_reflect.max_turns
         return reflection_prompt, model_name, max_turns
 

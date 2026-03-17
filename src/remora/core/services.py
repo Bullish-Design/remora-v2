@@ -41,7 +41,7 @@ class RuntimeServices:
 
         self.workspace_service = CairnWorkspaceService(config, project_root, metrics=self.metrics)
         self.language_registry = LanguageRegistry.from_config(
-            language_defs=config.languages,
+            language_defs=config.behavior.languages,
             query_search_paths=resolve_query_search_paths(config, project_root),
         )
 

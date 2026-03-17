@@ -150,7 +150,7 @@ def lsp_command(
 
     project_root = project_root.resolve()
     config = load_config(config_path)
-    db_path = project_root / config.workspace_root / "remora.db"
+    db_path = project_root / config.infra.workspace_root / "remora.db"
     if not db_path.exists():
         logger.error("Database not found at %s. Is 'remora start' running?", db_path)
         raise typer.Exit(code=1)
@@ -202,10 +202,12 @@ async def _discover(
 
     return discover_nodes(
         discovery_paths,
-        language_map=config.language_map,
+        language_map=config.behavior.language_map,
         query_paths=query_paths,
-        languages=list(config.discovery_languages) if config.discovery_languages else None,
-        ignore_patterns=config.workspace_ignore_patterns,
+        languages=list(config.project.discovery_languages)
+        if config.project.discovery_languages
+        else None,
+        ignore_patterns=config.project.workspace_ignore_patterns,
     )
 
 
@@ -287,12 +289,9 @@ def _configure_logging(level_name: str, *, lsp_mode: bool = False) -> None:
     stream_handler = logging.StreamHandler(stream)
     stream_handler.addFilter(_StructuredFieldInjector())
     log_format = (
-        "%(asctime)s %(levelname)s %(name)s "
-        "[%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
+        "%(asctime)s %(levelname)s %(name)s [%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
     )
-    stream_handler.setFormatter(
-        logging.Formatter(log_format)
-    )
+    stream_handler.setFormatter(logging.Formatter(log_format))
     root_logger.addHandler(stream_handler)
 
 
@@ -325,13 +324,11 @@ def _configure_file_logging(log_path: Path) -> None:
     file_handler.addFilter(_StructuredFieldInjector())
     file_handler.setLevel(root_logger.level)
     log_format = (
-        "%(asctime)s %(levelname)s %(name)s "
-        "[%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
+        "%(asctime)s %(levelname)s %(name)s [%(node_id)s:%(turn)s %(correlation_id)s]: %(message)s"
     )
-    file_handler.setFormatter(
-        logging.Formatter(log_format)
-    )
+    file_handler.setFormatter(logging.Formatter(log_format))
     root_logger.addHandler(file_handler)
+
 
 if __name__ == "__main__":
     main()

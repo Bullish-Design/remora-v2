@@ -6,8 +6,11 @@ import pytest
 from pydantic import ValidationError
 
 from remora.core.config import (
+    BehaviorConfig,
     BundleConfig,
     Config,
+    ProjectConfig,
+    RuntimeConfig,
     SearchConfig,
     SearchMode,
     _deep_merge,
@@ -22,13 +25,13 @@ def test_default_config(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("REMORA_MODEL_DEFAULT", raising=False)
     monkeypatch.chdir(tmp_path)
     config = load_config()
-    assert config.max_turns == 8
-    assert config.bundle_overlays["function"] == "code-agent"
-    assert config.bundle_overlays["directory"] == "directory-agent"
-    assert "file" not in config.bundle_overlays
-    assert config.language_map[".py"] == "python"
-    assert "queries/" in config.query_search_paths
-    assert config.actor_idle_timeout_s == 300.0
+    assert config.behavior.max_turns == 8
+    assert config.behavior.bundle_overlays["function"] == "code-agent"
+    assert config.behavior.bundle_overlays["directory"] == "directory-agent"
+    assert "file" not in config.behavior.bundle_overlays
+    assert config.behavior.language_map[".py"] == "python"
+    assert "queries/" in config.behavior.query_search_paths
+    assert config.runtime.actor_idle_timeout_s == 300.0
 
 
 def test_legacy_bundle_mapping_key_rejected() -> None:
@@ -50,10 +53,10 @@ def test_load_from_yaml(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     config = load_config(yaml_path)
-    assert config.max_turns == 20
-    assert config.model_default == "gpt-4"
-    assert config.language_map[".md"] == "markdown"
-    assert config.query_search_paths == ("custom-queries/",)
+    assert config.behavior.max_turns == 20
+    assert config.behavior.model_default == "gpt-4"
+    assert config.behavior.language_map[".md"] == "markdown"
+    assert config.behavior.query_search_paths == ("custom-queries/",)
 
 
 def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:
@@ -103,23 +106,25 @@ def test_find_config_file(tmp_path: Path, monkeypatch) -> None:
 
 def test_invalid_language_map_rejected() -> None:
     with pytest.raises(ValidationError):
-        Config(language_map={"py": "python"})
+        Config(behavior=BehaviorConfig(language_map={"py": "python"}))
 
 
 def test_empty_discovery_paths_rejected() -> None:
     with pytest.raises(ValidationError):
-        Config(discovery_paths=())
+        Config(project=ProjectConfig(discovery_paths=()))
 
 
 def test_bundle_rules_override_type_overlays() -> None:
     config = Config(
-        bundle_overlays={"function": "code-agent"},
-        bundle_rules=(
-            {
-                "node_type": "function",
-                "name_pattern": "test_*",
-                "bundle": "test-agent",
-            },
+        behavior=BehaviorConfig(
+            bundle_overlays={"function": "code-agent"},
+            bundle_rules=(
+                {
+                    "node_type": "function",
+                    "name_pattern": "test_*",
+                    "bundle": "test-agent",
+                },
+            ),
         ),
     )
     assert config.resolve_bundle("function", "test_alpha") == "test-agent"
@@ -210,9 +215,9 @@ def test_load_config_deep_merges_languages(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     config = load_config(user_config)
-    assert ".pyi" in config.languages["python"]["extensions"]
-    assert "markdown" in config.languages
-    assert "toml" in config.languages
+    assert ".pyi" in config.behavior.languages["python"]["extensions"]
+    assert "markdown" in config.behavior.languages
+    assert "toml" in config.behavior.languages
 
 
 def test_load_config_deep_merges_language_map(tmp_path: Path) -> None:
@@ -223,5 +228,5 @@ def test_load_config_deep_merges_language_map(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     config = load_config(user_config)
-    assert config.language_map[".rs"] == "rust"
-    assert config.language_map[".py"] == "python"
+    assert config.behavior.language_map[".rs"] == "rust"
+    assert config.behavior.language_map[".py"] == "python"

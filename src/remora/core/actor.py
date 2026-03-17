@@ -43,8 +43,8 @@ class Actor:
         self._last_active: float = time.time()
         self._history: list[Message] = []
         self._send_message_limiter = SlidingWindowRateLimiter(
-            max_requests=config.send_message_rate_limit,
-            window_seconds=config.send_message_rate_window_s,
+            max_requests=config.runtime.send_message_rate_limit,
+            window_seconds=config.runtime.send_message_rate_window_s,
         )
 
         self._trigger_policy = TriggerPolicy(config)

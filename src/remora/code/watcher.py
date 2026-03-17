@@ -28,7 +28,9 @@ class FileWatcher:
         """Scan discovery paths and return `{absolute_file_path: mtime_ns}`."""
         mtimes: dict[str, int] = {}
         discovery_paths = resolve_discovery_paths(self._config, self._project_root)
-        for file_path in walk_source_files(discovery_paths, self._config.workspace_ignore_patterns):
+        for file_path in walk_source_files(
+            discovery_paths, self._config.project.workspace_ignore_patterns
+        ):
             try:
                 mtimes[str(file_path)] = file_path.stat().st_mtime_ns
             except FileNotFoundError:
