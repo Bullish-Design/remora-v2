@@ -27,7 +27,7 @@ def test_subscription_pattern_matches_exact() -> None:
 
 
 def test_subscription_pattern_matches_event_type() -> None:
-    pattern = SubscriptionPattern(event_types=["AgentMessageEvent"])
+    pattern = SubscriptionPattern(event_types=["agent_message"])
     assert pattern.matches(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
     assert not pattern.matches(ContentChangedEvent(path="src/app.py"))
 
@@ -46,7 +46,7 @@ def test_subscription_pattern_none_matches_all() -> None:
 
 def test_not_from_agents_excludes_matching_agent_id() -> None:
     pattern = SubscriptionPattern(
-        event_types=["AgentCompleteEvent"],
+        event_types=["agent_complete"],
         not_from_agents=["observer-1"],
     )
     own_event = AgentCompleteEvent(agent_id="observer-1", result_summary="done")
@@ -57,7 +57,7 @@ def test_not_from_agents_excludes_matching_agent_id() -> None:
 
 def test_not_from_agents_excludes_matching_from_agent() -> None:
     pattern = SubscriptionPattern(
-        event_types=["AgentMessageEvent"],
+        event_types=["agent_message"],
         not_from_agents=["observer-1"],
     )
     event = AgentMessageEvent(from_agent="observer-1", to_agent="agent-a", content="hi")
@@ -66,7 +66,7 @@ def test_not_from_agents_excludes_matching_from_agent() -> None:
 
 def test_not_from_agents_none_matches_all() -> None:
     pattern = SubscriptionPattern(
-        event_types=["AgentCompleteEvent"],
+        event_types=["agent_complete"],
         not_from_agents=None,
     )
     event = AgentCompleteEvent(agent_id="any-agent", result_summary="done")
@@ -120,7 +120,7 @@ async def test_registry_not_from_agents_filter(db) -> None:
     await registry.register(
         "observer-1",
         SubscriptionPattern(
-            event_types=["AgentCompleteEvent"],
+            event_types=["agent_complete"],
             not_from_agents=["observer-1"],
         ),
     )
@@ -213,5 +213,5 @@ def test_property_subscription_path_glob_matches_suffix(path_parts: list[str]) -
     suffix = path_parts[-1]
     path = f"src/{'/'.join(path_parts)}.py"
     pattern = SubscriptionPattern(path_glob=f"**/{suffix}.py")
-    event = _PathEvent(event_type="ContentChangedEvent", path=path)
+    event = _PathEvent(event_type="content_changed", path=path)
     assert pattern.matches(event)

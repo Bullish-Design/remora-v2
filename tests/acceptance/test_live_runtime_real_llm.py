@@ -569,7 +569,7 @@ async def test_acceptance_live_web_chat_routes_through_dispatcher_actorpool_and_
             message_event = await _wait_for_event(
                 client,
                 lambda event: (
-                    event.get("event_type") == "AgentMessageEvent"
+                    event.get("event_type") == "agent_message"
                     and event.get("payload", {}).get("from_agent") == node_id
                     and event.get("payload", {}).get("to_agent") == node_id
                     and event.get("payload", {}).get("content") == token
@@ -581,7 +581,7 @@ async def test_acceptance_live_web_chat_routes_through_dispatcher_actorpool_and_
             await _wait_for_event(
                 client,
                 lambda event: (
-                    event.get("event_type") == "AgentCompleteEvent"
+                    event.get("event_type") == "agent_complete"
                     and event.get("correlation_id") == correlation_id
                 ),
             )
@@ -589,7 +589,7 @@ async def test_acceptance_live_web_chat_routes_through_dispatcher_actorpool_and_
             errors = [
                 event
                 for event in events
-                if event.get("event_type") == "AgentErrorEvent"
+                if event.get("event_type") == "agent_error"
                 and event.get("correlation_id") == correlation_id
             ]
             assert errors == []
@@ -637,7 +637,7 @@ async def test_acceptance_process_lsp_open_save_emits_content_changed_event(
                 await _wait_for_event(
                     client,
                     lambda event: (
-                        event.get("event_type") == "ContentChangedEvent"
+                        event.get("event_type") == "content_changed"
                         and event.get("payload", {}).get("path")
                         == str(runtime_project.source_path.resolve())
                         and event.get("payload", {}).get("change_type") == "modified"
@@ -706,14 +706,14 @@ async def test_acceptance_proposal_flow_generates_diff_and_accept_materializes_f
             await _wait_for_event(
                 client,
                 lambda event: (
-                    event.get("event_type") == "RewriteAcceptedEvent"
+                    event.get("event_type") == "rewrite_accepted"
                     and event.get("payload", {}).get("proposal_id") == proposal_id
                 ),
             )
             await _wait_for_event(
                 client,
                 lambda event: (
-                    event.get("event_type") == "ContentChangedEvent"
+                    event.get("event_type") == "content_changed"
                     and event.get("payload", {}).get("path") == str(materialized_path)
                 ),
             )
@@ -761,7 +761,7 @@ async def test_acceptance_reactive_file_change_triggers_live_real_llm_turn(
             message_event = await _wait_for_event(
                 client,
                 lambda event: (
-                    event.get("event_type") == "AgentMessageEvent"
+                    event.get("event_type") == "agent_message"
                     and event.get("payload", {}).get("from_agent") == directory_node_id
                     and event.get("payload", {}).get("to_agent") == directory_node_id
                     and event.get("payload", {}).get("content") == "reactive-ok"
@@ -773,7 +773,7 @@ async def test_acceptance_reactive_file_change_triggers_live_real_llm_turn(
             await _wait_for_event(
                 client,
                 lambda event: (
-                    event.get("event_type") == "AgentCompleteEvent"
+                    event.get("event_type") == "agent_complete"
                     and event.get("correlation_id") == correlation_id
                 ),
             )
@@ -781,7 +781,7 @@ async def test_acceptance_reactive_file_change_triggers_live_real_llm_turn(
             errors = [
                 event
                 for event in events
-                if event.get("event_type") == "AgentErrorEvent"
+                if event.get("event_type") == "agent_error"
                 and event.get("correlation_id") == correlation_id
             ]
             assert errors == []

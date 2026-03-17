@@ -115,11 +115,11 @@
     .timeline-event .timeline-meta {
       color: var(--muted);
     }
-    .timeline-event.type-AgentStartEvent { border-color: #2563eb; }
-    .timeline-event.type-AgentCompleteEvent { border-color: #15803d; }
-    .timeline-event.type-AgentErrorEvent { border-color: #b91c1c; }
-    .timeline-event.type-AgentMessageEvent { border-color: #ea580c; }
-    .timeline-event.type-ContentChangedEvent { border-color: #7c3aed; }
+    .timeline-event.type-agent_start { border-color: #2563eb; }
+    .timeline-event.type-agent_complete { border-color: #15803d; }
+    .timeline-event.type-agent_error { border-color: #b91c1c; }
+    .timeline-event.type-agent_message { border-color: #ea580c; }
+    .timeline-event.type-content_changed { border-color: #7c3aed; }
     #agent-panel {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -534,22 +534,22 @@
       const items = events.slice(-60).map((entry) => {
         const eventType = entry.eventType;
         const payload = entry.payload || {};
-        if (eventType === "AgentMessageEvent" && payload.from_agent === "user") {
+        if (eventType === "agent_message" && payload.from_agent === "user") {
           return `<div class=\"panel-item panel-user\"><div class=\"panel-meta\">User</div>${escapeHtml(payload.content || "")}</div>`;
         }
-        if (eventType === "AgentCompleteEvent") {
+        if (eventType === "agent_complete") {
           return `<div class=\"panel-item panel-agent\"><div class=\"panel-meta\">Agent Response</div>${escapeHtml(payload.full_response || payload.result_summary || "")}</div>`;
         }
-        if (eventType === "AgentStartEvent") {
+        if (eventType === "agent_start") {
           return `<div class=\"panel-item\"><div class=\"panel-meta\">Agent Start</div>Turn started.</div>`;
         }
-        if (eventType === "AgentErrorEvent") {
+        if (eventType === "agent_error") {
           return `<div class=\"panel-item panel-error\"><div class=\"panel-meta\">Agent Error</div>${escapeHtml(payload.error || "")}</div>`;
         }
-        if (eventType === "ToolResultEvent") {
+        if (eventType === "tool_result") {
           return `<div class=\"panel-item\"><div class=\"panel-meta\">Tool Result · ${escapeHtml(payload.tool_name || "")}</div>${escapeHtml(payload.result_summary || "")}</div>`;
         }
-        if (eventType === "HumanInputRequestEvent") {
+        if (eventType === "human_input_request") {
           const options = Array.isArray(payload.options) ? payload.options.join(", ") : "";
           return (
             `<div class=\"panel-item\" data-request-id=\"${escapeHtml(payload.request_id || "")}\">` +
@@ -561,7 +561,7 @@
             `</div>`
           );
         }
-        if (eventType === "RewriteProposalEvent") {
+        if (eventType === "rewrite_proposal") {
           return (
             `<div class=\"panel-item\" data-proposal-node=\"${escapeHtml(nodeId)}\">` +
             `<div class=\"panel-meta\">Rewrite Proposal</div>` +
@@ -621,7 +621,7 @@
     document.getElementById("send-chat").addEventListener("click", async () => {
       const message = document.getElementById("chat-input").value.trim();
       if (!selectedNode || !message) return;
-      cacheEvent("AgentMessageEvent", {
+      cacheEvent("agent_message", {
         from_agent: "user",
         to_agent: selectedNode,
         content: message,
@@ -710,7 +710,7 @@
         }
       };
 
-      evtSource.addEventListener("NodeDiscoveredEvent", (event) => {
+      evtSource.addEventListener("node_discovered", (event) => {
         const payload = ssePayload(event);
         if (!graph.hasNode(payload.node_id)) {
           const filePath = payload.file_path || "";
@@ -741,105 +741,105 @@
           }
         }
         renderer.refresh();
-        appendEventLine(`NodeDiscoveredEvent: ${payload.node_id}`);
-        addTimelineEvent("NodeDiscoveredEvent", payload);
+        appendEventLine(`node_discovered: ${payload.node_id}`);
+        addTimelineEvent("node_discovered", payload);
       });
-      evtSource.addEventListener("NodeRemovedEvent", (event) => {
+      evtSource.addEventListener("node_removed", (event) => {
         const payload = ssePayload(event);
         if (graph.hasNode(payload.node_id)) {
           graph.dropNode(payload.node_id);
           renderer.refresh();
         }
-        appendEventLine(`NodeRemovedEvent: ${payload.node_id}`);
-        addTimelineEvent("NodeRemovedEvent", payload);
+        appendEventLine(`node_removed: ${payload.node_id}`);
+        addTimelineEvent("node_removed", payload);
       });
-      evtSource.addEventListener("NodeChangedEvent", (event) => {
+      evtSource.addEventListener("node_changed", (event) => {
         const payload = ssePayload(event);
-        appendEventLine(`NodeChangedEvent: ${payload.node_id}`);
-        addTimelineEvent("NodeChangedEvent", payload);
+        appendEventLine(`node_changed: ${payload.node_id}`);
+        addTimelineEvent("node_changed", payload);
       });
-      evtSource.addEventListener("AgentStartEvent", (event) => {
+      evtSource.addEventListener("agent_start", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("AgentStartEvent", payload);
+        cacheEvent("agent_start", payload);
         if (graph.hasNode(payload.agent_id)) {
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "running"));
           renderer.refresh();
         }
-        appendEventLine(`AgentStartEvent: ${payload.agent_id}`);
-        addTimelineEvent("AgentStartEvent", payload);
+        appendEventLine(`agent_start: ${payload.agent_id}`);
+        addTimelineEvent("agent_start", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("AgentCompleteEvent", (event) => {
+      evtSource.addEventListener("agent_complete", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("AgentCompleteEvent", payload);
+        cacheEvent("agent_complete", payload);
         if (graph.hasNode(payload.agent_id)) {
           const nodeType = graph.getNodeAttribute(payload.agent_id, "node_type");
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor(nodeType, "idle"));
           renderer.refresh();
         }
-        appendEventLine(`AgentCompleteEvent: ${payload.agent_id}`);
-        addTimelineEvent("AgentCompleteEvent", payload);
+        appendEventLine(`agent_complete: ${payload.agent_id}`);
+        addTimelineEvent("agent_complete", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("AgentErrorEvent", (event) => {
+      evtSource.addEventListener("agent_error", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("AgentErrorEvent", payload);
+        cacheEvent("agent_error", payload);
         if (graph.hasNode(payload.agent_id)) {
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "error"));
           renderer.refresh();
         }
-        appendEventLine(`AgentErrorEvent: ${payload.agent_id}`);
-        addTimelineEvent("AgentErrorEvent", payload);
+        appendEventLine(`agent_error: ${payload.agent_id}`);
+        addTimelineEvent("agent_error", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("AgentMessageEvent", (event) => {
+      evtSource.addEventListener("agent_message", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("AgentMessageEvent", payload);
-        appendEventLine(`AgentMessageEvent: ${payload.from_agent} → ${payload.to_agent}`);
-        addTimelineEvent("AgentMessageEvent", payload);
+        cacheEvent("agent_message", payload);
+        appendEventLine(`agent_message: ${payload.from_agent} → ${payload.to_agent}`);
+        addTimelineEvent("agent_message", payload);
         if (selectedNode && (selectedNode === payload.to_agent || selectedNode === payload.from_agent)) {
           renderAgentPanel(selectedNode);
         }
       });
-      evtSource.addEventListener("HumanInputRequestEvent", (event) => {
+      evtSource.addEventListener("human_input_request", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("HumanInputRequestEvent", payload);
+        cacheEvent("human_input_request", payload);
         if (graph.hasNode(payload.agent_id)) {
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "awaiting_input"));
           renderer.refresh();
         }
-        addTimelineEvent("HumanInputRequestEvent", payload);
+        addTimelineEvent("human_input_request", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("HumanInputResponseEvent", (event) => {
+      evtSource.addEventListener("human_input_response", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("HumanInputResponseEvent", payload);
-        addTimelineEvent("HumanInputResponseEvent", payload);
+        cacheEvent("human_input_response", payload);
+        addTimelineEvent("human_input_response", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("RewriteProposalEvent", (event) => {
+      evtSource.addEventListener("rewrite_proposal", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("RewriteProposalEvent", payload);
+        cacheEvent("rewrite_proposal", payload);
         if (graph.hasNode(payload.agent_id)) {
           graph.setNodeAttribute(payload.agent_id, "color", nodeColor("", "awaiting_review"));
           renderer.refresh();
         }
-        addTimelineEvent("RewriteProposalEvent", payload);
+        addTimelineEvent("rewrite_proposal", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("RewriteAcceptedEvent", (event) => {
+      evtSource.addEventListener("rewrite_accepted", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("RewriteAcceptedEvent", payload);
-        addTimelineEvent("RewriteAcceptedEvent", payload);
+        cacheEvent("rewrite_accepted", payload);
+        addTimelineEvent("rewrite_accepted", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("RewriteRejectedEvent", (event) => {
+      evtSource.addEventListener("rewrite_rejected", (event) => {
         const payload = ssePayload(event);
-        cacheEvent("RewriteRejectedEvent", payload);
-        addTimelineEvent("RewriteRejectedEvent", payload);
+        cacheEvent("rewrite_rejected", payload);
+        addTimelineEvent("rewrite_rejected", payload);
         if (selectedNode === payload.agent_id) renderAgentPanel(selectedNode);
       });
-      evtSource.addEventListener("CursorFocusEvent", (event) => {
+      evtSource.addEventListener("cursor_focus", (event) => {
         const payload = ssePayload(event);
         const panel = document.getElementById("companion-panel");
 
@@ -882,7 +882,7 @@
             }
           }, 500);
         }
-        addTimelineEvent("CursorFocusEvent", payload);
+        addTimelineEvent("cursor_focus", payload);
         if (payload.node_id) {
           selectNode(payload.node_id);
         }

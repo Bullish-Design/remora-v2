@@ -39,7 +39,7 @@ from remora.core.events import (
     EventStore,
 )
 from remora.core.graph import NodeStore
-from remora.core.types import NodeStatus
+from remora.core.types import EventType, NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -59,7 +59,7 @@ async def test_outbox_emit_persists_event(outbox_env) -> None:
     event_id = await outbox.emit(AgentStartEvent(agent_id="agent-a"))
     assert event_id == 1
     events = await event_store.get_events(limit=1)
-    assert events[0]["event_type"] == "AgentStartEvent"
+    assert events[0]["event_type"] == "agent_start"
 
 
 @pytest.mark.asyncio
@@ -107,8 +107,8 @@ async def test_recording_outbox_captures_events() -> None:
     await outbox.emit(AgentStartEvent(agent_id="test-agent"))
     await outbox.emit(AgentCompleteEvent(agent_id="test-agent"))
     assert len(outbox.events) == 2
-    assert outbox.events[0].event_type == "AgentStartEvent"
-    assert outbox.events[1].event_type == "AgentCompleteEvent"
+    assert outbox.events[0].event_type == "agent_start"
+    assert outbox.events[1].event_type == "agent_complete"
     assert all(event.correlation_id == "corr-1" for event in outbox.events)
     assert outbox.sequence == 2
 
@@ -245,8 +245,8 @@ async def test_actor_processes_inbox_message(actor_env, monkeypatch) -> None:
 
     events = await env["event_store"].get_events(limit=10)
     event_types = [event["event_type"] for event in events]
-    assert "AgentStartEvent" in event_types
-    assert "AgentCompleteEvent" in event_types
+    assert "agent_start" in event_types
+    assert "agent_complete" in event_types
 
     updated = await env["node_store"].get_node(node.node_id)
     assert updated is not None
@@ -286,7 +286,7 @@ async def test_actor_emits_primary_tag_on_normal_completion(actor_env, monkeypat
     await actor._execute_turn(trigger, outbox)
 
     events = await env["event_store"].get_events(limit=20)
-    complete = next(event for event in events if event["event_type"] == "AgentCompleteEvent")
+    complete = next(event for event in events if event["event_type"] == "agent_complete")
     assert complete["tags"] == ["primary"]
 
 
@@ -329,7 +329,7 @@ async def test_actor_emits_reflection_tag_on_self_completion_trigger(actor_env, 
     await actor._execute_turn(trigger, outbox)
 
     events = await env["event_store"].get_events(limit=20)
-    complete = next(event for event in events if event["event_type"] == "AgentCompleteEvent")
+    complete = next(event for event in events if event["event_type"] == "agent_complete")
     assert complete["tags"] == ["reflection"]
 
 
@@ -366,7 +366,7 @@ async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) ->
     await actor._execute_turn(trigger, outbox)
 
     events = await env["event_store"].get_events(limit=20)
-    complete = next(event for event in events if event["event_type"] == "AgentCompleteEvent")
+    complete = next(event for event in events if event["event_type"] == "agent_complete")
     assert "hello world" in complete["payload"]["user_message"]
 
 
@@ -570,7 +570,7 @@ async def test_actor_missing_node(actor_env) -> None:
     trigger = Trigger(node_id="missing-node", correlation_id="c1")
     await actor._execute_turn(trigger, outbox)
     events = await actor_env["event_store"].get_events(limit=5)
-    assert not any(event["event_type"] == "AgentStartEvent" for event in events)
+    assert not any(event["event_type"] == "agent_start" for event in events)
 
 
 @pytest.mark.asyncio
@@ -927,11 +927,11 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(
 
     events = await env["event_store"].get_events(limit=10)
     event_types = [event["event_type"] for event in events]
-    assert AgentStartEvent.__name__ in event_types
-    assert AgentErrorEvent.__name__ in event_types
-    assert AgentCompleteEvent.__name__ not in event_types
+    assert EventType.AGENT_START in event_types
+    assert EventType.AGENT_ERROR in event_types
+    assert EventType.AGENT_COMPLETE not in event_types
 
-    error_event = next(event for event in events if event["event_type"] == AgentErrorEvent.__name__)
+    error_event = next(event for event in events if event["event_type"] == EventType.AGENT_ERROR)
     assert "connection refused" in error_event["payload"]["error"]
 
     updated_node = await env["node_store"].get_node(node.node_id)
@@ -986,8 +986,8 @@ async def test_actor_execute_turn_retries_kernel_once(actor_env, monkeypatch) ->
     assert attempts == 2
     events = await env["event_store"].get_events(limit=10)
     event_types = [event["event_type"] for event in events]
-    assert AgentCompleteEvent.__name__ in event_types
-    assert AgentErrorEvent.__name__ not in event_types
+    assert EventType.AGENT_COMPLETE in event_types
+    assert EventType.AGENT_ERROR not in event_types
 
 
 @pytest.mark.asyncio
@@ -1156,11 +1156,11 @@ async def test_actor_emits_kernel_observability_events(actor_env, monkeypatch) -
 
     events = await env["event_store"].get_events(limit=30)
     event_types = [event["event_type"] for event in events]
-    assert "ModelRequestEvent" in event_types
-    assert "ModelResponseEvent" in event_types
-    assert "RemoraToolCallEvent" in event_types
-    assert "RemoraToolResultEvent" in event_types
-    assert "TurnCompleteEvent" in event_types
+    assert "model_request" in event_types
+    assert "model_response" in event_types
+    assert "remora_tool_call" in event_types
+    assert "remora_tool_result" in event_types
+    assert "turn_complete" in event_types
 
 
 @pytest.mark.asyncio

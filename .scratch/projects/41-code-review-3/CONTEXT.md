@@ -62,7 +62,19 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - Red phase captured with `AttributeError` on missing `project_root` property.
   - `devenv shell -- pytest tests/unit/test_workspace.py tests/unit/test_web_server.py -q` passed.
   - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`359 passed, 8 skipped`).
+- Completed section 2.1 (event type dispatch with stable identifiers):
+  - added `EventType` `StrEnum` in `core/types.py`.
+  - removed event class-name auto-assignment (`model_post_init`) from base `Event`.
+  - set explicit `event_type` defaults on all concrete events using `EventType`.
+  - migrated runtime event matching/subscription wiring to stable values.
+  - migrated event-type literals in web/static UI, bundles, and tests to snake_case values.
+  - restored `core.events`/`core.events.types` `__all__` symbol exports after literal migration.
+- Verification for section 2.1:
+  - targeted regression run passed:
+    - `devenv shell -- pytest tests/unit/test_events.py tests/unit/test_subscription_registry.py tests/unit/test_event_store.py tests/unit/test_reconciler.py tests/unit/test_actor.py tests/unit/test_web_server.py tests/integration/test_e2e.py -q`
+  - full suite passed after fixing residual bundle/config fixture references:
+    - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` (`359 passed, 8 skipped`).
 
 ## Next Action
-- Commit and push section 1.6 checkpoint (Phase 1 complete).
-- Begin section 2.1 implementation (stable `EventType` dispatch).
+- Commit and push section 2.1 checkpoint.
+- Begin section 2.2 implementation (actor-scoped send_message rate limiter).

@@ -260,7 +260,7 @@ async def test_api_chat_emits_agent_message_event(web_env) -> None:
 
     events = await event_store.get_events(limit=10)
     assert any(
-        event["event_type"] == "AgentMessageEvent"
+        event["event_type"] == "agent_message"
         and event["payload"].get("from_agent") == "user"
         and event["payload"].get("to_agent") == "src/app.py::a"
         and event["payload"].get("content") == "hello"
@@ -313,7 +313,7 @@ async def test_api_respond_resolves_pending_request_and_emits_event(web_env) -> 
 
     events = await event_store.get_events(limit=5)
     assert any(
-        event["event_type"] == "HumanInputResponseEvent"
+        event["event_type"] == "human_input_response"
         and event["payload"].get("request_id") == "req-1"
         and event["payload"].get("response") == "approved"
         for event in events
@@ -356,8 +356,8 @@ async def test_api_proposal_accept_materializes_workspace_and_emits_events(
 
     events = await event_store.get_events(limit=20)
     types = [event["event_type"] for event in events]
-    assert "RewriteAcceptedEvent" in types
-    assert "ContentChangedEvent" in types
+    assert "rewrite_accepted" in types
+    assert "content_changed" in types
 
 
 @pytest.mark.asyncio
@@ -370,7 +370,7 @@ async def test_api_proposal_reject_emits_rejected_event(proposal_web_env) -> Non
     assert response.status_code == 200
 
     events = await event_store.get_events(limit=20)
-    rejected = next(event for event in events if event["event_type"] == "RewriteRejectedEvent")
+    rejected = next(event for event in events if event["event_type"] == "rewrite_rejected")
     assert rejected["payload"]["feedback"] == "Try a smaller change"
 
 
@@ -477,7 +477,7 @@ async def test_api_events(web_env) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert isinstance(payload, list)
-    assert payload and payload[0]["event_type"] == "AgentMessageEvent"
+    assert payload and payload[0]["event_type"] == "agent_message"
 
 
 @pytest.mark.asyncio
@@ -688,7 +688,7 @@ async def test_sse_receives_events(web_env) -> None:
         data_line = await asyncio.wait_for(read_one_data_line(response), timeout=2.0)
 
     payload = json.loads(data_line.removeprefix("data: ").strip())
-    assert payload["event_type"] == "AgentMessageEvent"
+    assert payload["event_type"] == "agent_message"
     assert payload["payload"]["content"] == "from-sse-test"
     assert set(payload.keys()) == {
         "event_type",

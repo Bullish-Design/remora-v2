@@ -23,7 +23,7 @@ system_prompt_extension: |
   4. Keep responses concise but informative (2-4 sentences)
 
   ## Responding to Code Changes
-  When triggered by a NodeChangedEvent:
+  When triggered by node_changed:
   1. Review the change in your source code
   2. Use reflect to note what changed
   3. Use kv_set to update your understanding

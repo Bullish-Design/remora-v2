@@ -30,7 +30,7 @@ async def test_bus_mro_dispatch() -> None:
 
     bus.subscribe(Event, handler)
     await bus.emit(AgentMessageEvent(from_agent="a", to_agent="b", content="hello"))
-    assert seen == ["AgentMessageEvent"]
+    assert seen == ["agent_message"]
 
 
 @pytest.mark.asyncio
@@ -68,7 +68,7 @@ async def test_bus_subscribe_all() -> None:
     bus.subscribe_all(handler)
     await bus.emit(AgentStartEvent(agent_id="a"))
     await bus.emit(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
-    assert seen == ["AgentStartEvent", "AgentMessageEvent"]
+    assert seen == ["agent_start", "agent_message"]
 
 
 @pytest.mark.asyncio

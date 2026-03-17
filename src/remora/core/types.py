@@ -36,6 +36,33 @@ class ChangeType(StrEnum):
     OPENED = "opened"
 
 
+class EventType(StrEnum):
+    """Stable event identifiers decoupled from class names."""
+
+    AGENT_START = "agent_start"
+    AGENT_COMPLETE = "agent_complete"
+    AGENT_ERROR = "agent_error"
+    AGENT_MESSAGE = "agent_message"
+    NODE_DISCOVERED = "node_discovered"
+    NODE_REMOVED = "node_removed"
+    NODE_CHANGED = "node_changed"
+    CONTENT_CHANGED = "content_changed"
+    HUMAN_INPUT_REQUEST = "human_input_request"
+    HUMAN_INPUT_RESPONSE = "human_input_response"
+    REWRITE_PROPOSAL = "rewrite_proposal"
+    REWRITE_ACCEPTED = "rewrite_accepted"
+    REWRITE_REJECTED = "rewrite_rejected"
+    MODEL_REQUEST = "model_request"
+    MODEL_RESPONSE = "model_response"
+    TOOL_RESULT = "tool_result"
+    REMORA_TOOL_CALL = "remora_tool_call"
+    REMORA_TOOL_RESULT = "remora_tool_result"
+    TURN_COMPLETE = "turn_complete"
+    TURN_DIGESTED = "turn_digested"
+    CUSTOM = "custom"
+    CURSOR_FOCUS = "cursor_focus"
+
+
 STATUS_TRANSITIONS: dict[NodeStatus, set[NodeStatus]] = {
     NodeStatus.IDLE: {NodeStatus.RUNNING},
     NodeStatus.RUNNING: {
@@ -64,6 +91,7 @@ __all__ = [
     "NodeStatus",
     "NodeType",
     "ChangeType",
+    "EventType",
     "STATUS_TRANSITIONS",
     "validate_status_transition",
     "serialize_enum",

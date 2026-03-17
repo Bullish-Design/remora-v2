@@ -25,7 +25,7 @@ from remora.core.events import (
 from remora.core.graph import NodeStore
 from remora.core.node import Node
 from remora.core.search import SearchServiceProtocol
-from remora.core.types import NodeType
+from remora.core.types import EventType, NodeType
 from remora.core.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -602,14 +602,14 @@ class FileReconciler:
             await self._event_store.subscriptions.register(
                 node.node_id,
                 SubscriptionPattern(
-                    event_types=["NodeChangedEvent"],
+                    event_types=[EventType.NODE_CHANGED],
                     path_glob=subtree_glob,
                 ),
             )
             await self._event_store.subscriptions.register(
                 node.node_id,
                 SubscriptionPattern(
-                    event_types=["ContentChangedEvent"],
+                    event_types=[EventType.CONTENT_CHANGED],
                     path_glob=subtree_glob,
                 ),
             )
@@ -622,7 +622,7 @@ class FileReconciler:
                 await self._event_store.subscriptions.register(
                     node.node_id,
                     SubscriptionPattern(
-                        event_types=["AgentCompleteEvent"],
+                        event_types=[EventType.AGENT_COMPLETE],
                         from_agents=[node.node_id],
                         tags=["primary"],
                     ),
@@ -631,7 +631,7 @@ class FileReconciler:
         await self._event_store.subscriptions.register(
             node.node_id,
             SubscriptionPattern(
-                event_types=["ContentChangedEvent"],
+                event_types=[EventType.CONTENT_CHANGED],
                 path_glob=node.file_path,
             ),
         )

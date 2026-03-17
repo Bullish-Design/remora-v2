@@ -37,7 +37,7 @@ def test_agent_text_response_event_removed() -> None:
 
 def test_event_base_auto_type() -> None:
     event = AgentStartEvent(agent_id="a1")
-    assert event.event_type == "AgentStartEvent"
+    assert event.event_type == "agent_start"
 
 
 def test_event_timestamp() -> None:
@@ -50,7 +50,7 @@ def test_event_timestamp() -> None:
 def test_event_serialization() -> None:
     event = AgentMessageEvent(from_agent="a", to_agent="b", content="hello")
     dumped = event.model_dump()
-    assert dumped["event_type"] == "AgentMessageEvent"
+    assert dumped["event_type"] == "agent_message"
     assert dumped["from_agent"] == "a"
     assert dumped["to_agent"] == "b"
     assert dumped["content"] == "hello"
@@ -65,7 +65,7 @@ def test_event_to_envelope_shape() -> None:
         tags=("chat",),
     )
     envelope = event.to_envelope()
-    assert envelope["event_type"] == "AgentMessageEvent"
+    assert envelope["event_type"] == "agent_message"
     assert envelope["correlation_id"] == "corr-1"
     assert envelope["tags"] == ["chat"]
     assert envelope["payload"] == {
@@ -78,7 +78,7 @@ def test_event_to_envelope_shape() -> None:
 def test_custom_event_to_envelope_flattens_payload() -> None:
     event = CustomEvent(payload={"foo": "bar"}, tags=("custom",))
     envelope = event.to_envelope()
-    assert envelope["event_type"] == "CustomEvent"
+    assert envelope["event_type"] == "custom"
     assert envelope["tags"] == ["custom"]
     assert envelope["payload"] == {"foo": "bar"}
 
@@ -215,7 +215,7 @@ def test_agent_complete_event_user_message_in_envelope() -> None:
 
 def test_turn_digested_event_defaults() -> None:
     event = TurnDigestedEvent(agent_id="agent-a")
-    assert event.event_type == "TurnDigestedEvent"
+    assert event.event_type == "turn_digested"
     assert event.summary == ""
     assert event.tags == ()
     assert event.has_reflection is False
@@ -238,6 +238,6 @@ def test_turn_digested_event_full() -> None:
 def test_turn_digested_event_envelope() -> None:
     event = TurnDigestedEvent(agent_id="agent-a", summary="test")
     envelope = event.to_envelope()
-    assert envelope["event_type"] == "TurnDigestedEvent"
+    assert envelope["event_type"] == "turn_digested"
     assert envelope["payload"]["agent_id"] == "agent-a"
     assert envelope["payload"]["summary"] == "test"

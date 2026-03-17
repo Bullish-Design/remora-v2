@@ -211,7 +211,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     assert "def beta():\n    return 2\n" in updated_source
 
     events_after = await runtime["event_store"].get_events(limit=50)
-    assert any(event["event_type"] == "RewriteProposalEvent" for event in events_after)
+    assert any(event["event_type"] == "rewrite_proposal" for event in events_after)
 
     await runtime["runner"].stop_and_wait()
     await runtime["workspace_service"].close()
@@ -270,7 +270,7 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
         async def run(self, messages, tool_schemas, max_turns=8):  # noqa: ANN001, ANN201
             del tool_schemas, max_turns
             prompt = messages[1].content or ""
-            if "# Node: alpha" in prompt and "Event: AgentMessageEvent" in prompt:
+            if "# Node: alpha" in prompt and "Event: agent_message" in prompt:
                 await self._tools["send_message"].execute(
                     {"to_node_id": beta.node_id, "content": "ping"},
                     ToolCall(id="call-alpha-ping", name="send_message", arguments={}),
@@ -301,12 +301,12 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
         while asyncio.get_running_loop().time() < deadline:
             events = await runtime["event_store"].get_events(limit=100)
             message_events = [
-                event for event in events if event["event_type"] == "AgentMessageEvent"
+                event for event in events if event["event_type"] == "agent_message"
             ]
             complete_agents = {
                 event["payload"].get("agent_id")
                 for event in events
-                if event["event_type"] == "AgentCompleteEvent"
+                if event["event_type"] == "agent_complete"
             }
             ping_seen = any(
                 event["payload"].get("from_agent") == alpha.node_id
@@ -340,13 +340,13 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
     )
     events_after = await wait_for_exchange()
     event_types = [event["event_type"] for event in events_after]
-    assert "AgentErrorEvent" not in event_types
-    assert "AgentCompleteEvent" in event_types
+    assert "agent_error" not in event_types
+    assert "agent_complete" in event_types
 
     complete_agents = {
         event["payload"]["agent_id"]
         for event in events_after
-        if event["event_type"] == "AgentCompleteEvent"
+        if event["event_type"] == "agent_complete"
     }
     assert alpha.node_id in complete_agents
     assert beta.node_id in complete_agents

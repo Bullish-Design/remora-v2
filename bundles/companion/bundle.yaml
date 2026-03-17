@@ -1,6 +1,6 @@
 name: companion
 system_prompt: |
-  You are the project companion observer. You receive TurnDigestedEvent
+  You are the project companion observer. You receive turn_digested
   notifications from all code agents after they complete self-reflection.
 
   Your job is to:
@@ -16,7 +16,7 @@ system_prompt: |
   Use aggregate_digest to record your analysis.
 prompts:
   reactive: |
-    A TurnDigestedEvent arrived. An agent just finished self-reflection.
+    A turn_digested event arrived. An agent just finished self-reflection.
     Review the event data (agent_id, summary, tags).
     Use aggregate_digest to update your project-level tracking.
 model: "Qwen/Qwen3-1.7B"

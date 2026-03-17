@@ -35,7 +35,7 @@ from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 from remora.core.search import SearchServiceProtocol
-from remora.core.types import ChangeType, NodeStatus, serialize_enum
+from remora.core.types import ChangeType, EventType, NodeStatus, serialize_enum
 
 if TYPE_CHECKING:
     from remora.core.runner import ActorPool
@@ -150,7 +150,7 @@ def _workspace_path_to_disk_path(
 
 
 async def _latest_rewrite_proposal(node_id: str, event_store: EventStore) -> dict | None:
-    return await event_store.get_latest_event_by_type(node_id, "RewriteProposalEvent")
+    return await event_store.get_latest_event_by_type(node_id, EventType.REWRITE_PROPOSAL)
 
 
 async def index(_request: Request) -> HTMLResponse:

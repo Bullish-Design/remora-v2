@@ -59,7 +59,7 @@ def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:
         "  - id: test-agent\n"
         "    role: test-agent\n"
         "    subscriptions:\n"
-        "      - event_types: [NodeChangedEvent]\n"
+        "      - event_types: [node_changed]\n"
         "        path_glob: src/**\n"
         "        tags: [scaffold, ci]\n",
         encoding="utf-8",
@@ -68,7 +68,7 @@ def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:
     assert len(config.virtual_agents) == 1
     assert config.virtual_agents[0].id == "test-agent"
     assert config.virtual_agents[0].role == "test-agent"
-    assert config.virtual_agents[0].subscriptions[0].event_types == ("NodeChangedEvent",)
+    assert config.virtual_agents[0].subscriptions[0].event_types == ("node_changed",)
     assert config.virtual_agents[0].subscriptions[0].tags == ("scaffold", "ci")
 
 

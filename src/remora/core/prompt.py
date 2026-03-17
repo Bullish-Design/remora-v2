@@ -5,7 +5,7 @@ from __future__ import annotations
 from remora.core.config import BundleConfig, Config
 from remora.core.events.types import Event
 from remora.core.node import Node
-from remora.core.types import NodeType, serialize_enum
+from remora.core.types import EventType, NodeType, serialize_enum
 
 _DEFAULT_REFLECTION_PROMPT = """\
 You just completed a conversation turn. Reflect on the exchange and record metadata.
@@ -36,7 +36,7 @@ class PromptBuilder:
             self_reflect is not None
             and self_reflect.enabled
             and trigger_event is not None
-            and trigger_event.event_type == "AgentCompleteEvent"
+            and trigger_event.event_type == EventType.AGENT_COMPLETE
             and "primary" in getattr(trigger_event, "tags", ())
         )
         if is_reflection:

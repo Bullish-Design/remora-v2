@@ -226,11 +226,11 @@ async def test_externals_event_ops(context_env) -> None:
     context = await _context(node.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    sub_id = await externals["event_subscribe"](["AgentMessageEvent"], None, None)
+    sub_id = await externals["event_subscribe"](["agent_message"], None, None)
     assert isinstance(sub_id, int)
-    assert await externals["event_emit"]("CustomEvent", {"value": "x"}, tags=["scaffold"])
+    assert await externals["event_emit"]("custom", {"value": "x"}, tags=["scaffold"])
     stored = await event_store.get_events(limit=10)
-    custom = next(event for event in stored if event["event_type"] == "CustomEvent")
+    custom = next(event for event in stored if event["event_type"] == "custom")
     assert custom["payload"]["value"] == "x"
     assert custom["tags"] == ["scaffold"]
     history = await externals["event_get_history"](node.node_id, limit=10)
@@ -251,19 +251,19 @@ async def test_externals_event_subscribe_supports_tag_filters(context_env) -> No
     context = await _context(node.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    sub_id = await externals["event_subscribe"](["CustomEvent"], None, None, ["review"])
+    sub_id = await externals["event_subscribe"](["custom"], None, None, ["review"])
     assert isinstance(sub_id, int)
 
-    await externals["event_emit"]("CustomEvent", {"value": "no-match"}, tags=["other"])
-    await externals["event_emit"]("CustomEvent", {"value": "match"}, tags=["review"])
+    await externals["event_emit"]("custom", {"value": "no-match"}, tags=["other"])
+    await externals["event_emit"]("custom", {"value": "match"}, tags=["review"])
 
     no_match_event = CustomEvent(
-        event_type="CustomEvent",
+        event_type="custom",
         payload={"value": "n"},
         tags=("other",),
     )
     yes_match_event = CustomEvent(
-        event_type="CustomEvent",
+        event_type="custom",
         payload={"value": "y"},
         tags=("review",),
     )
@@ -286,7 +286,7 @@ async def test_request_human_input_blocks_until_response(context_env) -> None:
     await asyncio.sleep(0.01)
 
     events = await event_store.get_events(limit=10)
-    request = next(event for event in events if event["event_type"] == "HumanInputRequestEvent")
+    request = next(event for event in events if event["event_type"] == "human_input_request")
     request_id = request["payload"]["request_id"]
     assert request["payload"]["question"] == "Proceed?"
     assert request["payload"]["options"] == ["yes", "no"]
@@ -325,7 +325,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
         await externals["request_human_input"]("Need approval?", None)
 
     events = await event_store.get_events(limit=10)
-    request = next(event for event in events if event["event_type"] == "HumanInputRequestEvent")
+    request = next(event for event in events if event["event_type"] == "human_input_request")
     request_id = request["payload"]["request_id"]
     assert not event_store.resolve_response(request_id, "late")
 
@@ -351,7 +351,7 @@ async def test_externals_communication(context_env) -> None:
     summary = await externals["broadcast"]("*", "all")
     assert "Broadcast sent to" in summary
     events = await event_store.get_events(limit=10)
-    message_events = [event for event in events if event["event_type"] == "AgentMessageEvent"]
+    message_events = [event for event in events if event["event_type"] == "agent_message"]
     assert len(message_events) >= 3
 
 
@@ -374,7 +374,7 @@ async def test_externals_broadcast_siblings_and_file_patterns(context_env) -> No
     assert "1 agents" in summary1
     assert "1 agents" in summary2
     events = await event_store.get_events(limit=10)
-    payloads = [e["payload"] for e in events if e["event_type"] == "AgentMessageEvent"]
+    payloads = [e["payload"] for e in events if e["event_type"] == "agent_message"]
     assert any(p["to_agent"] == sibling.node_id for p in payloads)
     assert any(p["to_agent"] == other.node_id for p in payloads)
 
@@ -399,7 +399,7 @@ async def test_externals_broadcast_caps_target_count(context_env) -> None:
     summary = await externals["broadcast"]("*", "all")
     assert "50 agents" in summary
     events = await event_store.get_events(limit=200)
-    sent = [event for event in events if event["event_type"] == "AgentMessageEvent"]
+    sent = [event for event in events if event["event_type"] == "agent_message"]
     assert len(sent) == 50
 
 
@@ -435,7 +435,7 @@ async def test_externals_code_ops(context_env) -> None:
     assert "def alpha():\n    return 1\n" in file_source
 
     events = await event_store.get_events(limit=5)
-    proposal_events = [event for event in events if event["event_type"] == "RewriteProposalEvent"]
+    proposal_events = [event for event in events if event["event_type"] == "rewrite_proposal"]
     assert proposal_events
     assert proposal_events[0]["payload"]["proposal_id"] == proposal_id
     assert proposal_events[0]["payload"]["reason"] == "Update alpha behavior"
@@ -463,7 +463,7 @@ async def test_propose_changes_excludes_bundle_paths(context_env) -> None:
 
     events = await event_store.get_events(limit=10)
     proposal_event = next(
-        event for event in events if event["event_type"] == "RewriteProposalEvent"
+        event for event in events if event["event_type"] == "rewrite_proposal"
     )
     files = proposal_event["payload"]["files"]
     assert f"source/{node.node_id}" in files
@@ -520,15 +520,15 @@ async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
     )
     externals = context.to_capabilities_dict()
 
-    await externals["event_emit"]("CustomEvent", {"key": "val"})
+    await externals["event_emit"]("custom", {"key": "val"})
     await externals["send_message"]("target-node", "hello")
 
     assert len(outbox.events) == 2
-    assert outbox.events[0].event_type == "CustomEvent"
-    assert outbox.events[1].event_type == "AgentMessageEvent"
+    assert outbox.events[0].event_type == "custom"
+    assert outbox.events[1].event_type == "agent_message"
 
     stored = await event_store.get_events(limit=10)
-    assert not any(event["event_type"] == "CustomEvent" for event in stored)
+    assert not any(event["event_type"] == "custom" for event in stored)
 
 
 @pytest.mark.asyncio

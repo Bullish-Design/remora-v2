@@ -23,7 +23,7 @@
 - [x] 1.6 Add `project_root` Property to Workspace Service
 
 ### Phase 2
-- [ ] 2.1 Fix Event Type Dispatch
+- [x] 2.1 Fix Event Type Dispatch
 - [ ] 2.2 Fix the Rate Limiter Bug
 
 ### Phase 3

@@ -39,7 +39,7 @@ def test_companion_bundle_exists() -> None:
 
     config = yaml.safe_load(bundle_path.read_text(encoding="utf-8"))
     assert config["name"] == "companion"
-    assert "TurnDigestedEvent" in config.get("system_prompt", "")
+    assert "turn_digested" in config.get("system_prompt", "")
 
 
 def test_aggregate_digest_tool_exists() -> None:

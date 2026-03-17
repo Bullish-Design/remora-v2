@@ -62,7 +62,7 @@ async def test_lsp_server_accepts_shared_services(lsp_env, tmp_path: Path) -> No
 
     events = await event_store.get_events(limit=5)
     assert any(
-        event["event_type"] == "ContentChangedEvent"
+        event["event_type"] == "content_changed"
         and event["payload"].get("path") == str(file_path)
         for event in events
     )
@@ -96,7 +96,7 @@ async def test_lsp_server_accepts_db_path(tmp_path: Path) -> None:
     rows = await verify_store.get_events(limit=10)
     await verify_db.close()
     assert any(
-        event["event_type"] == "ContentChangedEvent"
+        event["event_type"] == "content_changed"
         and event["payload"].get("path") == str(file_path)
         for event in rows
     )
@@ -118,13 +118,13 @@ def test_node_to_hover() -> None:
         node,
         callers=["src/app.py::caller"],
         callees=["src/app.py::callee"],
-        recent_events=["AgentStartEvent"],
+        recent_events=["agent_start"],
     )
     assert isinstance(hover, lsp.Hover)
     assert node.node_id in hover.contents.value
     assert node.file_path in hover.contents.value
     assert "Recent Events" in hover.contents.value
-    assert "AgentStartEvent" in hover.contents.value
+    assert "agent_start" in hover.contents.value
 
 
 def test_find_node_at_line() -> None:
@@ -157,7 +157,7 @@ async def test_lsp_did_save_emits_event(lsp_env, tmp_path: Path) -> None:
     await did_save(params)
     events = await event_store.get_events(limit=5)
     assert events
-    assert events[0]["event_type"] == "ContentChangedEvent"
+    assert events[0]["event_type"] == "content_changed"
     assert events[0]["payload"]["path"] == str(file_path)
 
 
@@ -191,7 +191,7 @@ async def test_lsp_did_change_writes_file_and_emits_event(
     assert documents.get(f"file://{file_path}") == "print('goodbye')\n"
     events = await event_store.get_events(limit=5)
     assert not any(
-        event["event_type"] == "ContentChangedEvent"
+        event["event_type"] == "content_changed"
         and event["payload"].get("path") == str(file_path)
         and event["payload"].get("change_type") == "modified"
         for event in events
@@ -241,8 +241,8 @@ async def test_lsp_open_change_save_lifecycle(lsp_env, tmp_path: Path) -> None:
         (event["event_type"], event["payload"].get("path"), event["payload"].get("change_type"))
         for event in events
     ]
-    assert ("ContentChangedEvent", str(file_path), "opened") in paths
-    assert ("ContentChangedEvent", str(file_path), "modified") in paths
+    assert ("content_changed", str(file_path), "opened") in paths
+    assert ("content_changed", str(file_path), "modified") in paths
 
 
 @pytest.mark.asyncio
@@ -292,7 +292,7 @@ async def test_lsp_trigger_command_emits_agent_message_event(lsp_env) -> None:
     await trigger_command(server, ["src/app.py::a"])
     events = await event_store.get_events(limit=5)
     assert any(
-        event["event_type"] == "AgentMessageEvent"
+        event["event_type"] == "agent_message"
         and event["payload"].get("to_agent") == "src/app.py::a"
         and event["payload"].get("content") == "Manual trigger from editor"
         for event in events

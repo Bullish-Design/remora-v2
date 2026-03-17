@@ -67,7 +67,7 @@ async def test_full_scan_discovers_registers_and_emits(reconcile_env, tmp_path: 
     nodes = await reconciler.full_scan()
     stored = await node_store.list_nodes()
     events = await event_store.get_events(limit=20)
-    discovered = [event for event in events if event["event_type"] == "NodeDiscoveredEvent"]
+    discovered = [event for event in events if event["event_type"] == "node_discovered"]
 
     assert nodes
     assert stored
@@ -153,7 +153,7 @@ async def test_reconcile_cycle_handles_new_and_deleted_files(reconcile_env, tmp_
     assert await node_store.get_node(f"{file_a}::a") is None
 
     events = await event_store.get_events(limit=50)
-    removed = [event for event in events if event["event_type"] == "NodeRemovedEvent"]
+    removed = [event for event in events if event["event_type"] == "node_removed"]
     assert removed
 
 
@@ -316,7 +316,7 @@ async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_p
     removed_ids = [
         event["payload"]["node_id"]
         for event in events
-        if event["event_type"] == "NodeRemovedEvent"
+        if event["event_type"] == "node_removed"
     ]
     assert "src/gone" in removed_ids
 
@@ -548,7 +548,7 @@ async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) ->
                 "role": "test-agent",
                 "subscriptions": (
                     {
-                        "event_types": ["NodeChangedEvent"],
+                        "event_types": ["node_changed"],
                         "path_glob": "src/**",
                     },
                 ),

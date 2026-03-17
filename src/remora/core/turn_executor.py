@@ -24,7 +24,7 @@ from remora.core.outbox import Outbox, OutboxObserver
 from remora.core.prompt import PromptBuilder
 from remora.core.search import SearchServiceProtocol
 from remora.core.trigger import Trigger, TriggerPolicy
-from remora.core.types import NodeStatus
+from remora.core.types import EventType, NodeStatus
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ class AgentTurnExecutor:
                 )
                 is_reflection_turn = (
                     trigger.event is not None
-                    and trigger.event.event_type == "AgentCompleteEvent"
+                    and trigger.event.event_type == EventType.AGENT_COMPLETE
                     and "primary" in getattr(trigger.event, "tags", ())
                 )
                 if not is_reflection_turn:

@@ -8,20 +8,16 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from remora.core.types import ChangeType
+from remora.core.types import ChangeType, EventType
 
 
 class Event(BaseModel):
-    """Base event with automatic event_type tagging."""
+    """Base event envelope."""
 
     event_type: str = ""
     timestamp: float = Field(default_factory=time.time)
     correlation_id: str | None = None
     tags: tuple[str, ...] = ()
-
-    def model_post_init(self, __context: Any) -> None:
-        if not self.event_type:
-            self.event_type = type(self).__name__
 
     def summary(self) -> str:
         """Return a human-readable summary of this event."""
@@ -41,11 +37,13 @@ class Event(BaseModel):
 
 
 class AgentStartEvent(Event):
+    event_type: str = EventType.AGENT_START
     agent_id: str
     node_name: str = ""
 
 
 class AgentCompleteEvent(Event):
+    event_type: str = EventType.AGENT_COMPLETE
     agent_id: str
     result_summary: str = ""
     full_response: str = ""
@@ -56,6 +54,7 @@ class AgentCompleteEvent(Event):
 
 
 class AgentErrorEvent(Event):
+    event_type: str = EventType.AGENT_ERROR
     agent_id: str
     error: str
 
@@ -64,6 +63,7 @@ class AgentErrorEvent(Event):
 
 
 class AgentMessageEvent(Event):
+    event_type: str = EventType.AGENT_MESSAGE
     from_agent: str
     to_agent: str
     content: str
@@ -73,6 +73,7 @@ class AgentMessageEvent(Event):
 
 
 class NodeDiscoveredEvent(Event):
+    event_type: str = EventType.NODE_DISCOVERED
     node_id: str
     node_type: str
     file_path: str
@@ -80,6 +81,7 @@ class NodeDiscoveredEvent(Event):
 
 
 class NodeRemovedEvent(Event):
+    event_type: str = EventType.NODE_REMOVED
     node_id: str
     node_type: str
     file_path: str
@@ -87,6 +89,7 @@ class NodeRemovedEvent(Event):
 
 
 class NodeChangedEvent(Event):
+    event_type: str = EventType.NODE_CHANGED
     node_id: str
     old_hash: str
     new_hash: str
@@ -94,6 +97,7 @@ class NodeChangedEvent(Event):
 
 
 class ContentChangedEvent(Event):
+    event_type: str = EventType.CONTENT_CHANGED
     path: str
     change_type: ChangeType = ChangeType.MODIFIED
     agent_id: str | None = None
@@ -104,6 +108,7 @@ class ContentChangedEvent(Event):
 class HumanInputRequestEvent(Event):
     """Agent asks the human for input and waits for a response."""
 
+    event_type: str = EventType.HUMAN_INPUT_REQUEST
     agent_id: str
     request_id: str
     question: str
@@ -113,6 +118,7 @@ class HumanInputRequestEvent(Event):
 class HumanInputResponseEvent(Event):
     """Human answered an agent's pending input request."""
 
+    event_type: str = EventType.HUMAN_INPUT_RESPONSE
     agent_id: str
     request_id: str
     response: str
@@ -121,6 +127,7 @@ class HumanInputResponseEvent(Event):
 class RewriteProposalEvent(Event):
     """Agent indicates workspace changes are ready for human review."""
 
+    event_type: str = EventType.REWRITE_PROPOSAL
     agent_id: str
     proposal_id: str
     files: tuple[str, ...] = ()
@@ -130,6 +137,7 @@ class RewriteProposalEvent(Event):
 class RewriteAcceptedEvent(Event):
     """Human accepted an agent rewrite proposal."""
 
+    event_type: str = EventType.REWRITE_ACCEPTED
     agent_id: str
     proposal_id: str
 
@@ -137,6 +145,7 @@ class RewriteAcceptedEvent(Event):
 class RewriteRejectedEvent(Event):
     """Human rejected an agent rewrite proposal."""
 
+    event_type: str = EventType.REWRITE_REJECTED
     agent_id: str
     proposal_id: str
     feedback: str = ""
@@ -145,6 +154,7 @@ class RewriteRejectedEvent(Event):
 class ModelRequestEvent(Event):
     """LLM request started for an agent turn."""
 
+    event_type: str = EventType.MODEL_REQUEST
     agent_id: str
     model: str = ""
     tool_count: int = 0
@@ -154,6 +164,7 @@ class ModelRequestEvent(Event):
 class ModelResponseEvent(Event):
     """LLM response received for an agent turn."""
 
+    event_type: str = EventType.MODEL_RESPONSE
     agent_id: str
     response_preview: str = ""
     duration_ms: int = 0
@@ -164,6 +175,7 @@ class ModelResponseEvent(Event):
 class RemoraToolCallEvent(Event):
     """Agent is about to call a tool."""
 
+    event_type: str = EventType.REMORA_TOOL_CALL
     agent_id: str
     tool_name: str
     arguments_summary: str = ""
@@ -173,6 +185,7 @@ class RemoraToolCallEvent(Event):
 class RemoraToolResultEvent(Event):
     """Tool execution completed within a turn."""
 
+    event_type: str = EventType.REMORA_TOOL_RESULT
     agent_id: str
     tool_name: str
     is_error: bool = False
@@ -184,6 +197,7 @@ class RemoraToolResultEvent(Event):
 class TurnCompleteEvent(Event):
     """One model/tool turn cycle completed."""
 
+    event_type: str = EventType.TURN_COMPLETE
     agent_id: str
     turn: int = 0
     tool_calls_count: int = 0
@@ -193,6 +207,7 @@ class TurnCompleteEvent(Event):
 class TurnDigestedEvent(Event):
     """Emitted after Layer 1 reflection completes for an agent turn."""
 
+    event_type: str = EventType.TURN_DIGESTED
     agent_id: str
     summary: str = ""
     has_reflection: bool = False
@@ -200,6 +215,7 @@ class TurnDigestedEvent(Event):
 
 
 class CustomEvent(Event):
+    event_type: str = EventType.CUSTOM
     payload: dict[str, Any] = Field(default_factory=dict)
 
     def to_envelope(self) -> dict[str, Any]:
@@ -213,6 +229,7 @@ class CustomEvent(Event):
 
 
 class ToolResultEvent(Event):
+    event_type: str = EventType.TOOL_RESULT
     agent_id: str
     tool_name: str
     result_summary: str = ""
@@ -224,6 +241,7 @@ class ToolResultEvent(Event):
 class CursorFocusEvent(Event):
     """Emitted when the editor cursor focuses on a code element."""
 
+    event_type: str = EventType.CURSOR_FOCUS
     file_path: str
     line: int
     character: int

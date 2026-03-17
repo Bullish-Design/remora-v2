@@ -338,11 +338,11 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
 
         events = await event_store.get_events(limit=30)
         event_types = [entry["event_type"] for entry in events]
-        assert "AgentStartEvent" in event_types
-        assert "AgentCompleteEvent" in event_types
-        assert "AgentErrorEvent" not in event_types
+        assert "agent_start" in event_types
+        assert "agent_complete" in event_types
+        assert "agent_error" not in event_types
 
-        message_events = [entry for entry in events if entry["event_type"] == "AgentMessageEvent"]
+        message_events = [entry for entry in events if entry["event_type"] == "agent_message"]
         assert message_events, "expected at least one send_message tool emission"
         assert any(
             item["payload"].get("to_agent") == node.node_id
@@ -395,10 +395,10 @@ async def test_real_llm_turn_kv_roundtrip_and_message(tmp_path: Path) -> None:
 
         events = await event_store.get_events(limit=40)
         by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
-        assert any(entry["event_type"] == "AgentCompleteEvent" for entry in by_corr)
-        assert not any(entry["event_type"] == "AgentErrorEvent" for entry in by_corr)
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
         assert any(
-            entry["event_type"] == "AgentMessageEvent"
+            entry["event_type"] == "agent_message"
             and entry["payload"].get("to_agent") == node.node_id
             and "v-integration" in str(entry["payload"].get("content", ""))
             for entry in by_corr
@@ -470,10 +470,10 @@ async def test_real_llm_turn_reload_uses_runtime_bundle_mutation(tmp_path: Path)
         events = await event_store.get_events(limit=60)
         first_turn = [entry for entry in events if entry.get("correlation_id") == corr_a]
         second_turn = [entry for entry in events if entry.get("correlation_id") == corr_b]
-        assert any(entry["event_type"] == "AgentCompleteEvent" for entry in first_turn)
-        assert not any(entry["event_type"] == "AgentErrorEvent" for entry in first_turn)
-        assert any(entry["event_type"] == "AgentErrorEvent" for entry in second_turn)
-        assert not any(entry["event_type"] == "AgentCompleteEvent" for entry in second_turn)
+        assert any(entry["event_type"] == "agent_complete" for entry in first_turn)
+        assert not any(entry["event_type"] == "agent_error" for entry in first_turn)
+        assert any(entry["event_type"] == "agent_error" for entry in second_turn)
+        assert not any(entry["event_type"] == "agent_complete" for entry in second_turn)
     finally:
         if workspace_service is not None:
             await workspace_service.close()
@@ -515,7 +515,7 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
                 "role": "test-agent",
                 "subscriptions": (
                     {
-                        "event_types": ["NodeChangedEvent"],
+                        "event_types": ["node_changed"],
                         "path_glob": "src/**",
                     },
                 ),
@@ -567,11 +567,11 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
 
         events = await event_store.get_events(limit=60)
         by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
-        assert any(entry["event_type"] == "AgentStartEvent" for entry in by_corr)
-        assert any(entry["event_type"] == "AgentCompleteEvent" for entry in by_corr)
-        assert not any(entry["event_type"] == "AgentErrorEvent" for entry in by_corr)
+        assert any(entry["event_type"] == "agent_start" for entry in by_corr)
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
         assert any(
-            entry["event_type"] == "AgentMessageEvent"
+            entry["event_type"] == "agent_message"
             and entry["payload"].get("to_agent") == "test-agent"
             and entry["payload"].get("content") == "virtual-reactive-ok"
             for entry in by_corr
@@ -614,9 +614,9 @@ async def test_real_llm_reactive_trigger_uses_reactive_mode_prompt(tmp_path: Pat
 
         events = await event_store.get_events(limit=50)
         by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
-        assert any(entry["event_type"] == "AgentStartEvent" for entry in by_corr)
-        assert any(entry["event_type"] == "AgentCompleteEvent" for entry in by_corr)
-        assert not any(entry["event_type"] == "AgentErrorEvent" for entry in by_corr)
+        assert any(entry["event_type"] == "agent_start" for entry in by_corr)
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
     finally:
         if workspace_service is not None:
             await workspace_service.close()

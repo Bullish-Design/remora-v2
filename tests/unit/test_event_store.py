@@ -36,8 +36,8 @@ async def test_eventstore_query_events(tmp_path: Path) -> None:
     await store.append(AgentMessageEvent(from_agent="a", to_agent="b", content="hello"))
     events = await store.get_events(limit=2)
     assert len(events) == 2
-    assert events[0]["event_type"] == "AgentMessageEvent"
-    assert events[1]["event_type"] == "AgentStartEvent"
+    assert events[0]["event_type"] == "agent_message"
+    assert events[1]["event_type"] == "agent_start"
     await db.close()
 
 
@@ -51,8 +51,8 @@ async def test_eventstore_query_by_agent(tmp_path: Path) -> None:
     await store.append(AgentMessageEvent(from_agent="x", to_agent="other", content="skip"))
     events = await store.get_events_for_agent("target", limit=10)
     event_types = [event["event_type"] for event in events]
-    assert event_types.count("AgentStartEvent") == 1
-    assert event_types.count("AgentMessageEvent") == 1
+    assert event_types.count("agent_start") == 1
+    assert event_types.count("agent_message") == 1
     await db.close()
 
 
@@ -65,9 +65,9 @@ async def test_eventstore_get_latest_event_by_type(tmp_path: Path) -> None:
     await store.append(AgentMessageEvent(from_agent="x", to_agent="target", content="first"))
     await store.append(AgentMessageEvent(from_agent="target", to_agent="y", content="latest"))
 
-    event = await store.get_latest_event_by_type("target", "AgentMessageEvent")
+    event = await store.get_latest_event_by_type("target", "agent_message")
     assert event is not None
-    assert event["event_type"] == "AgentMessageEvent"
+    assert event["event_type"] == "agent_message"
     assert event["payload"]["content"] == "latest"
     await db.close()
 
@@ -79,7 +79,7 @@ async def test_eventstore_get_latest_event_by_type_returns_none(tmp_path: Path) 
     await store.create_tables()
     await store.append(AgentStartEvent(agent_id="target"))
 
-    event = await store.get_latest_event_by_type("target", "AgentMessageEvent")
+    event = await store.get_latest_event_by_type("target", "agent_message")
     assert event is None
     await db.close()
 
@@ -115,5 +115,5 @@ async def test_eventstore_forwards_to_bus(tmp_path: Path) -> None:
     store = EventStore(db=db, event_bus=bus)
     await store.create_tables()
     await store.append(AgentStartEvent(agent_id="a"))
-    assert seen == ["AgentStartEvent"]
+    assert seen == ["agent_start"]
     await db.close()
