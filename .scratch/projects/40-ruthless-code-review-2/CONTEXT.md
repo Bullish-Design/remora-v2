@@ -190,3 +190,9 @@ Next action:
 
 Next action:
 - Start Phase 6 (`web/server.py` refactor): extract handler dependency dataclass and module-level handler groups.
+- Step 6.1 completed:
+  - added `WebDeps` dataclass to `web/server.py` for shared handler dependencies
+  - verification: `tests/unit/test_web_server.py` passed
+
+Next action:
+- Step 6.2: extract endpoint handlers into module-level function groups and read deps from `request.app.state.deps`.

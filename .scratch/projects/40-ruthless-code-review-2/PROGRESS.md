@@ -54,3 +54,10 @@
 - [x] Step 5.5 Slim down `core/actor.py` to orchestration only
 - [x] Step 5.6 Update imports and re-export verification
 - [x] Step 5.7 Run full-suite verification for decomposition
+
+### Phase 6
+- [x] Step 6.1 Create `WebDeps` handler dependency dataclass
+- [ ] Step 6.2 Extract web handlers into module-level groups
+- [ ] Step 6.3 Move web helper functions to module level
+- [ ] Step 6.4 Simplify `create_app` wiring around `WebDeps`
+- [ ] Step 6.5 Verify/refactor-web commit checkpoint

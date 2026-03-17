@@ -9,6 +9,7 @@ import time
 from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -60,6 +61,21 @@ class RateLimiter:
             return False
         self._timestamps.append(now)
         return True
+
+
+@dataclass
+class WebDeps:
+    """Shared dependencies for all web handlers."""
+
+    event_store: EventStore
+    node_store: NodeStore
+    event_bus: EventBus
+    metrics: Metrics | None
+    actor_pool: ActorPool | None
+    workspace_service: CairnWorkspaceService | None
+    search_service: SearchServiceProtocol | None
+    shutdown_event: asyncio.Event
+    chat_limiter: RateLimiter
 
 
 def _is_allowed_origin(origin: str) -> bool:
