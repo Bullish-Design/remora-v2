@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from remora.code.discovery import CSTNode, discover
+from remora.code.discovery import CSTNode, clear_caches, discover
 from remora.code.languages import LanguageRegistry
 from tests.factories import write_file
 
@@ -157,10 +157,7 @@ def test_discover_reuses_cached_language_registry(tmp_path: Path, monkeypatch: p
             super().__init__()
 
     monkeypatch.setattr(discovery_module, "LanguageRegistry", CountingRegistry)
-    discovery_module._get_language_registry.cache_clear()
-    discovery_module._get_registry_plugin.cache_clear()
-    discovery_module._get_parser.cache_clear()
-    discovery_module._load_query.cache_clear()
+    clear_caches()
 
     discover([tmp_path], language_map={".py": "python"})
     discover([tmp_path], language_map={".py": "python"})

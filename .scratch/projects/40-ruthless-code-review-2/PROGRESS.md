@@ -90,5 +90,5 @@
 
 ### Phase 11
 - [x] Step 11.1 Bound Grail script source cache
-- [ ] Step 11.2 Add discovery cache clear helper
+- [x] Step 11.2 Add discovery cache clear helper
 - [ ] Step 11.3 Verify/commit checkpoint

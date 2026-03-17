@@ -374,3 +374,10 @@ Next action:
 
 Next action:
 - Step 11.2: add `clear_caches()` helper in `code/discovery.py` and migrate tests to use it.
+- Step 11.2 completed:
+  - added `clear_caches()` helper in `code/discovery.py` to reset module-level parser/query caches
+  - updated `tests/unit/test_discovery.py` to call `clear_caches()` instead of manually clearing private cache functions
+  - verification: `devenv shell -- python -m pytest tests/unit/test_grail.py tests/unit/test_discovery.py -q` passed (`31 passed`)
+
+Next action:
+- Step 11.3: commit/push Phase 11 checkpoint and move to Phase 12.
