@@ -39,7 +39,15 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - Red phase captured by import error after switching tests/callers before renaming in `config.py`.
   - `devenv shell -- pytest tests/unit/test_config.py tests/unit/test_actor.py -q` passed.
   - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`357 passed, 8 skipped`).
+- Completed section 1.4 (fix config silent drops):
+  - added strict prompt-key validation in `BundleConfig._validate_prompts`.
+  - unknown prompt keys now raise `ValueError` with valid-key details.
+  - added `test_bundle_config_rejects_unknown_prompt_keys`.
+- Verification for section 1.4:
+  - Red phase captured with failing test (`DID NOT RAISE`) before validator change.
+  - `devenv shell -- pytest tests/unit/test_config.py -q` passed.
+  - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`358 passed, 8 skipped`).
 
 ## Next Action
-- Commit and push section 1.3 checkpoint.
-- Begin section 1.4 implementation (strict prompt key validation in bundle config).
+- Commit and push section 1.4 checkpoint.
+- Begin section 1.5 implementation (remove dead `file` bundle overlay default).

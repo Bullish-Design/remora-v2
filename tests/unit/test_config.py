@@ -5,7 +5,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from remora.core.config import Config, SearchConfig, expand_env_vars, _find_config_file, load_config
+from remora.core.config import (
+    BundleConfig,
+    Config,
+    SearchConfig,
+    _find_config_file,
+    expand_env_vars,
+    load_config,
+)
 
 
 def test_default_config(monkeypatch) -> None:
@@ -130,6 +137,11 @@ def test_search_config_defaults() -> None:
 def test_search_config_invalid_mode_rejected() -> None:
     with pytest.raises(ValidationError):
         SearchConfig(mode="invalid")
+
+
+def test_bundle_config_rejects_unknown_prompt_keys() -> None:
+    with pytest.raises(ValidationError, match="Unknown prompt keys"):
+        BundleConfig(prompts={"chat": "ok", "analysis": "nope"})
 
 
 def test_config_parses_search_dict() -> None:

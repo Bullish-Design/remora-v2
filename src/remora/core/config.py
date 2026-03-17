@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from remora.core.types import NodeType, serialize_enum
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
+_VALID_PROMPT_KEYS = frozenset({"chat", "reactive"})
 
 
 class VirtualSubscriptionConfig(BaseModel):
@@ -122,7 +123,12 @@ class BundleConfig(BaseModel):
     @field_validator("prompts")
     @classmethod
     def _validate_prompts(cls, value: dict[str, str]) -> dict[str, str]:
-        return {k: v for k, v in value.items() if k in ("chat", "reactive") and v.strip()}
+        unknown = set(value) - _VALID_PROMPT_KEYS
+        if unknown:
+            valid_keys = ", ".join(sorted(_VALID_PROMPT_KEYS))
+            unknown_keys = ", ".join(sorted(unknown))
+            raise ValueError(f"Unknown prompt keys: {unknown_keys}. Valid keys: {valid_keys}")
+        return {k: v for k, v in value.items() if v.strip()}
 
 
 class Config(BaseSettings):
