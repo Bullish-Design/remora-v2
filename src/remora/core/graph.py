@@ -126,6 +126,12 @@ class NodeStore:
         rows = await cursor.fetchall()
         return [Node.from_row(row) for row in rows]
 
+    async def count_nodes(self) -> int:
+        """Return the total number of nodes."""
+        cursor = await self._db.execute("SELECT COUNT(*) FROM nodes")
+        row = await cursor.fetchone()
+        return int(row[0]) if row is not None else 0
+
     async def list_nodes(
         self,
         node_type: NodeType | None = None,

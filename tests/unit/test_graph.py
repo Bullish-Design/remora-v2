@@ -57,6 +57,15 @@ async def test_nodestore_get_nodes_by_ids(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_nodestore_count_nodes(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    assert await store.count_nodes() == 2
+
+
+@pytest.mark.asyncio
 async def test_nodestore_delete(db) -> None:
     store = NodeStore(db)
     await store.create_tables()

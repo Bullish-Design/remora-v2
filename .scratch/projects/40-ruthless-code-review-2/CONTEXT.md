@@ -336,3 +336,10 @@ Next action:
 
 Next action:
 - Start Phase 10 Step 10.1: add `NodeStore.count_nodes()` and remove direct DB counting from web health endpoint.
+- Step 10.1 completed:
+  - added `NodeStore.count_nodes()` to encapsulate node count query behind store API
+  - added unit test coverage in `tests/unit/test_graph.py`
+  - verification: `devenv shell -- python -m pytest tests/unit/test_graph.py -q` passed (`18 passed`)
+
+Next action:
+- Step 10.2: update web health endpoint to call `node_store.count_nodes()` instead of reaching into `node_store._db`.

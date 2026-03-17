@@ -81,3 +81,9 @@
 - [x] Step 9.5 Improve SSE event wait loop
 - [x] Step 9.6 Fix N+1 in `_do_reconcile_file`
 - [x] Step 9.7 Verify/commit checkpoint
+
+### Phase 10
+- [x] Step 10.1 Add `NodeStore.count_nodes()`
+- [ ] Step 10.2 Use `count_nodes()` in web health endpoint
+- [ ] Step 10.3 Update OutboxObserver dispatch strategy
+- [ ] Step 10.4 Verify/commit checkpoint
