@@ -425,3 +425,9 @@ Next action:
 
 Next action:
 - Step 13.4: record skip decision for `_discover` async signature churn per guide.
+- Step 13.4 completed:
+  - per guide decision, intentionally skipped `_discover` async signature churn in `__main__.py`
+  - rationale: current async wrapper is harmless and preserves future flexibility for async discovery I/O
+
+Next action:
+- Step 13.5: remove dead `name_node` parameter from `discovery._build_name_from_tree` and update call sites.
