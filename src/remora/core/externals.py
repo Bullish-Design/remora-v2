@@ -319,12 +319,12 @@ class CommunicationCapabilities:
         )
 
         try:
-            return await asyncio.wait_for(future, timeout=self._human_input_timeout_s)
+            result = await asyncio.wait_for(future, timeout=self._human_input_timeout_s)
+            await self._node_store.transition_status(self._node_id, NodeStatus.RUNNING)
+            return result
         except TimeoutError:
             self._event_store.discard_response_future(request_id)
             raise
-        finally:
-            await self._node_store.transition_status(self._node_id, NodeStatus.RUNNING)
 
     async def propose_changes(self, reason: str = "") -> str:
         proposal_id = str(uuid.uuid4())

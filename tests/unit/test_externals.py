@@ -335,7 +335,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
 
     resumed = await node_store.get_node(node.node_id)
     assert resumed is not None
-    assert resumed.status == NodeStatus.RUNNING
+    assert resumed.status == NodeStatus.AWAITING_INPUT
 
 
 @pytest.mark.asyncio
@@ -412,12 +412,7 @@ async def test_externals_code_ops(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     source_path = workspace_service._project_root / "src" / "app.py"
     source_path.parent.mkdir(parents=True, exist_ok=True)
-    full_source = (
-        "def alpha():\n"
-        "    return 1\n\n"
-        "def beta():\n"
-        "    return 2\n"
-    )
+    full_source = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n"
     source_path.write_text(full_source, encoding="utf-8")
 
     node = make_node("src/app.py::alpha", file_path=str(source_path))
@@ -466,9 +461,7 @@ async def test_propose_changes_excludes_bundle_paths(context_env) -> None:
     assert proposal_id
 
     events = await event_store.get_events(limit=10)
-    proposal_event = next(
-        event for event in events if event["event_type"] == "rewrite_proposal"
-    )
+    proposal_event = next(event for event in events if event["event_type"] == "rewrite_proposal")
     files = proposal_event["payload"]["files"]
     assert f"source/{node.node_id}" in files
     assert "notes/analysis.txt" in files
