@@ -27,7 +27,7 @@
 - [x] 2.2 Fix the Rate Limiter Bug
 
 ### Phase 3
-- [ ] 3.1 Decompose the Reconciler
+- [x] 3.1 Decompose the Reconciler
 - [ ] 3.2 Decompose the Web Server
 
 ### Phase 4

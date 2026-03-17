@@ -206,10 +206,10 @@ async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, mo
 async def test_reconciler_watch_import_error_is_not_suppressed(reconcile_env, monkeypatch) -> None:
     _node_store, _event_store, _workspace_service, _config, reconciler = reconcile_env
 
-    async def fake_watch() -> None:
+    async def fake_watch(_on_changes) -> None:  # noqa: ANN001
         raise ImportError("watchfiles unavailable")
 
-    monkeypatch.setattr(reconciler, "_run_watching", fake_watch)
+    monkeypatch.setattr(reconciler._watcher, "watch", fake_watch)
     with pytest.raises(ImportError, match="watchfiles unavailable"):
         await asyncio.wait_for(reconciler.run_forever(), timeout=0.05)
 

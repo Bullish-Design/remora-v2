@@ -85,7 +85,24 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - targeted run passed:
     - `devenv shell -- pytest tests/unit/test_externals.py tests/unit/test_actor.py tests/unit/test_web_server.py tests/integration/test_e2e.py -q`
   - note: user requested no full-suite verification after each step; moving forward use targeted test scopes unless explicitly requested.
+- Completed section 3.1 (reconciler decomposition):
+  - extracted `FileWatcher` into `src/remora/code/watcher.py` for file mtimes and watchfiles loop/stop-task management.
+  - extracted `DirectoryManager` into `src/remora/code/directories.py` for directory hierarchy projection/materialization.
+  - extracted `VirtualAgentManager` into `src/remora/code/virtual_agents.py` for virtual-node sync and subscription/hash derivation.
+  - slimmed `src/remora/code/reconciler.py` into orchestration + node reconciliation + subscription/provisioning helpers.
+  - updated package exports in `src/remora/code/__init__.py`.
+  - updated reconciler import-error test seam to patch watcher (`reconciler._watcher.watch`) instead of removed `_run_watching`.
+  - added focused module tests:
+    - `tests/unit/test_watcher.py`
+    - `tests/unit/test_directories.py`
+    - `tests/unit/test_virtual_agents.py`
+- Verification for section 3.1:
+  - red phase captured:
+    - `devenv shell -- pytest tests/unit/test_watcher.py tests/unit/test_directories.py tests/unit/test_virtual_agents.py -q`
+    - failed with `ModuleNotFoundError` for `remora.code.watcher|directories|virtual_agents` before implementation.
+  - green phase passed:
+    - `devenv shell -- pytest tests/unit/test_watcher.py tests/unit/test_directories.py tests/unit/test_virtual_agents.py tests/unit/test_reconciler.py -q` (`26 passed`).
 
 ## Next Action
-- Commit and push section 2.2 checkpoint (Phase 2 complete).
-- Begin section 3.1 implementation (reconciler decomposition).
+- Commit and push section 3.1 checkpoint.
+- Begin section 3.2 implementation (web server decomposition).
