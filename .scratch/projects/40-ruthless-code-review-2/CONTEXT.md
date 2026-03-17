@@ -459,3 +459,13 @@ Next action:
 
 Next action:
 - Start Phase 14 Step 14.1: add lifecycle integration tests per implementation guide.
+- Step 14.1 completed:
+  - added `tests/integration/test_lifecycle.py` covering:
+    - lifecycle start with real fixture project
+    - node discovery verification
+    - live web health endpoint response
+    - clean shutdown with no leaked `remora-*` asyncio tasks
+  - verification: `devenv shell -- python -m pytest tests/integration/test_lifecycle.py -q` passed (`1 passed`)
+
+Next action:
+- Step 14.2: add dedicated concurrency test coverage for dispatch/subscription/reconcile races.

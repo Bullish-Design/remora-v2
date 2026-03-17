@@ -107,3 +107,10 @@
 - [x] Step 13.6 Skip language-property refactor (per guide)
 - [x] Step 13.7 Remove redundant subscriptions create_tables call
 - [x] Step 13.8 Verify/commit checkpoint
+
+### Phase 14
+- [x] Step 14.1 Add lifecycle integration test coverage
+- [ ] Step 14.2 Add concurrency tests
+- [ ] Step 14.3 Fix remaining whitebox tests
+- [ ] Step 14.4 Confirm/add missing batch rollback coverage
+- [ ] Step 14.5 Verify/commit checkpoint
