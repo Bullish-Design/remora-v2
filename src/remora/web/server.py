@@ -141,11 +141,7 @@ def _workspace_path_to_disk_path(
 
 
 async def _latest_rewrite_proposal(node_id: str, event_store: EventStore) -> dict | None:
-    rows = await event_store.get_events_for_agent(node_id, limit=200)
-    for row in rows:
-        if row.get("event_type") == "RewriteProposalEvent":
-            return row
-    return None
+    return await event_store.get_latest_event_by_type(node_id, "RewriteProposalEvent")
 
 
 async def index(_request: Request) -> HTMLResponse:

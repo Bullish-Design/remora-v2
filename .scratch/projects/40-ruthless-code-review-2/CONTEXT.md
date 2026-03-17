@@ -289,3 +289,10 @@ Next action:
 
 Next action:
 - Step 9.2: update web rewrite-proposal lookup helper to use `get_latest_event_by_type` instead of scanning recent events.
+- Step 9.2 completed:
+  - replaced rewrite-proposal lookup in `web/server.py` to use `EventStore.get_latest_event_by_type`
+  - removed O(200) event scan in hot path for proposal endpoints
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
+
+Next action:
+- Step 9.3: add `NodeStore.get_nodes_by_ids` to enable batched node lookups for projections/reconciler.
