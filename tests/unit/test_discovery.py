@@ -5,7 +5,7 @@ from pathlib import Path
 import hashlib
 import pytest
 
-from remora.code.discovery import clear_caches, discover
+from remora.code.discovery import discover
 from remora.code.languages import LanguageRegistry
 from remora.core.node import Node
 from tests.factories import write_file
@@ -145,25 +145,21 @@ def test_unconfigured_extension_is_skipped(tmp_path: Path) -> None:
     assert nodes == []
 
 
-def test_discover_reuses_cached_language_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_discover_with_fresh_language_registry_instances(tmp_path: Path) -> None:
     write_file(tmp_path / "example.py", "def greet(name):\n    return f'hi {name}'\n")
-
-    import remora.code.discovery as discovery_module
-
-    init_calls = 0
-
-    class CountingRegistry(LanguageRegistry):
-        def __init__(self) -> None:
-            nonlocal init_calls
-            init_calls += 1
-            super().__init__()
-
-    monkeypatch.setattr(discovery_module, "LanguageRegistry", CountingRegistry)
-    clear_caches()
-    discover([tmp_path], language_map={".py": "python"})
-    discover([tmp_path], language_map={".py": "python"})
-
-    assert init_calls == 1
+    first = discover(
+        [tmp_path],
+        language_map={".py": "python"},
+        language_registry=LanguageRegistry(),
+    )
+    second = discover(
+        [tmp_path],
+        language_map={".py": "python"},
+        language_registry=LanguageRegistry(),
+    )
+    assert len(first) == len(second) == 1
+    assert first[0].name == "greet"
+    assert second[0].name == "greet"
 
 
 def test_discover_uses_injected_language_registry(tmp_path: Path) -> None:

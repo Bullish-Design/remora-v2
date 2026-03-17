@@ -11,9 +11,7 @@ from structured_agents import Message
 from remora.core.config import Config
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
-from remora.core.grail import discover_tools
 from remora.core.graph import NodeStore
-from remora.core.kernel import create_kernel, extract_response_text
 from remora.core.metrics import Metrics
 from remora.core.outbox import Outbox, OutboxObserver
 from remora.core.prompt import PromptBuilder
@@ -57,14 +55,6 @@ class Actor:
             prompt_builder=self._prompt_builder,
             trigger_policy=self._trigger_policy,
             search_service=search_service,
-            # Keep these injected from actor module so existing test monkeypatch
-            # paths on remora.core.actor continue to work during decomposition.
-            create_kernel_fn=lambda **kwargs: create_kernel(**kwargs),
-            discover_tools_fn=lambda workspace, capabilities: discover_tools(
-                workspace,
-                capabilities,
-            ),
-            extract_response_text_fn=lambda result: extract_response_text(result),
         )
 
     @property

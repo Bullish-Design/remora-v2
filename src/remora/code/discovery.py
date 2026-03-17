@@ -83,14 +83,6 @@ def _load_query(language: str, query_file: str) -> Query:
     return Query(plugin.get_language(), query_text)
 
 
-def clear_caches() -> None:
-    """Clear module-level discovery caches. Intended for tests."""
-    _get_language_registry.cache_clear()
-    _get_registry_plugin.cache_clear()
-    _get_parser.cache_clear()
-    _load_query.cache_clear()
-
-
 def _resolve_query_file(plugin: LanguagePlugin, query_paths: list[Path]) -> Path:
     for query_dir in query_paths:
         candidate = query_dir / f"{plugin.name}.scm"
@@ -218,4 +210,4 @@ def _node_key(node: Any) -> tuple[int, int, str]:
     return (node.start_byte, node.end_byte, node.type)
 
 
-__all__ = ["discover", "clear_caches"]
+__all__ = ["discover"]

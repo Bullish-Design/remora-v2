@@ -231,8 +231,8 @@ async def test_actor_processes_inbox_message(actor_env, monkeypatch) -> None:
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -269,8 +269,8 @@ async def test_actor_emits_primary_tag_on_normal_completion(actor_env, monkeypat
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -306,8 +306,8 @@ async def test_actor_emits_reflection_tag_on_self_completion_trigger(actor_env, 
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     trigger_event = AgentCompleteEvent(
@@ -349,8 +349,8 @@ async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) ->
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -483,8 +483,8 @@ async def test_companion_context_injected_for_primary_turn(actor_env, monkeypatc
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -537,8 +537,8 @@ async def test_companion_context_not_injected_for_reflection_turn(actor_env, mon
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -681,8 +681,8 @@ async def test_actor_reload_reads_updated_bundle_config_each_turn(actor_env, mon
         seen_models.append(kwargs["model_name"])
         return MockKernel()
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", capture_kernel)
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", capture_kernel)
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     outbox = Outbox(actor_id=node.node_id, event_store=env["event_store"], correlation_id="corr-a")
@@ -720,8 +720,8 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -737,7 +737,7 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
     )
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-log", event=event)
 
-    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.turn_executor"):
         await actor._execute_turn(trigger, outbox)
 
     messages = [record.getMessage() for record in caplog.records]
@@ -766,8 +766,8 @@ async def test_turn_logs_include_correlation_id(actor_env, monkeypatch, caplog) 
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -786,7 +786,7 @@ async def test_turn_logs_include_correlation_id(actor_env, monkeypatch, caplog) 
         correlation_id="corr-turn-context",
     )
 
-    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.turn_executor"):
         await actor._execute_turn(trigger, outbox)
 
     assert any(
@@ -813,8 +813,8 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -830,7 +830,7 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
     )
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-long", event=event)
 
-    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.turn_executor"):
         await actor._execute_turn(trigger, outbox)
 
     messages = [record.getMessage() for record in caplog.records]
@@ -862,8 +862,8 @@ async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) 
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -879,7 +879,7 @@ async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) 
     )
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-log-nl", event=event)
 
-    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.turn_executor"):
         await actor._execute_turn(trigger, outbox)
 
     request = next(
@@ -907,8 +907,8 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(
     def fail_create_kernel(**_kwargs):  # noqa: ANN003, ANN202
         raise ConnectionError("connection refused")
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", fail_create_kernel)
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", fail_create_kernel)
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -964,9 +964,9 @@ async def test_actor_execute_turn_retries_kernel_once(actor_env, monkeypatch) ->
     async def _no_sleep(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: RetryKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr("remora.core.actor.asyncio.sleep", _no_sleep)
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: RetryKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.asyncio.sleep", _no_sleep)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -1025,8 +1025,8 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: BlockingKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: BlockingKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     shared_semaphore = asyncio.Semaphore(1)
     actor_a = Actor(
@@ -1138,8 +1138,8 @@ async def test_actor_emits_kernel_observability_events(actor_env, monkeypatch) -
     def capture_kernel(**kwargs):  # noqa: ANN003, ANN202
         return ObservedKernel(kwargs["observer"])
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", capture_kernel)
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", capture_kernel)
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     outbox = Outbox(
@@ -1193,8 +1193,8 @@ async def test_actor_chat_mode_injects_prompt(actor_env, monkeypatch) -> None:
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: CapturingKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -1245,8 +1245,8 @@ async def test_actor_reactive_mode_injects_prompt(actor_env, monkeypatch) -> Non
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.actor.create_kernel", lambda **_kwargs: CapturingKernel())
-    monkeypatch.setattr("remora.core.actor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel())
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
 
     actor = _make_actor(env, node.node_id)
     event = ContentChangedEvent(path=node.file_path, change_type="modified")

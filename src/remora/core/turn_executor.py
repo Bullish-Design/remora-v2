@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
 from typing import Any
 
 import yaml
@@ -28,8 +27,7 @@ from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.types import NodeStatus
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
-# Preserve historical logger namespace expected by runtime logs/tests.
-logger = logging.getLogger("remora.core.actor")
+logger = logging.getLogger(__name__)
 
 
 def _turn_logger(node_id: str, correlation_id: str, turn_number: int) -> logging.LoggerAdapter:
@@ -60,9 +58,6 @@ class AgentTurnExecutor:
         prompt_builder: PromptBuilder,
         trigger_policy: TriggerPolicy,
         search_service: SearchServiceProtocol | None,
-        create_kernel_fn: Callable[..., Any] = create_kernel,
-        discover_tools_fn: Callable[..., Any] = discover_tools,
-        extract_response_text_fn: Callable[[Any], str] = extract_response_text,
     ) -> None:
         self._node_store = node_store
         self._event_store = event_store
@@ -74,9 +69,6 @@ class AgentTurnExecutor:
         self._prompt_builder = prompt_builder
         self._trigger_policy = trigger_policy
         self._search_service = search_service
-        self._create_kernel_fn = create_kernel_fn
-        self._discover_tools_fn = discover_tools_fn
-        self._extract_response_text_fn = extract_response_text_fn
 
     async def execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
@@ -145,7 +137,7 @@ class AgentTurnExecutor:
                     turn_log,
                 )
 
-                response_text = self._extract_response_text_fn(result)
+                response_text = extract_response_text(result)
                 self._history.append(Message(role="assistant", content=response_text))
                 turn_tags = ("reflection",) if is_reflection_turn else ("primary",)
                 await self._complete_agent_turn(
@@ -221,7 +213,7 @@ class AgentTurnExecutor:
             search_service=self._search_service,
         )
         capabilities = context.to_capabilities_dict()
-        tools = await self._resolve_maybe_awaitable(self._discover_tools_fn(workspace, capabilities))
+        tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))
         return context, tools
 
     async def _run_kernel(
@@ -241,7 +233,7 @@ class AgentTurnExecutor:
         tool_schemas = [tool.schema for tool in tools]
 
         for attempt in range(max_retries + 1):
-            kernel = self._create_kernel_fn(
+            kernel = create_kernel(
                 model_name=model_name,
                 base_url=self._config.model_base_url,
                 api_key=self._config.model_api_key,

@@ -19,7 +19,17 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - TDD red phase captured with failing discovery tests before implementation.
   - `devenv shell -- pytest tests/unit/test_discovery.py tests/unit/test_reconciler.py -q` passed.
   - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`357 passed, 8 skipped`).
+- Completed section 1.2 (remove test-driven production indirection):
+  - removed injected `create_kernel_fn`, `discover_tools_fn`, and `extract_response_text_fn` from `AgentTurnExecutor`.
+  - removed actor-side lambda wrappers and now uses direct module imports in `turn_executor`.
+  - removed `clear_caches()` from discovery and updated tests to use fresh `LanguageRegistry` injection.
+  - switched turn executor logger namespace to `__name__` (`remora.core.turn_executor`) and updated log-capture tests.
+  - updated actor/e2e monkeypatch paths to `remora.core.turn_executor.*`.
+- Verification for section 1.2:
+  - Red phase captured with 18 failing tests after monkeypatch path migration and before code cleanup.
+  - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_discovery.py tests/integration/test_e2e.py -q` passed.
+  - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`357 passed, 8 skipped`).
 
 ## Next Action
-- Commit and push section 1.1 checkpoint.
-- Begin section 1.2 implementation (remove test-driven production indirection).
+- Commit and push section 1.2 checkpoint.
+- Begin section 1.3 implementation (`_expand_env_vars` -> `expand_env_vars`).
