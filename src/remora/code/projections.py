@@ -23,10 +23,13 @@ async def project_nodes(
     """Project CSTNodes into Nodes and provision bundles for new nodes."""
     results: list[Node] = []
     bundle_root = Path(config.bundle_root)
+    node_ids = [cst.node_id for cst in cst_nodes]
+    existing_nodes = await node_store.get_nodes_by_ids(node_ids)
+    existing_by_id = {node.node_id: node for node in existing_nodes}
 
     for cst in cst_nodes:
         source_hash = hashlib.sha256(cst.text.encode("utf-8")).hexdigest()
-        existing = await node_store.get_node(cst.node_id)
+        existing = existing_by_id.get(cst.node_id)
         if existing is not None and existing.source_hash == source_hash:
             if sync_existing_bundles:
                 # System tools/config are always included; role bundle overlays them.

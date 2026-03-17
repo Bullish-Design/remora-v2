@@ -303,3 +303,11 @@ Next action:
 
 Next action:
 - Step 9.4: refactor `code/projections.py` to use `get_nodes_by_ids` and remove per-node lookup N+1 behavior.
+- Step 9.4 completed:
+  - updated `project_nodes` to prefetch existing nodes via `NodeStore.get_nodes_by_ids`
+  - removed per-node `get_node` call in projection loop
+  - added regression test asserting batched lookup path is used
+  - verification: `devenv shell -- python -m pytest tests/unit/test_projections.py -q` passed (`7 passed`)
+
+Next action:
+- Step 9.5: improve SSE wait loop in `web/server.py` to avoid timeout polling overhead.

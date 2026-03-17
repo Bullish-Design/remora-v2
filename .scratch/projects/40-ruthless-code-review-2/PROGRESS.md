@@ -77,7 +77,7 @@
 - [x] Step 9.1 Add `EventStore.get_latest_event_by_type`
 - [x] Step 9.2 Replace rewrite-proposal linear scans with targeted lookup
 - [x] Step 9.3 Add `NodeStore.get_nodes_by_ids`
-- [ ] Step 9.4 Fix N+1 in `code/projections.py`
+- [x] Step 9.4 Fix N+1 in `code/projections.py`
 - [ ] Step 9.5 Improve SSE event wait loop
 - [ ] Step 9.6 Fix N+1 in `_do_reconcile_file`
 - [ ] Step 9.7 Verify/commit checkpoint

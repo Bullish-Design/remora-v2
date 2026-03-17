@@ -85,6 +85,31 @@ async def test_project_changed_node(projection_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_project_nodes_uses_batched_existing_lookup(
+    projection_env,
+    monkeypatch,
+) -> None:
+    node_store, workspace_service, config = projection_env
+    first = make_cst(file_path="src/a.py", name="a")
+    second = make_cst(file_path="src/b.py", name="b")
+
+    calls: list[list[str]] = []
+
+    async def fail_get_node(*_args, **_kwargs):  # noqa: ANN202
+        raise AssertionError("project_nodes should not call get_node per item")
+
+    async def batched_lookup(node_ids: list[str]):  # noqa: ANN202
+        calls.append(node_ids)
+        return []
+
+    monkeypatch.setattr(node_store, "get_node", fail_get_node)
+    monkeypatch.setattr(node_store, "get_nodes_by_ids", batched_lookup)
+
+    await project_nodes([first, second], node_store, workspace_service, config)
+    assert calls == [[first.node_id, second.node_id]]
+
+
+@pytest.mark.asyncio
 async def test_project_unchanged_node_can_sync_existing_bundle_tools(
     projection_env,
     tmp_path: Path,
