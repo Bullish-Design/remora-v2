@@ -16,10 +16,11 @@ from remora.core.config import (
 )
 
 
-def test_default_config(monkeypatch) -> None:
+def test_default_config(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("REMORA_MAX_TURNS", raising=False)
     monkeypatch.delenv("REMORA_MODEL_DEFAULT", raising=False)
-    config = Config()
+    monkeypatch.chdir(tmp_path)
+    config = load_config()
     assert config.max_turns == 8
     assert config.bundle_overlays["function"] == "code-agent"
     assert config.bundle_overlays["directory"] == "directory-agent"

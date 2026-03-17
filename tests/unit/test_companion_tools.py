@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).resolve().parents[2] / "bundles" / "system" / "tools"
+TOOLS_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "remora"
+    / "defaults"
+    / "bundles"
+    / "system"
+    / "tools"
+)
 
 
 def test_companion_summarize_exists() -> None:
@@ -33,7 +41,15 @@ def test_companion_link_exists() -> None:
 
 
 def test_companion_bundle_exists() -> None:
-    bundle_path = Path(__file__).resolve().parents[2] / "bundles" / "companion" / "bundle.yaml"
+    bundle_path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "remora"
+        / "defaults"
+        / "bundles"
+        / "companion"
+        / "bundle.yaml"
+    )
     assert bundle_path.exists()
     import yaml
 
@@ -45,6 +61,9 @@ def test_companion_bundle_exists() -> None:
 def test_aggregate_digest_tool_exists() -> None:
     tool_path = (
         Path(__file__).resolve().parents[2]
+        / "src"
+        / "remora"
+        / "defaults"
         / "bundles"
         / "companion"
         / "tools"

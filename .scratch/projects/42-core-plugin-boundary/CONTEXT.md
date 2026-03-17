@@ -21,11 +21,14 @@
   - Turn executor now builds user prompts through templates.
   - Defaults now include `prompt_templates.user/system/reflection`.
   - Actor/runner prompt tests updated to the new template contract.
+- Finished Phase 5 defaults cleanup:
+  - Config now accepts defaults payload keys merged from `defaults.yaml`.
+  - Runtime/integration fixtures that instantiate `Config()` now pass explicit behavior defaults.
+  - Legacy bundle-path tests were migrated to `src/remora/defaults/...`.
 
 ## Remaining gaps
-- Behavior defaults are only partially migrated; direct `Config()` callers still need cleanup (Phase 5).
 - Externals version contract not wired (Phase 6).
 - Search implementation still has module-level embeddy import boundary (Phase 7).
 
 ## Next action
-Implement Phase 5 defaults-driven config cleanup and align direct `Config()` callers.
+Implement Phase 6 externals API versioning and shipped bundle metadata.

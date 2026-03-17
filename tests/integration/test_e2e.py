@@ -23,6 +23,18 @@ from remora.core.graph import NodeStore
 from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
+_E2E_USER_TEMPLATE = (
+    "# Node: {node_full_name}\n"
+    "Type: {node_type} | File: {file_path}\n\n"
+    "## Source Code\n"
+    "```\n"
+    "{source}\n"
+    "```\n\n"
+    "## Trigger\n"
+    "Event: {event_type}\n"
+    "Content: {event_content}\n"
+)
+
 
 def _write_bundles(root: Path) -> None:
     system = root / "system"
@@ -88,7 +100,10 @@ async def _setup_runtime(tmp_path: Path):
         discovery_languages=("python",),
         workspace_root=".remora-e2e",
         bundle_search_paths=(str(bundles_root),),
+        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
+        prompt_templates={"user": _E2E_USER_TEMPLATE},
         model_default="mock",
+        max_turns=2,
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()

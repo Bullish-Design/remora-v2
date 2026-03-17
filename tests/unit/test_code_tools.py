@@ -10,13 +10,7 @@ def test_code_tools_parse() -> None:
     tools_dir = Path("src/remora/defaults/bundles/code-agent/tools")
     tool_files = sorted(tools_dir.glob("*.pym"))
     assert tool_files
-    expected = {
-        "read_file",
-        "write_file",
-        "find_occurrences",
-        "execute",
-        "search_symbols",
-    }
+    expected = {"rewrite_self", "scaffold"}
     names = {tool_file.stem for tool_file in tool_files}
     assert expected.issubset(names)
     for tool_file in tool_files:

@@ -21,6 +21,18 @@ _REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")
 _REAL_LLM_SKIP_REASON = "REMORA_TEST_MODEL_URL not set - skipping real LLM integration test"
 pytestmark = pytest.mark.real_llm
 
+_LLM_USER_TEMPLATE = (
+    "# Node: {node_full_name}\n"
+    "Type: {node_type} | File: {file_path}\n\n"
+    "## Source Code\n"
+    "```\n"
+    "{source}\n"
+    "```\n\n"
+    "## Trigger\n"
+    "Event: {event_type}\n"
+    "Content: {event_content}\n"
+)
+
 
 def _write_llm_test_bundles(root: Path, model_name: str) -> None:
     system = root / "system"
@@ -240,6 +252,8 @@ async def _setup_llm_runtime(
         discovery_paths=("src",),
         discovery_languages=("python",),
         bundle_search_paths=(str(bundles_root),),
+        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
+        prompt_templates={"user": _LLM_USER_TEMPLATE},
         workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,
@@ -293,6 +307,8 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
         discovery_paths=("src",),
         discovery_languages=("python",),
         bundle_search_paths=(str(bundles_root),),
+        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
+        prompt_templates={"user": _LLM_USER_TEMPLATE},
         workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,
@@ -503,6 +519,8 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
         discovery_paths=("src",),
         discovery_languages=("python",),
         bundle_search_paths=(str(bundles_root),),
+        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
+        prompt_templates={"user": _LLM_USER_TEMPLATE},
         workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,

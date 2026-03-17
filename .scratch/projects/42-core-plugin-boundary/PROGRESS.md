@@ -34,7 +34,10 @@
 - [x] Removed old `bundle_root`/`query_paths` usage in source and updated tests/config fixtures.
 
 ### Phase 5: Defaults extraction
-- [~] `defaults.yaml` + `load_config` merge exists, but config/test cleanup incomplete.
+- [x] `defaults.yaml` + `load_config` merge is wired.
+- [x] Added Config fields for defaults payload keys (`prompt_templates`, `externals_version`).
+- [x] Updated direct `Config()` tests/fixtures to pass explicit behavior-layer values where needed.
+- [x] Updated bundle/tool tests to assert against `src/remora/defaults/...` paths.
 
 ### Phase 6: Externals versioning
 - [ ] Not implemented.
