@@ -101,6 +101,53 @@ def _deps_from_request(request: Request) -> WebDeps:
     return request.app.state.deps
 
 
+def _resolve_within_project_root(
+    path: Path,
+    workspace_path: str,
+    workspace_service: CairnWorkspaceService | None,
+) -> Path:
+    candidate = path
+    if workspace_service is not None and not candidate.is_absolute():
+        candidate = workspace_service._project_root / candidate
+    resolved = candidate.resolve()
+    if workspace_service is None:
+        return resolved
+    project_root = workspace_service._project_root.resolve()
+    try:
+        resolved.relative_to(project_root)
+    except ValueError as exc:
+        raise ValueError(f"Path traversal attempt: {workspace_path}") from exc
+    return resolved
+
+
+def _workspace_path_to_disk_path(
+    node_id: str,
+    node_file_path: str,
+    workspace_path: str,
+    workspace_service: CairnWorkspaceService | None,
+) -> Path:
+    normalized = workspace_path.strip("/")
+    result = Path(node_file_path)
+    if normalized.startswith("source/"):
+        source_path = normalized.removeprefix("source/")
+        if source_path:
+            if source_path.startswith("/"):
+                result = Path(source_path)
+            elif source_path in {node_id, node_file_path}:
+                result = Path(node_file_path)
+            else:
+                result = Path(source_path)
+    return _resolve_within_project_root(result, workspace_path, workspace_service)
+
+
+async def _latest_rewrite_proposal(node_id: str, event_store: EventStore) -> dict | None:
+    rows = await event_store.get_events_for_agent(node_id, limit=200)
+    for row in rows:
+        if row.get("event_type") == "RewriteProposalEvent":
+            return row
+    return None
+
+
 async def index(_request: Request) -> HTMLResponse:
     return HTMLResponse(_INDEX_HTML)
 
@@ -264,12 +311,7 @@ async def api_proposals(request: Request) -> JSONResponse:
     pending = await deps.node_store.list_nodes(status=NodeStatus.AWAITING_REVIEW)
     payload: list[dict[str, object]] = []
     for node in pending:
-        proposal_event = None
-        rows = await deps.event_store.get_events_for_agent(node.node_id, limit=200)
-        for row in rows:
-            if row.get("event_type") == "RewriteProposalEvent":
-                proposal_event = row
-                break
+        proposal_event = await _latest_rewrite_proposal(node.node_id, deps.event_store)
         event_payload = proposal_event.get("payload", {}) if proposal_event else {}
         payload.append(
             {
@@ -293,12 +335,7 @@ async def api_proposal_diff(request: Request) -> JSONResponse:
     if node is None:
         return JSONResponse({"error": "not found"}, status_code=404)
 
-    proposal_event = None
-    rows = await deps.event_store.get_events_for_agent(node_id, limit=200)
-    for row in rows:
-        if row.get("event_type") == "RewriteProposalEvent":
-            proposal_event = row
-            break
+    proposal_event = await _latest_rewrite_proposal(node_id, deps.event_store)
     if proposal_event is None:
         return JSONResponse({"error": "no proposal found"}, status_code=404)
 
@@ -314,30 +351,15 @@ async def api_proposal_diff(request: Request) -> JSONResponse:
         except FileNotFoundError:
             continue
 
-        normalized = workspace_path.strip("/")
-        disk_path = Path(node.file_path)
-        if normalized.startswith("source/"):
-            source_path = normalized.removeprefix("source/")
-            if source_path:
-                if source_path.startswith("/"):
-                    disk_path = Path(source_path)
-                elif source_path in {node.node_id, node.file_path}:
-                    disk_path = Path(node.file_path)
-                else:
-                    disk_path = Path(source_path)
-        candidate = disk_path
-        if not candidate.is_absolute():
-            candidate = deps.workspace_service._project_root / candidate
-        resolved = candidate.resolve()
-        project_root = deps.workspace_service._project_root.resolve()
         try:
-            resolved.relative_to(project_root)
-        except ValueError:
-            return JSONResponse(
-                {"error": f"Path traversal attempt: {workspace_path}"},
-                status_code=400,
+            disk_path = _workspace_path_to_disk_path(
+                node.node_id,
+                node.file_path,
+                workspace_path,
+                deps.workspace_service,
             )
-        disk_path = resolved
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
         if disk_path.exists():
             old_source = disk_path.read_text(encoding="utf-8")
@@ -372,12 +394,7 @@ async def api_proposal_accept(request: Request) -> JSONResponse:
     if node is None:
         return JSONResponse({"error": "not found"}, status_code=404)
 
-    proposal_event = None
-    rows = await deps.event_store.get_events_for_agent(node_id, limit=200)
-    for row in rows:
-        if row.get("event_type") == "RewriteProposalEvent":
-            proposal_event = row
-            break
+    proposal_event = await _latest_rewrite_proposal(node_id, deps.event_store)
     if proposal_event is None:
         return JSONResponse({"error": "no proposal found"}, status_code=404)
 
@@ -395,30 +412,15 @@ async def api_proposal_accept(request: Request) -> JSONResponse:
         except FileNotFoundError:
             continue
 
-        normalized = workspace_path.strip("/")
-        disk_path = Path(node.file_path)
-        if normalized.startswith("source/"):
-            source_path = normalized.removeprefix("source/")
-            if source_path:
-                if source_path.startswith("/"):
-                    disk_path = Path(source_path)
-                elif source_path in {node.node_id, node.file_path}:
-                    disk_path = Path(node.file_path)
-                else:
-                    disk_path = Path(source_path)
-        candidate = disk_path
-        if not candidate.is_absolute():
-            candidate = deps.workspace_service._project_root / candidate
-        resolved = candidate.resolve()
-        project_root = deps.workspace_service._project_root.resolve()
         try:
-            resolved.relative_to(project_root)
-        except ValueError:
-            return JSONResponse(
-                {"error": f"Path traversal attempt: {workspace_path}"},
-                status_code=400,
+            disk_path = _workspace_path_to_disk_path(
+                node.node_id,
+                node.file_path,
+                workspace_path,
+                deps.workspace_service,
             )
-        disk_path = resolved
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
         old_bytes = disk_path.read_bytes() if disk_path.exists() else b""
         new_bytes = new_source.encode("utf-8")
@@ -461,12 +463,7 @@ async def api_proposal_reject(request: Request) -> JSONResponse:
     if node is None:
         return JSONResponse({"error": "not found"}, status_code=404)
 
-    proposal_event = None
-    rows = await deps.event_store.get_events_for_agent(node_id, limit=200)
-    for row in rows:
-        if row.get("event_type") == "RewriteProposalEvent":
-            proposal_event = row
-            break
+    proposal_event = await _latest_rewrite_proposal(node_id, deps.event_store)
     if proposal_event is None:
         return JSONResponse({"error": "no proposal found"}, status_code=404)
     proposal_payload = proposal_event.get("payload", {})

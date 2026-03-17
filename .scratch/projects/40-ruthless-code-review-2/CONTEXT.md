@@ -202,4 +202,10 @@ Next action:
   - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -v` passed (`45 passed`)
 
 Next action:
-- Step 6.3: move path/proposal helper routines (`_resolve_within_project_root`, `_workspace_path_to_disk_path`, `_latest_rewrite_proposal`) to module-level helpers and deduplicate proposal endpoint logic.
+- Step 6.3 completed:
+  - extracted `_resolve_within_project_root`, `_workspace_path_to_disk_path`, and `_latest_rewrite_proposal` to module scope in `web/server.py`
+  - proposal endpoints now call shared helpers instead of repeating path/proposal resolution logic inline
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
+
+Next action:
+- Step 6.4: simplify `create_app` wiring further so it is only dependency/lifespan/route assembly.

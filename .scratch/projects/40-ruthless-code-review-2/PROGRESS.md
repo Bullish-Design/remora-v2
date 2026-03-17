@@ -58,6 +58,6 @@
 ### Phase 6
 - [x] Step 6.1 Create `WebDeps` handler dependency dataclass
 - [x] Step 6.2 Extract web handlers into module-level groups
-- [ ] Step 6.3 Move web helper functions to module level
+- [x] Step 6.3 Move web helper functions to module level
 - [ ] Step 6.4 Simplify `create_app` wiring around `WebDeps`
 - [ ] Step 6.5 Verify/refactor-web commit checkpoint
