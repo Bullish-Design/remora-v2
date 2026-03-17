@@ -17,7 +17,7 @@
 - [x] Phase 8 Decompose _materialize_directories
 - [x] Phase 9 Performance Fixes
 - [x] Phase 10 Fix Encapsulation Violations
-- [ ] Phase 11 Clean Up Global State
+- [x] Phase 11 Clean Up Global State
 - [ ] Phase 12 Logging & Error Boundary Cleanup
 - [ ] Phase 13 Minor Fixes & Polish
 - [ ] Phase 14 Test Suite Improvements
@@ -91,4 +91,4 @@
 ### Phase 11
 - [x] Step 11.1 Bound Grail script source cache
 - [x] Step 11.2 Add discovery cache clear helper
-- [ ] Step 11.3 Verify/commit checkpoint
+- [x] Step 11.3 Verify/commit checkpoint
