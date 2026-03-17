@@ -28,7 +28,7 @@ from remora.core.actor import (
     Trigger,
     TriggerPolicy,
 )
-from remora.core.config import BundleConfig, Config
+from remora.core.config import BehaviorConfig, BundleConfig, Config, InfraConfig, RuntimeConfig
 from remora.core.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
@@ -146,12 +146,13 @@ async def actor_env(tmp_path: Path):
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        workspace_root=".remora-actor-test",
-        trigger_cooldown_ms=1000,
-        max_trigger_depth=2,
-        prompt_templates={"user": _TEST_USER_TEMPLATE},
-        model_default="mock",
-        max_turns=1,
+        infra=InfraConfig(workspace_root=".remora-actor-test"),
+        runtime=RuntimeConfig(trigger_cooldown_ms=1000, max_trigger_depth=2),
+        behavior=BehaviorConfig(
+            prompt_templates={"user": _TEST_USER_TEMPLATE},
+            model_default="mock",
+            max_turns=1,
+        ),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -311,7 +312,9 @@ async def test_actor_emits_primary_tag_on_normal_completion(actor_env, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_actor_emits_reflection_tag_on_self_completion_trigger(actor_env, monkeypatch) -> None:
+async def test_actor_emits_reflection_tag_on_self_completion_trigger(
+    actor_env, monkeypatch
+) -> None:
     env = actor_env
     node = make_node("src/app.py::tag-reflection")
     await env["node_store"].upsert_node(node)
@@ -452,15 +455,17 @@ def test_prompt_builder_reflection_tag_must_be_primary() -> None:
 
 def test_prompt_builder_build_user_prompt_interpolates_default_template() -> None:
     config = Config(
-        prompt_templates={
-            "user": (
-                "Node={node_full_name}|Type={node_type}|File={file_path}|Role={role}|"
-                "Event={event_type}|Content={event_content}|Mode={turn_mode}|"
-                "Companion={companion_context}|Source={source}"
-            )
-        },
-        model_default="mock",
-        max_turns=1,
+        behavior=BehaviorConfig(
+            prompt_templates={
+                "user": (
+                    "Node={node_full_name}|Type={node_type}|File={file_path}|Role={role}|"
+                    "Event={event_type}|Content={event_content}|Mode={turn_mode}|"
+                    "Companion={companion_context}|Source={source}"
+                )
+            },
+            model_default="mock",
+            max_turns=1,
+        ),
     )
     prompt_builder = PromptBuilder(config)
     node = make_node("src/app.py::alpha", role="code-agent", text="def alpha():\n    return 1\n")
@@ -485,9 +490,11 @@ def test_prompt_builder_build_user_prompt_interpolates_default_template() -> Non
 
 def test_prompt_builder_build_user_prompt_bundle_template_override() -> None:
     config = Config(
-        prompt_templates={"user": "default:{node_name}"},
-        model_default="mock",
-        max_turns=1,
+        behavior=BehaviorConfig(
+            prompt_templates={"user": "default:{node_name}"},
+            model_default="mock",
+            max_turns=1,
+        ),
     )
     prompt_builder = PromptBuilder(config)
     node = make_node("src/app.py::alpha", role="code-agent", text="def alpha():\n    return 1\n")
@@ -505,14 +512,23 @@ def test_prompt_builder_build_user_prompt_bundle_template_override() -> None:
 
 @pytest.mark.asyncio
 async def test_build_companion_context_empty(actor_env) -> None:
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-empty")
-    result = await workspace.build_companion_context()
+    from remora.core.prompt import PromptBuilder
+
+    workspace = await actor_env["workspace_service"].get_agent_workspace(
+        "src/app.py::companion-empty"
+    )
+    companion_data = await workspace.get_companion_data()
+    result = PromptBuilder.format_companion_context(companion_data)
     assert result == ""
 
 
 @pytest.mark.asyncio
 async def test_build_companion_context_with_data(actor_env) -> None:
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-data")
+    from remora.core.prompt import PromptBuilder
+
+    workspace = await actor_env["workspace_service"].get_agent_workspace(
+        "src/app.py::companion-data"
+    )
     await workspace.kv_set(
         "companion/reflections",
         [{"insight": "Regex does not handle Unicode domains", "timestamp": 1.0}],
@@ -526,7 +542,8 @@ async def test_build_companion_context_with_data(actor_env) -> None:
         [{"target": "test_validate", "relationship": "tested_by", "timestamp": 1.0}],
     )
 
-    result = await workspace.build_companion_context()
+    companion_data = await workspace.get_companion_data()
+    result = PromptBuilder.format_companion_context(companion_data)
     assert "Companion Memory" in result
     assert "Unicode domains" in result
     assert "email validation" in result
@@ -725,11 +742,7 @@ async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> No
     workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write(
         "_bundle/bundle.yaml",
-        (
-            'system_prompt: "You are a code agent."\n'
-            "self_reflect:\n"
-            "  enabled: false\n"
-        ),
+        ('system_prompt: "You are a code agent."\nself_reflect:\n  enabled: false\n'),
     )
 
     bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
@@ -899,8 +912,7 @@ async def test_turn_logs_include_correlation_id(actor_env, monkeypatch, caplog) 
         await actor._execute_turn(trigger, outbox)
 
     assert any(
-        getattr(record, "correlation_id", None) == "corr-turn-context"
-        for record in caplog.records
+        getattr(record, "correlation_id", None) == "corr-turn-context" for record in caplog.records
     )
 
 
@@ -960,7 +972,7 @@ async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) 
     ws = await env["workspace_service"].get_agent_workspace(node.node_id)
     await ws.write(
         "_bundle/bundle.yaml",
-        "system_prompt: \"line1\\nline2\"\nmodel: mock\nmax_turns: 1\n",
+        'system_prompt: "line1\\nline2"\nmodel: mock\nmax_turns: 1\n',
     )
 
     class MockKernel:
@@ -1134,7 +1146,9 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: BlockingKernel())
+    monkeypatch.setattr(
+        "remora.core.turn_executor.create_kernel", lambda **_kwargs: BlockingKernel()
+    )
     monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     shared_semaphore = asyncio.Semaphore(1)
@@ -1302,7 +1316,9 @@ async def test_actor_chat_mode_injects_prompt(actor_env, monkeypatch) -> None:
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel())
+    monkeypatch.setattr(
+        "remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel()
+    )
     monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
@@ -1354,7 +1370,9 @@ async def test_actor_reactive_mode_injects_prompt(actor_env, monkeypatch) -> Non
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel())
+    monkeypatch.setattr(
+        "remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel()
+    )
     monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
