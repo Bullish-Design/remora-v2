@@ -612,36 +612,8 @@ async def sse_stream(request: Request) -> StreamingResponse:
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 
-def create_app(
-    event_store: EventStore,
-    node_store: NodeStore,
-    event_bus: EventBus,
-    metrics: Metrics | None = None,
-    actor_pool: ActorPool | None = None,
-    workspace_service: CairnWorkspaceService | None = None,
-    search_service: SearchServiceProtocol | None = None,
-) -> Starlette:
-    """Create Starlette app exposing graph APIs, events, and chat."""
-    deps = WebDeps(
-        event_store=event_store,
-        node_store=node_store,
-        event_bus=event_bus,
-        metrics=metrics,
-        actor_pool=actor_pool,
-        workspace_service=workspace_service,
-        search_service=search_service,
-        shutdown_event=asyncio.Event(),
-        chat_limiter=RateLimiter(max_requests=10, window_seconds=60.0),
-    )
-
-    @asynccontextmanager
-    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        try:
-            yield
-        finally:
-            deps.shutdown_event.set()
-
-    routes = [
+def _build_routes() -> list[Route]:
+    return [
         Route("/", endpoint=index),
         Route("/api/nodes", endpoint=api_nodes),
         Route("/api/edges", endpoint=api_all_edges),
@@ -669,7 +641,41 @@ def create_app(
         Route("/api/cursor", endpoint=api_cursor, methods=["POST"]),
         Route("/sse", endpoint=sse_stream),
     ]
-    app = Starlette(routes=routes, lifespan=lifespan)
+
+
+def _build_lifespan(shutdown_event: asyncio.Event):
+    @asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            shutdown_event.set()
+
+    return lifespan
+
+
+def create_app(
+    event_store: EventStore,
+    node_store: NodeStore,
+    event_bus: EventBus,
+    metrics: Metrics | None = None,
+    actor_pool: ActorPool | None = None,
+    workspace_service: CairnWorkspaceService | None = None,
+    search_service: SearchServiceProtocol | None = None,
+) -> Starlette:
+    """Create Starlette app exposing graph APIs, events, and chat."""
+    deps = WebDeps(
+        event_store=event_store,
+        node_store=node_store,
+        event_bus=event_bus,
+        metrics=metrics,
+        actor_pool=actor_pool,
+        workspace_service=workspace_service,
+        search_service=search_service,
+        shutdown_event=asyncio.Event(),
+        chat_limiter=RateLimiter(max_requests=10, window_seconds=60.0),
+    )
+    app = Starlette(routes=_build_routes(), lifespan=_build_lifespan(deps.shutdown_event))
     app.state.deps = deps
     app.add_middleware(CSRFMiddleware)
     app.state.sse_shutdown_event = deps.shutdown_event

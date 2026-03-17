@@ -208,4 +208,11 @@ Next action:
   - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
 
 Next action:
-- Step 6.4: simplify `create_app` wiring further so it is only dependency/lifespan/route assembly.
+- Step 6.4 completed:
+  - extracted `_build_routes()` so route declarations are no longer embedded in `create_app`
+  - extracted `_build_lifespan(shutdown_event)` so `create_app` only wires dependencies and app state
+  - `create_app` now focuses on constructing `WebDeps`, app initialization, and middleware/static mounting
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
+
+Next action:
+- Step 6.5: run the phase verification checkpoint and commit/push the web refactor phase completion.
