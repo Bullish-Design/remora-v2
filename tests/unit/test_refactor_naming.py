@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from remora.core.config import Config
+from remora.core.config import Config, InfraConfig
 from remora.core.node import Node
 
 
@@ -28,8 +28,8 @@ def test_node_uses_role_field() -> None:
 
 
 def test_config_workspace_root_works() -> None:
-    config = Config(workspace_root=".remora-workspace")
-    assert config.workspace_root == ".remora-workspace"
+    config = Config(infra=InfraConfig(workspace_root=".remora-workspace"))
+    assert config.infra.workspace_root == ".remora-workspace"
 
 
 def test_legacy_swarm_root_key_rejected() -> None:
