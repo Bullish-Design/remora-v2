@@ -274,3 +274,11 @@ Next action:
 
 Next action:
 - Step 8.3: run the phase checkpoint verification and commit/push Phase 8 completion.
+- Step 8.3 completed:
+  - ran phase checkpoint verification:
+    - `devenv shell -- python -m pytest tests/unit/test_reconciler.py -v`
+    - result: `22 passed, 1 warning`
+  - Phase 8 is complete.
+
+Next action:
+- Start Phase 9 Step 9.1: add `get_latest_event_by_type` to `EventStore` and migrate proposal lookups.
