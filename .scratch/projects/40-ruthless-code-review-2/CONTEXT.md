@@ -431,3 +431,10 @@ Next action:
 
 Next action:
 - Step 13.5: remove dead `name_node` parameter from `discovery._build_name_from_tree` and update call sites.
+- Step 13.5 completed:
+  - removed unused `name_node` parameter from `_build_name_from_tree`
+  - updated both call sites to match simplified signature
+  - verification: `devenv shell -- python -m pytest tests/unit/test_discovery.py -q` passed (`14 passed`)
+
+Next action:
+- Step 13.6: record guide-directed skip for language-property refactor.

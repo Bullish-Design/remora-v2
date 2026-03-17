@@ -175,14 +175,13 @@ def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> 
         node = entry["node"]
         name_node = entry["name_node"]
         name = name_by_key[key]
-        full_name = _build_name_from_tree(node, name_node, parent_by_key, name_by_key)
+        full_name = _build_name_from_tree(node, parent_by_key, name_by_key)
         parent_key = parent_by_key.get(key)
         parent_full_name = None
         if parent_key is not None:
             parent_entry = by_key[parent_key]
             parent_full_name = _build_name_from_tree(
                 parent_entry["node"],
-                parent_entry["name_node"],
                 parent_by_key,
                 name_by_key,
             )
@@ -213,11 +212,9 @@ def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> 
 
 def _build_name_from_tree(
     node: Any,
-    name_node: Any,
     parent_by_key: dict[tuple[int, int, str], tuple[int, int, str] | None],
     name_by_key: dict[tuple[int, int, str], str],
 ) -> str:
-    del name_node
     current_key = _node_key(node)
     parts = [name_by_key[current_key]]
     parent_key = parent_by_key.get(current_key)
