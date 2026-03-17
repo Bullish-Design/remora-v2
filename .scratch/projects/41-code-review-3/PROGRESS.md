@@ -1,19 +1,42 @@
-# Project 41: Code Review 3 — Progress
+# Project 41: Code Review 3 - Implementation Progress
 
-## Tasks
+## Status Legend
+- pending
+- in-progress
+- done
 
-- [x] Read all 38 source files in `src/remora/` (6,923 LOC)
-- [x] Review test infrastructure (conftest, doubles, factories)
-- [x] Review pyproject.toml and example config
-- [x] Review bundles directory structure
-- [x] Write CODE_REVIEW.md — full review with severity ratings
-- [x] Write RECOMMENDATIONS.md — prioritized improvement list with concrete steps
-- [x] Write REVIEW_REFACTOR_GUIDE.md — step-by-step implementation guide with test verification
+## Phase Tracking
+- [ ] Phase 1 Model Cleanup & Quick Wins
+- [ ] Phase 2 Bug Fixes & Type Safety
+- [ ] Phase 3 Structural Decomposition
+- [ ] Phase 4 Turn Pipeline Simplification
+- [ ] Phase 5 Performance & Polish
 
-## Deliverables
+## Step Tracking
 
-| File | Status |
-|------|--------|
-| `CODE_REVIEW.md` | Done |
-| `RECOMMENDATIONS.md` | Done |
-| `REVIEW_REFACTOR_GUIDE.md` | Done |
+### Phase 1
+- [ ] 1.1 Unify the Node Model (CSTNode -> Node)
+- [ ] 1.2 Remove Test-Driven Production Indirection
+- [ ] 1.3 Make `_expand_env_vars` Public
+- [ ] 1.4 Fix Config Silent Drops
+- [ ] 1.5 Remove Dead Config
+- [ ] 1.6 Add `project_root` Property to Workspace Service
+
+### Phase 2
+- [ ] 2.1 Fix Event Type Dispatch
+- [ ] 2.2 Fix the Rate Limiter Bug
+
+### Phase 3
+- [ ] 3.1 Decompose the Reconciler
+- [ ] 3.2 Decompose the Web Server
+
+### Phase 4
+- [ ] 4.1 Simplify the Turn Executor
+- [ ] 4.2 Decompose the Externals God-Object
+
+### Phase 5
+- [ ] 5.1 Batch Event Commits
+- [ ] 5.2 Clean Up Grail Caching
+- [ ] 5.3 Fix NodeStore.batch() Transaction Management
+- [ ] 5.4 Use asyncio.iscoroutinefunction in EventBus
+- [ ] 5.5 Miscellaneous Polish

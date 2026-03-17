@@ -63,7 +63,7 @@
 
 **Step-by-step:**
 
-**Step 1: Decide on field naming.** The `Node` model uses `source_code` while `CSTNode` uses `text`. Since nodes are "code elements discovered from source," `source_code` is the more descriptive name. Keep `source_code` in `Node`.
+**Step 1: Decide on field naming.** The `Node` model uses `source_code` while `CSTNode` uses `text`. We'll use `text` moving forward.
 
 **Step 2: Add `source_hash` computation to discovery.** Currently discovery doesn't compute `source_hash` — that happens in `projections.py`. Add it to `_parse_file` in `discovery.py`:
 
@@ -78,7 +78,7 @@ source_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
 **Step 3: Modify `discovery.py` to return `Node` objects instead of `CSTNode`.** 
 
 Replace the `CSTNode` class definition and all `CSTNode(...)` constructor calls with `Node(...)`. The key field mapping:
-- `CSTNode.text` → `Node.source_code`
+- `CSTNode.text` → `Node.text`
 - Add `source_hash=hashlib.sha256(text.encode("utf-8")).hexdigest()`
 - Add `status="idle"` (default)
 - Add `role=None` (default)
@@ -171,7 +171,7 @@ async def _do_reconcile_file(self, file_path, mtime_ns, *, sync_existing_bundles
 **Step 7: Update tests.**
 
 - `tests/factories.py`: The `make_cst` helper should be deleted. If tests need a discovered node, use `make_node` (which already creates `Node` objects).
-- `tests/unit/test_discovery.py`: Change all assertions from `CSTNode` to `Node`. Fields `text` → `source_code`. Add assertions that `source_hash` is present and correct.
+- `tests/unit/test_discovery.py`: Change all assertions from `CSTNode` to `Node`. Add assertions that `source_hash` is present and correct.
 - `tests/unit/test_projections.py`: Delete this file entirely. The projection logic is now tested via reconciler tests.
 - Any test importing `CSTNode` or `project_nodes` needs updating.
 
