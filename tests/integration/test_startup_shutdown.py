@@ -21,7 +21,8 @@ async def test_startup_shutdown_path_runs_cleanly_for_two_seconds(tmp_path: Path
             "  - python\n"
             "language_map:\n"
             "  .py: python\n"
-            "query_paths: []\n"
+            "query_search_paths:\n"
+            "  - \"@default\"\n"
             "workspace_root: .remora-startup-shutdown\n"
         ),
         encoding="utf-8",

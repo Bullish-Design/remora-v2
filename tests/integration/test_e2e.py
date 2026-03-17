@@ -87,7 +87,7 @@ async def _setup_runtime(tmp_path: Path):
         discovery_paths=("src",),
         discovery_languages=("python",),
         workspace_root=".remora-e2e",
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
         model_default="mock",
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)

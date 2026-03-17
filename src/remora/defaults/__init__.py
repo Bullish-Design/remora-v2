@@ -7,8 +7,10 @@ via importlib.resources so they work in installed (non-editable) packages.
 
 from __future__ import annotations
 
+import yaml
 from importlib.resources import as_file, files
 from pathlib import Path
+from typing import Any
 
 
 def defaults_dir() -> Path:
@@ -36,9 +38,18 @@ def default_config_path() -> Path:
     return defaults_dir() / "defaults.yaml"
 
 
+def load_defaults() -> dict[str, Any]:
+    """Load defaults.yaml and return the parsed dict."""
+    path = default_config_path()
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
 __all__ = [
     "defaults_dir",
     "default_bundles_dir",
     "default_queries_dir",
     "default_config_path",
+    "load_defaults",
 ]

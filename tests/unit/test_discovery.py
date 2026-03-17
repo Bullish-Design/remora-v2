@@ -150,12 +150,12 @@ def test_discover_with_fresh_language_registry_instances(tmp_path: Path) -> None
     first = discover(
         [tmp_path],
         language_map={".py": "python"},
-        language_registry=LanguageRegistry(),
+        language_registry=LanguageRegistry.from_defaults(),
     )
     second = discover(
         [tmp_path],
         language_map={".py": "python"},
-        language_registry=LanguageRegistry(),
+        language_registry=LanguageRegistry.from_defaults(),
     )
     assert len(first) == len(second) == 1
     assert first[0].name == "greet"
@@ -164,7 +164,7 @@ def test_discover_with_fresh_language_registry_instances(tmp_path: Path) -> None
 
 def test_discover_uses_injected_language_registry(tmp_path: Path) -> None:
     write_file(tmp_path / "example.py", "def greet(name):\n    return f'hi {name}'\n")
-    registry = LanguageRegistry()
+    registry = LanguageRegistry.from_defaults()
     nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
     assert any(node.name == "greet" for node in nodes)
 

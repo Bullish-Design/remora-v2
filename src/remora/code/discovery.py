@@ -66,7 +66,7 @@ def _get_registry_plugin(name: str) -> LanguagePlugin:
 
 @lru_cache(maxsize=1)
 def _get_language_registry() -> LanguageRegistry:
-    return LanguageRegistry()
+    return LanguageRegistry.from_defaults()
 
 
 @lru_cache(maxsize=16)

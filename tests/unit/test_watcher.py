@@ -13,9 +13,9 @@ def _config() -> Config:
         discovery_paths=("src",),
         discovery_languages=("python",),
         language_map={".py": "python"},
-        query_paths=(),
+        query_search_paths=("@default",),
         workspace_root=".remora-reconcile",
-        bundle_root="bundles",
+        bundle_search_paths=("bundles",),
     )
 
 

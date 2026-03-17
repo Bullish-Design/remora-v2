@@ -26,7 +26,7 @@ async def test_lifecycle_discovers_nodes_serves_health_and_shuts_down(tmp_path: 
         discovery_paths=("src",),
         discovery_languages=("python",),
         language_map={".py": "python"},
-        query_paths=(),
+        query_search_paths=("@default",),
         workspace_root=".remora-lifecycle-test",
     )
     lifecycle = RemoraLifecycle(

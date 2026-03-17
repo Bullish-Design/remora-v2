@@ -39,9 +39,9 @@ async def reconcile_env(tmp_path: Path):
         discovery_paths=("src",),
         discovery_languages=("python",),
         language_map={".py": "python"},
-        query_paths=(),
+        query_search_paths=("@default",),
         workspace_root=".remora-reconcile",
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -539,9 +539,9 @@ async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) ->
         discovery_paths=("src",),
         discovery_languages=("python",),
         language_map={".py": "python"},
-        query_paths=(),
+        query_search_paths=("@default",),
         workspace_root=".remora-reconcile",
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
         virtual_agents=(
             {
                 "id": "test-agent",
@@ -614,9 +614,9 @@ async def test_reconciler_handles_external_paths(tmp_path: Path) -> None:
         discovery_paths=(str(external_root),),
         discovery_languages=("python",),
         language_map={".py": "python"},
-        query_paths=(),
+        query_search_paths=("@default",),
         workspace_root=".remora-reconcile",
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
     )
     workspace_service = CairnWorkspaceService(config, project_root)
     await workspace_service.initialize()

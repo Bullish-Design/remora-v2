@@ -9,7 +9,7 @@ import aiosqlite
 
 from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
-from remora.core.config import Config
+from remora.core.config import Config, resolve_query_search_paths
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
@@ -41,35 +41,13 @@ class RuntimeServices:
 
         self.workspace_service = CairnWorkspaceService(config, project_root, metrics=self.metrics)
         self.language_registry = LanguageRegistry.from_config(
-            language_defs=config.languages if hasattr(config, "languages") else {},
-            query_search_paths=self._resolve_query_search_paths(config, project_root),
+            language_defs=config.languages,
+            query_search_paths=resolve_query_search_paths(config, project_root),
         )
 
         self.search_service: SearchServiceProtocol | None = None
         self.reconciler: FileReconciler | None = None
         self.runner: ActorPool | None = None
-
-    def _resolve_query_search_paths(self, config: Config, project_root: Path) -> list[Path]:
-        """Resolve query search paths for language plugin discovery."""
-        from remora.defaults import default_queries_dir
-
-        paths: list[Path] = []
-
-        # 1. Project-local queries (highest priority)
-        local_queries = project_root / "queries"
-        if local_queries.exists():
-            paths.append(local_queries)
-
-        # 2. Config-specified query paths
-        for configured in config.query_paths:
-            candidate = project_root / configured
-            if candidate.exists():
-                paths.append(candidate.resolve())
-
-        # 3. Package default queries (fallback)
-        paths.append(default_queries_dir())
-
-        return paths
 
     async def initialize(self) -> None:
         """Create tables and initialize services."""

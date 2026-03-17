@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from remora.code.languages import LanguageRegistry, MarkdownPlugin, PythonPlugin, TomlPlugin
+from remora.code.languages import GenericLanguagePlugin, LanguageRegistry, PythonPlugin
+from remora.defaults import default_queries_dir
 
 
 def make_ts_node(node_type: str, parent=None, children=None):  # noqa: ANN001, ANN202
@@ -10,7 +11,7 @@ def make_ts_node(node_type: str, parent=None, children=None):  # noqa: ANN001, A
 
 
 def test_language_registry_resolves_by_name_and_extension() -> None:
-    registry = LanguageRegistry()
+    registry = LanguageRegistry.from_defaults()
     assert registry.get_by_name("python") is not None
     assert registry.get_by_extension(".py") is not None
     assert registry.get_by_extension(".md") is not None
@@ -18,7 +19,7 @@ def test_language_registry_resolves_by_name_and_extension() -> None:
 
 
 def test_python_plugin_resolve_node_type() -> None:
-    plugin = PythonPlugin()
+    plugin = PythonPlugin(default_queries_dir() / "python.scm")
     class_node = make_ts_node("class_definition")
     method_node = make_ts_node("function_definition", parent=class_node)
     fn_node = make_ts_node("function_definition")
@@ -28,6 +29,18 @@ def test_python_plugin_resolve_node_type() -> None:
     assert plugin.resolve_node_type(fn_node) == "function"
 
 
-def test_markdown_and_toml_plugins() -> None:
-    assert MarkdownPlugin().resolve_node_type(make_ts_node("heading")) == "section"
-    assert TomlPlugin().resolve_node_type(make_ts_node("table")) == "table"
+def test_generic_language_plugin_node_type_resolution() -> None:
+    markdown = GenericLanguagePlugin(
+        name="markdown",
+        extensions=[".md"],
+        query_path=default_queries_dir() / "markdown.scm",
+        default_node_type="section",
+    )
+    toml = GenericLanguagePlugin(
+        name="toml",
+        extensions=[".toml"],
+        query_path=default_queries_dir() / "toml.scm",
+        default_node_type="table",
+    )
+    assert markdown.resolve_node_type(make_ts_node("heading")) == "section"
+    assert toml.resolve_node_type(make_ts_node("table")) == "table"

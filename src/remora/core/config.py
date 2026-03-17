@@ -107,12 +107,14 @@ class SelfReflectConfig(BaseModel):
 class BundleConfig(BaseModel):
     """Agent bundle configuration loaded from bundle.yaml."""
 
-    system_prompt: str = "You are an autonomous code agent."
+    system_prompt: str = ""
     system_prompt_extension: str = ""
     model: str | None = None
-    max_turns: int = 8
+    max_turns: int = 0
     prompts: dict[str, str] = Field(default_factory=dict)
     self_reflect: SelfReflectConfig | None = None
+    prompt_templates: dict[str, str] = Field(default_factory=dict)
+    externals_version: int | None = None
 
     @field_validator("max_turns")
     @classmethod
@@ -139,33 +141,20 @@ class Config(BaseSettings):
     project_path: str = "."
     discovery_paths: tuple[str, ...] = ("src/",)
     discovery_languages: tuple[str, ...] | None = None
-    language_map: dict[str, str] = Field(
-        default_factory=lambda: {
-            ".py": "python",
-            ".md": "markdown",
-            ".toml": "toml",
-        }
-    )
-    query_paths: tuple[str, ...] = ("queries/",)
+    language_map: dict[str, str] = Field(default_factory=dict)
+    query_search_paths: tuple[str, ...] = ("queries/", "@default")
 
     # Bundles
-    bundle_root: str = "bundles"
-    bundle_overlays: dict[str, str] = Field(
-        default_factory=lambda: {
-            "function": "code-agent",
-            "class": "code-agent",
-            "method": "code-agent",
-            "directory": "directory-agent",
-        }
-    )
+    bundle_search_paths: tuple[str, ...] = ("bundles/", "@default")
+    bundle_overlays: dict[str, str] = Field(default_factory=dict)
     bundle_rules: tuple[BundleOverlayRule, ...] = ()
 
     # LLM
     model_base_url: str = "http://localhost:8000/v1"
-    model_default: str = "Qwen/Qwen3-4B"
+    model_default: str = ""
     model_api_key: str = ""
     timeout_s: float = 300.0
-    max_turns: int = 8
+    max_turns: int = 0
 
     # Agent execution
     workspace_root: str = ".remora"
@@ -178,6 +167,11 @@ class Config(BaseSettings):
     actor_idle_timeout_s: float = 300.0
     send_message_rate_limit: int = 10
     send_message_rate_window_s: float = 1.0
+
+    # Language definitions (loaded from defaults.yaml)
+    languages: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    prompt_templates: dict[str, str] = Field(default_factory=dict)
+    externals_version: int = 0
 
     # Search (optional embeddy integration)
     search: SearchConfig = Field(default_factory=SearchConfig)
@@ -214,9 +208,9 @@ class Config(BaseSettings):
             raise ValueError("discovery_paths must contain at least one non-empty path")
         return cleaned
 
-    @field_validator("query_paths")
+    @field_validator("bundle_search_paths", "query_search_paths")
     @classmethod
-    def _validate_query_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+    def _validate_search_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
             return value
         cleaned = tuple(path for path in value if isinstance(path, str) and path.strip())
@@ -288,12 +282,65 @@ def _find_config_file(start: Path | None = None) -> Path | None:
 
 def load_config(path: Path | None = None) -> Config:
     """Load config from remora.yaml, walking up directories when path is omitted."""
-    config_path = path if path is not None else _find_config_file()
-    if config_path is None:
-        return Config()
+    from remora.defaults import load_defaults
 
-    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    return Config(**expand_env_vars(data))
+    # Load defaults first (lowest priority)
+    defaults = load_defaults()
+
+    # Load user config (highest priority)
+    config_path = path if path is not None else _find_config_file()
+    if config_path is not None:
+        user_data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    else:
+        user_data = {}
+
+    # Defaults are lowest priority, user config overrides
+    merged = {**defaults, **expand_env_vars(user_data)}
+    return Config(**merged)
+
+
+def resolve_bundle_search_paths(config: Config, project_root: Path) -> list[Path]:
+    """Resolve configured bundle search path entries to filesystem directories."""
+    from remora.defaults import default_bundles_dir
+
+    return _resolve_search_paths(config.bundle_search_paths, project_root, default_bundles_dir())
+
+
+def resolve_bundle_dirs(bundle_name: str, search_paths: list[Path]) -> list[Path]:
+    """Find all directories for bundle name across search paths in priority order."""
+    dirs: list[Path] = []
+    for base in search_paths:
+        candidate = base / bundle_name
+        if candidate.is_dir():
+            dirs.append(candidate)
+    return dirs
+
+
+def resolve_query_search_paths(config: Config, project_root: Path) -> list[Path]:
+    """Resolve configured query search path entries to filesystem directories."""
+    from remora.defaults import default_queries_dir
+
+    return _resolve_search_paths(config.query_search_paths, project_root, default_queries_dir())
+
+
+def _resolve_search_paths(
+    entries: tuple[str, ...],
+    project_root: Path,
+    default_dir: Path,
+) -> list[Path]:
+    resolved: list[Path] = []
+    seen: set[Path] = set()
+    for entry in entries:
+        if entry == "@default":
+            candidate = default_dir
+        else:
+            raw = Path(entry)
+            candidate = raw if raw.is_absolute() else project_root / raw
+        candidate = candidate.resolve()
+        if candidate.exists() and candidate not in seen:
+            seen.add(candidate)
+            resolved.append(candidate)
+    return resolved
 
 
 __all__ = [
@@ -308,4 +355,7 @@ __all__ = [
     "expand_env_vars",
     "expand_string",
     "load_config",
+    "resolve_bundle_search_paths",
+    "resolve_bundle_dirs",
+    "resolve_query_search_paths",
 ]

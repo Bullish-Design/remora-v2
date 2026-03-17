@@ -5,7 +5,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-from remora.core.config import Config
+from remora.core.config import Config, resolve_query_search_paths
 
 
 def resolve_discovery_paths(config: Config, project_root: Path) -> list[Path]:
@@ -22,14 +22,8 @@ def resolve_discovery_paths(config: Config, project_root: Path) -> list[Path]:
 
 
 def resolve_query_paths(config: Config, project_root: Path) -> list[Path]:
-    """Resolve configured query paths relative to project root."""
-    resolved: list[Path] = []
-    for configured in config.query_paths:
-        candidate = Path(configured)
-        if not candidate.is_absolute():
-            candidate = project_root / candidate
-        resolved.append(candidate.resolve())
-    return resolved
+    """Resolve configured query search paths relative to project root."""
+    return resolve_query_search_paths(config, project_root)
 
 
 def walk_source_files(

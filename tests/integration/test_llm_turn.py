@@ -239,7 +239,7 @@ async def _setup_llm_runtime(
     config = Config(
         discovery_paths=("src",),
         discovery_languages=("python",),
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
         workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,
@@ -292,7 +292,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
     config = Config(
         discovery_paths=("src",),
         discovery_languages=("python",),
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
         workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,
@@ -502,7 +502,7 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
     config = Config(
         discovery_paths=("src",),
         discovery_languages=("python",),
-        bundle_root=str(bundles_root),
+        bundle_search_paths=(str(bundles_root),),
         workspace_root=".remora-llm-int",
         model_base_url=model_url,
         model_default=model_name,

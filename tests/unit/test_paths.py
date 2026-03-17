@@ -8,7 +8,8 @@ from remora.core.config import Config
 
 def test_resolve_paths_relative_to_project_root(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir(parents=True, exist_ok=True)
-    config = Config(discovery_paths=("src",), query_paths=("queries",))
+    (tmp_path / "queries").mkdir(parents=True, exist_ok=True)
+    config = Config(discovery_paths=("src",), query_search_paths=("queries",))
     discovery = resolve_discovery_paths(config, tmp_path)
     queries = resolve_query_paths(config, tmp_path)
     assert discovery == [(tmp_path / "src").resolve()]

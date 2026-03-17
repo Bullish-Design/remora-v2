@@ -25,7 +25,7 @@ def test_default_config(monkeypatch) -> None:
     assert config.bundle_overlays["directory"] == "directory-agent"
     assert "file" not in config.bundle_overlays
     assert config.language_map[".py"] == "python"
-    assert "queries/" in config.query_paths
+    assert "queries/" in config.query_search_paths
     assert config.actor_idle_timeout_s == 300.0
 
 
@@ -43,7 +43,7 @@ def test_load_from_yaml(tmp_path: Path) -> None:
         "language_map:\n"
         "  .py: python\n"
         "  .md: markdown\n"
-        "query_paths:\n"
+        "query_search_paths:\n"
         "  - custom-queries/\n",
         encoding="utf-8",
     )
@@ -51,7 +51,7 @@ def test_load_from_yaml(tmp_path: Path) -> None:
     assert config.max_turns == 20
     assert config.model_default == "gpt-4"
     assert config.language_map[".md"] == "markdown"
-    assert config.query_paths == ("custom-queries/",)
+    assert config.query_search_paths == ("custom-queries/",)
 
 
 def test_load_virtual_agents_from_yaml(tmp_path: Path) -> None:

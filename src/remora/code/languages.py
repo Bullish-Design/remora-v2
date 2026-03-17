@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any, Protocol
 
-import tree_sitter_markdown
 import tree_sitter_python
-import tree_sitter_toml
 from tree_sitter import Language
 
 
@@ -25,26 +24,26 @@ class LanguagePlugin(Protocol):
     def resolve_node_type(self, ts_node: Any) -> str: ...
 
 
-# Special-case plugins that need custom Python logic
-ADVANCED_PLUGINS: dict[str, type] = {}
-
-
 class PythonPlugin:
+    """Language plugin for Python with class/method ancestry handling."""
+
+    def __init__(self, query_path: Path, extensions: list[str] | None = None) -> None:
+        self._query_path = query_path
+        self._extensions = list(extensions or [".py"])
+
     @property
     def name(self) -> str:
         return "python"
 
     @property
     def extensions(self) -> list[str]:
-        return [".py"]
+        return self._extensions
 
     def get_language(self) -> Language:
         return Language(tree_sitter_python.language())
 
     def get_default_query_path(self) -> Path:
-        from remora.defaults import default_queries_dir
-
-        return default_queries_dir() / "python.scm"
+        return self._query_path
 
     def resolve_node_type(self, ts_node: Any) -> str:
         if ts_node.type == "class_definition":
@@ -90,7 +89,7 @@ class GenericLanguagePlugin:
         query_path: Path,
         node_type_rules: dict[str, str] | None = None,
         default_node_type: str = "function",
-    ):
+    ) -> None:
         self._name = name
         self._extensions = extensions
         self._query_path = query_path
@@ -106,9 +105,6 @@ class GenericLanguagePlugin:
         return self._extensions
 
     def get_language(self) -> Language:
-        # Dynamic import: tree_sitter_{name}
-        import importlib
-
         mod = importlib.import_module(f"tree_sitter_{self._name}")
         return Language(mod.language())
 
@@ -119,52 +115,9 @@ class GenericLanguagePlugin:
         return self._node_type_rules.get(ts_node.type, self._default_node_type)
 
 
-# Add PythonPlugin to advanced plugins after its definition
-ADVANCED_PLUGINS["python"] = PythonPlugin
-
-
-class MarkdownPlugin:
-    @property
-    def name(self) -> str:
-        return "markdown"
-
-    @property
-    def extensions(self) -> list[str]:
-        return [".md"]
-
-    def get_language(self) -> Language:
-        return Language(tree_sitter_markdown.language())
-
-    def get_default_query_path(self) -> Path:
-        from remora.defaults import default_queries_dir
-
-        return default_queries_dir() / "markdown.scm"
-
-    def resolve_node_type(self, ts_node: Any) -> str:
-        del ts_node
-        return "section"
-
-
-class TomlPlugin:
-    @property
-    def name(self) -> str:
-        return "toml"
-
-    @property
-    def extensions(self) -> list[str]:
-        return [".toml"]
-
-    def get_language(self) -> Language:
-        return Language(tree_sitter_toml.language())
-
-    def get_default_query_path(self) -> Path:
-        from remora.defaults import default_queries_dir
-
-        return default_queries_dir() / "toml.scm"
-
-    def resolve_node_type(self, ts_node: Any) -> str:
-        del ts_node
-        return "table"
+ADVANCED_PLUGINS: dict[str, type[PythonPlugin]] = {
+    "python": PythonPlugin,
+}
 
 
 class LanguageRegistry:
@@ -201,20 +154,36 @@ class LanguageRegistry:
         """Build a registry from YAML language definitions."""
         registry = cls(plugins=[])
         for lang_name, lang_config in language_defs.items():
+            query_file = lang_config.get("query_file", f"{lang_name}.scm")
+            query_path = _resolve_query_file(query_file, query_search_paths)
+            extensions = list(lang_config.get("extensions", []))
+
             if lang_name in ADVANCED_PLUGINS:
-                plugin = ADVANCED_PLUGINS[lang_name]()
+                plugin = ADVANCED_PLUGINS[lang_name](
+                    query_path=query_path,
+                    extensions=extensions,
+                )
             else:
-                query_file = lang_config.get("query_file", f"{lang_name}.scm")
-                query_path = _resolve_query_file(query_file, query_search_paths)
                 plugin = GenericLanguagePlugin(
                     name=lang_name,
-                    extensions=lang_config.get("extensions", []),
+                    extensions=extensions,
                     query_path=query_path,
                     node_type_rules=lang_config.get("node_type_rules"),
                     default_node_type=lang_config.get("default_node_type", "function"),
                 )
             registry.register(plugin)
         return registry
+
+    @classmethod
+    def from_defaults(cls) -> LanguageRegistry:
+        """Build a registry from shipped defaults.yaml language definitions."""
+        from remora.defaults import default_queries_dir, load_defaults
+
+        loaded = load_defaults()
+        language_defs = loaded.get("languages", {}) if isinstance(loaded, dict) else {}
+        if not isinstance(language_defs, dict):
+            language_defs = {}
+        return cls.from_config(language_defs, [default_queries_dir()])
 
 
 def _resolve_query_file(filename: str, search_paths: list[Path]) -> Path:
@@ -230,8 +199,6 @@ __all__ = [
     "LanguagePlugin",
     "GenericLanguagePlugin",
     "PythonPlugin",
-    "MarkdownPlugin",
-    "TomlPlugin",
     "ADVANCED_PLUGINS",
     "LanguageRegistry",
 ]

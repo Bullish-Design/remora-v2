@@ -6,9 +6,12 @@ language_map:
   ".py": "python"
   ".md": "markdown"
   ".toml": "toml"
-query_paths:
+query_search_paths:
   - "queries/"
-bundle_root: "bundles"
+  - "@default"
+bundle_search_paths:
+  - "bundles/"
+  - "@default"
 bundle_overlays:
   function: "code-agent"
   class: "code-agent"

@@ -112,7 +112,7 @@ async def test_perf_reconciler_load_1000_files_10_nodes_each(
         discovery_paths=("src",),
         discovery_languages=("python",),
         language_map={".py": "python"},
-        query_paths=(),
+        query_search_paths=("@default",),
         workspace_root=".remora-perf-reconciler",
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)

@@ -13,7 +13,7 @@ from remora.code.discovery import discover
 from remora.code.paths import resolve_query_paths
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
-from remora.core.config import Config
+from remora.core.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
 from remora.core.events import (
     ContentChangedEvent,
     Event,
@@ -52,6 +52,7 @@ class FileReconciler:
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
         self._search_service = search_service
+        self._bundle_search_paths = resolve_bundle_search_paths(config, self._project_root)
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
         self._file_lock_generations: dict[str, int] = {}
@@ -399,18 +400,7 @@ class FileReconciler:
 
     def _resolve_bundle_template_dirs(self, bundle_name: str) -> list[Path]:
         """Resolve a bundle name to template directories using search path."""
-        from remora.defaults import default_bundles_dir
-
-        dirs = []
-        # Project-local bundle (highest priority)
-        local = Path(self._config.bundle_root) / bundle_name
-        if local.exists():
-            dirs.append(local)
-        # Package default (fallback)
-        default = default_bundles_dir() / bundle_name
-        if default.exists():
-            dirs.append(default)
-        return dirs
+        return resolve_bundle_dirs(bundle_name, self._bundle_search_paths)
 
     async def _provision_bundle(self, node_id: str, role: str | None) -> None:
         template_dirs = self._resolve_bundle_template_dirs("system")
