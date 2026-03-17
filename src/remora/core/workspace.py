@@ -203,10 +203,10 @@ class CairnWorkspaceService:
             if self._metrics is not None:
                 self._metrics.workspace_provisions_total += 1
 
-        agent_workspace = AgentWorkspace(raw_workspace, node_id)
-        self._raw_agent_workspaces[node_id] = raw_workspace
-        self._agent_workspaces[node_id] = agent_workspace
-        return agent_workspace
+            agent_workspace = AgentWorkspace(raw_workspace, node_id)
+            self._raw_agent_workspaces[node_id] = raw_workspace
+            self._agent_workspaces[node_id] = agent_workspace
+            return agent_workspace
 
     async def read_bundle_config(self, node_id: str) -> BundleConfig:
         """Read and parse the bundle config for an agent."""
@@ -237,10 +237,7 @@ class CairnWorkspaceService:
         except ValidationError:
             logger.warning("Invalid bundle config for %s, using defaults", node_id)
             return BundleConfig()
-        if (
-            config.externals_version is not None
-            and config.externals_version > EXTERNALS_VERSION
-        ):
+        if config.externals_version is not None and config.externals_version > EXTERNALS_VERSION:
             logger.warning(
                 "Bundle for %s requires externals v%d but core provides v%d",
                 node_id,
