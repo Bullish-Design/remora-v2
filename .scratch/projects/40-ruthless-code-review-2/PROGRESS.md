@@ -13,7 +13,7 @@
 - [x] Phase 4 Extract BundleConfig Model
 - [x] Phase 5 Decompose actor.py
 - [x] Phase 6 Refactor web/server.py
-- [ ] Phase 7 Fix Event System Issues
+- [x] Phase 7 Fix Event System Issues
 - [ ] Phase 8 Decompose _materialize_directories
 - [ ] Phase 9 Performance Fixes
 - [ ] Phase 10 Fix Encapsulation Violations
@@ -66,4 +66,4 @@
 - [x] Step 7.1 Fix TurnDigestedEvent.tags shadow
 - [x] Step 7.2 Fix CustomEvent payload nesting
 - [x] Step 7.3 Fix EventBus.unsubscribe ghost registrations
-- [ ] Step 7.4 Verify/commit checkpoint
+- [x] Step 7.4 Verify/commit checkpoint

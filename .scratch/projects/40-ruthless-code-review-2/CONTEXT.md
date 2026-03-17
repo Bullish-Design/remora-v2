@@ -245,3 +245,11 @@ Next action:
 
 Next action:
 - Step 7.4: run Phase 7 verification checkpoint and commit/push phase completion.
+- Step 7.4 completed:
+  - ran phase checkpoint verification:
+    - `devenv shell -- python -m pytest tests/unit/test_event_bus.py tests/unit/test_events.py -v`
+    - result: `24 passed, 1 warning`
+  - Phase 7 is complete.
+
+Next action:
+- Start Phase 8 Step 8.1 in `core/workspace.py`: extract helper methods from `_materialize_directories`.
