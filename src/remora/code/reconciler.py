@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -12,6 +13,7 @@ from remora.code.directories import DirectoryManager
 from remora.code.discovery import discover
 from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_query_paths
+from remora.code.subscriptions import SubscriptionManager
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
 from remora.core.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
@@ -45,6 +47,7 @@ class FileReconciler:
         workspace_service: CairnWorkspaceService,
         project_root: Path,
         language_registry: LanguageRegistry,
+        subscription_manager: SubscriptionManager,
         *,
         search_service: SearchServiceProtocol | None = None,
         tx: Any | None = None,
@@ -55,6 +58,7 @@ class FileReconciler:
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
         self._language_registry = language_registry
+        self._subscription_manager = subscription_manager
         self._search_service = search_service
         self._tx = tx
         self._bundle_search_paths = resolve_bundle_search_paths(config, self._project_root)
@@ -74,7 +78,7 @@ class FileReconciler:
             workspace_service,
             project_root,
             remove_node=self._remove_node,
-            register_subscriptions=self._register_subscriptions,
+            register_subscriptions=self._subscription_manager.register_for_node,
             provision_bundle=self._provision_bundle,
         )
         self._virtual_agent_manager = VirtualAgentManager(
@@ -82,7 +86,7 @@ class FileReconciler:
             node_store,
             event_store,
             remove_node=self._remove_node,
-            register_subscriptions=self._register_subscriptions,
+            register_subscriptions=self._subscription_manager.register_for_node,
             provision_bundle=self._provision_bundle,
         )
 
@@ -258,7 +262,7 @@ class FileReconciler:
 
                 for node_id in additions:
                     node = projected_by_id[node_id]
-                    await self._register_subscriptions(node)
+                    await self._subscription_manager.register_for_node(node)
                     await self._event_store.append(
                         NodeDiscoveredEvent(
                             node_id=node.node_id,
@@ -273,7 +277,7 @@ class FileReconciler:
                     old_hash = old_hashes.get(node_id)
                     new_hash = node.source_hash
                     if old_hash is not None and old_hash != new_hash:
-                        await self._register_subscriptions(node)
+                        await self._subscription_manager.register_for_node(node)
                         await self._event_store.append(
                             NodeChangedEvent(
                                 node_id=node_id,
@@ -348,62 +352,6 @@ class FileReconciler:
                 file_path=node.file_path,
                 name=node.name,
             )
-        )
-
-    async def _register_subscriptions(
-        self,
-        node: Node,
-        *,
-        virtual_subscriptions: tuple[SubscriptionPattern, ...] = (),
-    ) -> None:
-        await self._event_store.subscriptions.unregister_by_agent(node.node_id)
-        await self._event_store.subscriptions.register(
-            node.node_id,
-            SubscriptionPattern(to_agent=node.node_id),
-        )
-
-        if node.node_type == NodeType.VIRTUAL:
-            for pattern in virtual_subscriptions:
-                await self._event_store.subscriptions.register(node.node_id, pattern)
-            return
-
-        if node.node_type == NodeType.DIRECTORY:
-            subtree_glob = "**" if node.file_path == "." else f"**/{node.file_path}/**"
-            await self._event_store.subscriptions.register(
-                node.node_id,
-                SubscriptionPattern(
-                    event_types=[EventType.NODE_CHANGED],
-                    path_glob=subtree_glob,
-                ),
-            )
-            await self._event_store.subscriptions.register(
-                node.node_id,
-                SubscriptionPattern(
-                    event_types=[EventType.CONTENT_CHANGED],
-                    path_glob=subtree_glob,
-                ),
-            )
-            return
-
-        if self._workspace_service.has_workspace(node.node_id):
-            workspace = await self._workspace_service.get_agent_workspace(node.node_id)
-            self_reflect_config = await workspace.kv_get("_system/self_reflect")
-            if isinstance(self_reflect_config, dict) and self_reflect_config.get("enabled"):
-                await self._event_store.subscriptions.register(
-                    node.node_id,
-                    SubscriptionPattern(
-                        event_types=[EventType.AGENT_COMPLETE],
-                        from_agents=[node.node_id],
-                        tags=["primary"],
-                    ),
-                )
-
-        await self._event_store.subscriptions.register(
-            node.node_id,
-            SubscriptionPattern(
-                event_types=[EventType.CONTENT_CHANGED],
-                path_glob=node.file_path,
-            ),
         )
 
     def _resolve_bundle_template_dirs(self, bundle_name: str) -> list[Path]:

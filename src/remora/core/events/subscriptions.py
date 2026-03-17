@@ -71,7 +71,7 @@ class SubscriptionRegistry:
     async def _maybe_commit(self) -> None:
         if self._tx is not None and self._tx.in_batch:
             return
-        await self._maybe_commit()
+        await self._db.commit()
 
     async def create_tables(self) -> None:
         """Create subscription storage tables."""

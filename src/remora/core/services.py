@@ -9,6 +9,7 @@ import aiosqlite
 
 from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
+from remora.code.subscriptions import SubscriptionManager
 from remora.core.config import Config, resolve_query_search_paths
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.graph import NodeStore
@@ -62,6 +63,8 @@ class RuntimeServices:
             self.search_service = SearchService(self.config.search, self.project_root)
             await self.search_service.initialize()
 
+        subscription_manager = SubscriptionManager(self.event_store, self.workspace_service)
+
         self.reconciler = FileReconciler(
             self.config,
             self.node_store,
@@ -69,6 +72,7 @@ class RuntimeServices:
             self.workspace_service,
             self.project_root,
             self.language_registry,
+            subscription_manager,
             search_service=self.search_service,
             tx=self.tx,
         )
