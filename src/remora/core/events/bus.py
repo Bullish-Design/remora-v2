@@ -34,9 +34,18 @@ class EventBus:
     ) -> None:
         tasks: list[asyncio.Task[Any]] = []
         for handler in handlers:
-            result = handler(event)
-            if asyncio.iscoroutine(result):
-                tasks.append(asyncio.create_task(result))
+            if asyncio.iscoroutinefunction(handler):
+                tasks.append(asyncio.create_task(handler(event)))
+                continue
+            try:
+                handler(event)
+            except Exception as exc:  # noqa: BLE001 - isolate failing handlers
+                logger.exception(
+                    "Event handler failed for %s: %s",
+                    event.event_type,
+                    exc,
+                    exc_info=exc,
+                )
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:

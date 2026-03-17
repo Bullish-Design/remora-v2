@@ -160,7 +160,12 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - preserved existing `failed` guard semantics for nested batch safety.
   - targeted verification:
     - `devenv shell -- pytest tests/unit/test_graph.py -q` (`18 passed`).
+- Completed section 5.4 (EventBus coroutine dispatch fix):
+  - updated `src/remora/core/events/bus.py` `_dispatch_handlers` to use `asyncio.iscoroutinefunction(handler)` instead of invoking first and checking result.
+  - sync handlers now run inline with isolated exception logging; async handlers are tasked and gathered as before.
+  - targeted verification:
+    - `devenv shell -- pytest tests/unit/test_event_bus.py -q` (`9 passed`).
 
 ## Next Action
-- Commit and push section 5.3 checkpoint.
-- Begin section 5.4 implementation (EventBus coroutine dispatch fix).
+- Commit and push section 5.4 checkpoint.
+- Begin section 5.5 implementation (misc polish set).

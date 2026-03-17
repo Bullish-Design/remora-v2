@@ -38,5 +38,5 @@
 - [x] 5.1 Batch Event Commits
 - [x] 5.2 Clean Up Grail Caching
 - [x] 5.3 Fix NodeStore.batch() Transaction Management
-- [ ] 5.4 Use asyncio.iscoroutinefunction in EventBus
+- [x] 5.4 Use asyncio.iscoroutinefunction in EventBus
 - [ ] 5.5 Miscellaneous Polish
