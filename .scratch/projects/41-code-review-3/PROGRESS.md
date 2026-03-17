@@ -17,7 +17,7 @@
 ### Phase 1
 - [x] 1.1 Unify the Node Model (CSTNode -> Node)
 - [x] 1.2 Remove Test-Driven Production Indirection
-- [ ] 1.3 Make `_expand_env_vars` Public
+- [x] 1.3 Make `_expand_env_vars` Public
 - [ ] 1.4 Fix Config Silent Drops
 - [ ] 1.5 Remove Dead Config
 - [ ] 1.6 Add `project_root` Property to Workspace Service

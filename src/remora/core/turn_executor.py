@@ -11,7 +11,7 @@ from fsdantic import FileNotFoundError as FsdFileNotFoundError
 from pydantic import ValidationError
 from structured_agents import Message
 
-from remora.core.config import BundleConfig, Config, _expand_env_vars
+from remora.core.config import BundleConfig, Config, expand_env_vars
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
 from remora.core.externals import TurnContext
@@ -404,7 +404,7 @@ class AgentTurnExecutor:
         if not isinstance(loaded, dict):
             return BundleConfig()
 
-        expanded = _expand_env_vars(loaded)
+        expanded = expand_env_vars(loaded)
         if not isinstance(expanded, dict):
             return BundleConfig()
 

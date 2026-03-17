@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from remora.core.config import Config, SearchConfig, _expand_env_vars, _find_config_file, load_config
+from remora.core.config import Config, SearchConfig, expand_env_vars, _find_config_file, load_config
 
 
 def test_default_config(monkeypatch) -> None:
@@ -71,7 +71,7 @@ def test_env_var_expansion(monkeypatch) -> None:
         "model_api_key": "${MISSING_KEY:-default-key}",
         "nested": ["${MISSING_2:-x}", {"v": "${TEST_MODEL:-y}"}],
     }
-    expanded = _expand_env_vars(data)
+    expanded = expand_env_vars(data)
     assert expanded["model_default"] == "gpt-5"
     assert expanded["model_api_key"] == "default-key"
     assert expanded["nested"] == ["x", {"v": "gpt-5"}]

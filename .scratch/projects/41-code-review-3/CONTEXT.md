@@ -29,7 +29,17 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - Red phase captured with 18 failing tests after monkeypatch path migration and before code cleanup.
   - `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_discovery.py tests/integration/test_e2e.py -q` passed.
   - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`357 passed, 8 skipped`).
+- Completed section 1.3 (make env expansion API public):
+  - renamed `_expand_string` -> `expand_string`.
+  - renamed `_expand_env_vars` -> `expand_env_vars`.
+  - updated `load_config` and `turn_executor` call sites/imports.
+  - exported both public helpers in `core.config.__all__`.
+  - updated config unit tests to import/use `expand_env_vars`.
+- Verification for section 1.3:
+  - Red phase captured by import error after switching tests/callers before renaming in `config.py`.
+  - `devenv shell -- pytest tests/unit/test_config.py tests/unit/test_actor.py -q` passed.
+  - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`357 passed, 8 skipped`).
 
 ## Next Action
-- Commit and push section 1.2 checkpoint.
-- Begin section 1.3 implementation (`_expand_env_vars` -> `expand_env_vars`).
+- Commit and push section 1.3 checkpoint.
+- Begin section 1.4 implementation (strict prompt key validation in bundle config).

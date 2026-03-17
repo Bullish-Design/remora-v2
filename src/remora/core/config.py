@@ -243,7 +243,7 @@ class Config(BaseSettings):
         return self.bundle_overlays.get(normalized_type)
 
 
-def _expand_string(value: str) -> str:
+def expand_string(value: str) -> str:
     """Expand ${VAR:-default} shell-style values."""
 
     def replace(match: re.Match[str]) -> str:
@@ -255,16 +255,16 @@ def _expand_string(value: str) -> str:
     return _ENV_VAR_PATTERN.sub(replace, value)
 
 
-def _expand_env_vars(data: Any) -> Any:
+def expand_env_vars(data: Any) -> Any:
     """Recursively expand shell-style env vars in YAML-loaded objects."""
     if isinstance(data, dict):
-        return {key: _expand_env_vars(value) for key, value in data.items()}
+        return {key: expand_env_vars(value) for key, value in data.items()}
     if isinstance(data, list):
-        return [_expand_env_vars(value) for value in data]
+        return [expand_env_vars(value) for value in data]
     if isinstance(data, tuple):
-        return tuple(_expand_env_vars(value) for value in data)
+        return tuple(expand_env_vars(value) for value in data)
     if isinstance(data, str):
-        return _expand_string(data)
+        return expand_string(data)
     return data
 
 
@@ -288,7 +288,7 @@ def load_config(path: Path | None = None) -> Config:
         return Config()
 
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    return Config(**_expand_env_vars(data))
+    return Config(**expand_env_vars(data))
 
 
 __all__ = [
@@ -299,5 +299,7 @@ __all__ = [
     "VirtualSubscriptionConfig",
     "VirtualAgentConfig",
     "Config",
+    "expand_env_vars",
+    "expand_string",
     "load_config",
 ]
