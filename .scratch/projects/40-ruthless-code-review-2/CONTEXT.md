@@ -296,3 +296,10 @@ Next action:
 
 Next action:
 - Step 9.3: add `NodeStore.get_nodes_by_ids` to enable batched node lookups for projections/reconciler.
+- Step 9.3 completed:
+  - added `NodeStore.get_nodes_by_ids(node_ids: list[str])` for batched node fetches
+  - added unit test coverage in `tests/unit/test_graph.py`
+  - verification: `devenv shell -- python -m pytest tests/unit/test_graph.py -q` passed (`17 passed`)
+
+Next action:
+- Step 9.4: refactor `code/projections.py` to use `get_nodes_by_ids` and remove per-node lookup N+1 behavior.

@@ -114,6 +114,18 @@ class NodeStore:
         row = await cursor.fetchone()
         return None if row is None else Node.from_row(row)
 
+    async def get_nodes_by_ids(self, node_ids: list[str]) -> list[Node]:
+        """Fetch multiple nodes by ID in a single query."""
+        if not node_ids:
+            return []
+        placeholders = ", ".join("?" for _ in node_ids)
+        cursor = await self._db.execute(
+            f"SELECT * FROM nodes WHERE node_id IN ({placeholders})",
+            tuple(node_ids),
+        )
+        rows = await cursor.fetchall()
+        return [Node.from_row(row) for row in rows]
+
     async def list_nodes(
         self,
         node_type: NodeType | None = None,

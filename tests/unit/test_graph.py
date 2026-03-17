@@ -46,6 +46,17 @@ async def test_nodestore_list_with_filters(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_nodestore_get_nodes_by_ids(db) -> None:
+    store = NodeStore(db)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+
+    nodes = await store.get_nodes_by_ids(["src/app.py::b", "src/app.py::a", "missing"])
+    assert {node.node_id for node in nodes} == {"src/app.py::a", "src/app.py::b"}
+
+
+@pytest.mark.asyncio
 async def test_nodestore_delete(db) -> None:
     store = NodeStore(db)
     await store.create_tables()
