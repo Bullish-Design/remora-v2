@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
+
+import tree_sitter_markdown
 
 from remora.code.languages import GenericLanguagePlugin, LanguageRegistry, PythonPlugin
 from remora.defaults import default_queries_dir
@@ -44,3 +47,37 @@ def test_generic_language_plugin_node_type_resolution() -> None:
     )
     assert markdown.resolve_node_type(make_ts_node("heading")) == "section"
     assert toml.resolve_node_type(make_ts_node("table")) == "table"
+
+
+def test_language_registry_supports_custom_language_from_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    query_file = tmp_path / "custom.scm"
+    query_file.write_text("(heading) @node\n", encoding="utf-8")
+
+    class _FakeModule:
+        @staticmethod
+        def language():  # noqa: ANN001
+            return tree_sitter_markdown.language()
+
+    monkeypatch.setattr(
+        "remora.code.languages.importlib.import_module",
+        lambda name: _FakeModule if name == "tree_sitter_custom" else None,
+    )
+
+    registry = LanguageRegistry.from_config(
+        {
+            "custom": {
+                "extensions": [".custom"],
+                "query_file": "custom.scm",
+                "default_node_type": "heading",
+            }
+        },
+        [tmp_path],
+    )
+    plugin = registry.get_by_extension(".custom")
+    assert plugin is not None
+    assert plugin.name == "custom"
+    assert plugin.resolve_node_type(make_ts_node("anything")) == "heading"
+    assert plugin.get_language() is not None

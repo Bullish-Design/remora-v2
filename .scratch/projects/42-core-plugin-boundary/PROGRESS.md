@@ -53,4 +53,11 @@
 - [x] Kept search dependency optional in `pyproject.toml`.
 
 ### Phase 8: Verification
-- [ ] Pending after implementation completion.
+- [x] Full suite pass: `pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q`
+- [x] Result: `374 passed, 8 skipped`.
+- [x] Verified removal of old `bundle_root` config usage from source/tests.
+- [x] Added custom-language registry test proving config-driven language extensibility.
+- [x] Added externals contract doc and bundle version metadata.
+
+## Project status
+- [x] Guide implementation complete through all phases.

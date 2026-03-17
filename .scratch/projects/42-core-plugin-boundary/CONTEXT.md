@@ -36,7 +36,11 @@
   - Search/unit service tests updated and passing.
 
 ## Remaining gaps
-- Final Phase 8 verification checklist and freeze validation.
+- None.
 
 ## Next action
-Run final verification pass (Phase 8), then close project 42.
+Project 42 is complete. Await next project selection.
+
+## Final verification snapshot
+- Full suite command: `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q`
+- Result: `374 passed, 8 skipped, 3 warnings`
