@@ -102,7 +102,32 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
     - failed with `ModuleNotFoundError` for `remora.code.watcher|directories|virtual_agents` before implementation.
   - green phase passed:
     - `devenv shell -- pytest tests/unit/test_watcher.py tests/unit/test_directories.py tests/unit/test_virtual_agents.py tests/unit/test_reconciler.py -q` (`26 passed`).
+- Completed section 3.2 (web server decomposition):
+  - extracted shared deps to `src/remora/web/deps.py` (`WebDeps`, request dep accessor, chat limiter).
+  - extracted CSRF logic to `src/remora/web/middleware.py`.
+  - extracted proposal path/proposal lookup helpers to `src/remora/web/paths.py`.
+  - extracted SSE streaming to `src/remora/web/sse.py`.
+  - split route handlers into focused modules under `src/remora/web/routes/`:
+    - `nodes.py`, `chat.py`, `events.py`, `proposals.py`, `search.py`, `health.py`, `cursor.py`.
+  - slimmed `src/remora/web/server.py` to app factory/lifespan/root index route composition.
+  - implemented lazy index HTML loading in `server.py` (`_get_index_html` cache).
+  - added decomposition tests in `tests/unit/test_web_decomposition.py`.
+- Verification for section 3.2:
+  - red phase captured:
+    - `devenv shell -- pytest tests/unit/test_web_decomposition.py -q`
+    - failed with `ModuleNotFoundError: remora.web.deps` before extraction.
+  - green phase passed:
+    - `devenv shell -- pytest tests/unit/test_web_decomposition.py tests/unit/test_web_server.py -q` (`47 passed`).
+- Completed section 4.1 (turn executor simplification):
+  - moved `_read_bundle_config` and `_build_companion_context` into `CairnWorkspaceService.read_bundle_config` and `AgentWorkspace.build_companion_context`.
+  - slimmed `AgentTurnExecutor` to call the workspace helpers and removed `_resolve_maybe_awaitable`.
+  - updated `tests/unit/test_actor.py` to invoke the workspace helpers and to patch `discover_tools` with an async helper.
+  - introduced `_empty_tools` helper to keep tests compatible with the now-async `discover_tools`.
+  - targeted verification:
+    - red phase captured by `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_workspace.py -q` failing due to missing methods.
+    - green phase passed with same command (`57 passed, 1 warning`).
 
 ## Next Action
-- Commit and push section 3.1 checkpoint.
-- Begin section 3.2 implementation (web server decomposition).
+- Commit and push section 3.2 checkpoint (Phase 3 complete).
+- Commit and push section 4.1 checkpoint.
+- Begin section 4.2 implementation (externals decomposition).

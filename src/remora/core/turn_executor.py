@@ -6,12 +6,9 @@ import asyncio
 import logging
 from typing import Any
 
-import yaml
-from fsdantic import FileNotFoundError as FsdFileNotFoundError
-from pydantic import ValidationError
 from structured_agents import Message
 
-from remora.core.config import BundleConfig, Config, expand_env_vars
+from remora.core.config import BundleConfig, Config
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
 from remora.core.externals import TurnContext
@@ -97,7 +94,7 @@ class AgentTurnExecutor:
                     and "primary" in getattr(trigger.event, "tags", ())
                 )
                 if not is_reflection_turn:
-                    companion_context = await self._build_companion_context(workspace)
+                    companion_context = await workspace.build_companion_context()
                     if companion_context:
                         system_prompt = f"{system_prompt}\n{companion_context}"
 
@@ -195,7 +192,7 @@ class AgentTurnExecutor:
         )
 
         workspace = await self._workspace_service.get_agent_workspace(node_id)
-        bundle_config = await self._read_bundle_config(workspace)
+        bundle_config = await self._workspace_service.read_bundle_config(node_id)
         return node, workspace, bundle_config
 
     async def _prepare_turn_context(
@@ -215,7 +212,7 @@ class AgentTurnExecutor:
             search_service=self._search_service,
         )
         capabilities = context.to_capabilities_dict()
-        tools = await self._resolve_maybe_awaitable(discover_tools(workspace, capabilities))
+        tools = await discover_tools(workspace, capabilities)
         return context, tools
 
     async def _run_kernel(
@@ -326,101 +323,6 @@ class AgentTurnExecutor:
             turn_log.exception("Failed to reset node status")
         self._trigger_policy.release_depth(depth_key)
 
-    @staticmethod
-    async def _resolve_maybe_awaitable(value: Any) -> Any:
-        if asyncio.iscoroutine(value):
-            return await value
-        return value
-
-    @staticmethod
-    async def _build_companion_context(workspace: AgentWorkspace) -> str:
-        """Build a compact companion-memory context block from workspace KV."""
-        parts: list[str] = []
-
-        reflections = await workspace.kv_get("companion/reflections")
-        if isinstance(reflections, list) and reflections:
-            reflection_lines: list[str] = []
-            for entry in reflections[-5:]:
-                if not isinstance(entry, dict):
-                    continue
-                insight = entry.get("insight", "")
-                if isinstance(insight, str) and insight.strip():
-                    reflection_lines.append(f"- {insight.strip()}")
-            if reflection_lines:
-                parts.append("## Prior Reflections")
-                parts.extend(reflection_lines)
-
-        chat_index = await workspace.kv_get("companion/chat_index")
-        if isinstance(chat_index, list) and chat_index:
-            chat_lines: list[str] = []
-            for entry in chat_index[-5:]:
-                if not isinstance(entry, dict):
-                    continue
-                summary = entry.get("summary", "")
-                if not isinstance(summary, str) or not summary.strip():
-                    continue
-                raw_tags = entry.get("tags", [])
-                tags_source = raw_tags if isinstance(raw_tags, (list, tuple)) else []
-                tags = [str(tag).strip() for tag in tags_source if str(tag).strip()]
-                tag_suffix = f" [{', '.join(tags)}]" if tags else ""
-                chat_lines.append(f"- {summary.strip()}{tag_suffix}")
-            if chat_lines:
-                parts.append("## Recent Activity")
-                parts.extend(chat_lines)
-
-        links = await workspace.kv_get("companion/links")
-        if isinstance(links, list) and links:
-            link_lines: list[str] = []
-            for entry in links[-10:]:
-                if not isinstance(entry, dict):
-                    continue
-                target = entry.get("target", "")
-                if not isinstance(target, str) or not target.strip():
-                    continue
-                relationship = entry.get("relationship", "related")
-                relation_text = (
-                    relationship.strip()
-                    if isinstance(relationship, str) and relationship.strip()
-                    else "related"
-                )
-                link_lines.append(f"- {relation_text}: {target.strip()}")
-            if link_lines:
-                parts.append("## Known Relationships")
-                parts.extend(link_lines)
-
-        if not parts:
-            return ""
-        return "\n## Companion Memory\n" + "\n".join(parts)
-
-    @staticmethod
-    async def _read_bundle_config(workspace: AgentWorkspace) -> BundleConfig:
-        try:
-            text = await workspace.read("_bundle/bundle.yaml")
-        except (FileNotFoundError, FsdFileNotFoundError):
-            return BundleConfig()
-        try:
-            loaded = yaml.safe_load(text) or {}
-        except yaml.YAMLError:
-            logger.warning("Ignoring malformed _bundle/bundle.yaml")
-            return BundleConfig()
-        if not isinstance(loaded, dict):
-            return BundleConfig()
-
-        expanded = expand_env_vars(loaded)
-        if not isinstance(expanded, dict):
-            return BundleConfig()
-
-        # Preserve previous behavior: disabled self-reflect should be treated as absent.
-        self_reflect = expanded.get("self_reflect")
-        if isinstance(self_reflect, dict) and not self_reflect.get("enabled"):
-            expanded = dict(expanded)
-            expanded.pop("self_reflect", None)
-
-        try:
-            return BundleConfig.model_validate(expanded)
-        except ValidationError:
-            logger.warning("Invalid bundle config, using defaults")
-            return BundleConfig()
 
 
 __all__ = ["AgentTurnExecutor", "_turn_logger"]

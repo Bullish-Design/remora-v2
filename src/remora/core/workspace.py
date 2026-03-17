@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 from cairn.runtime import workspace_manager as cairn_wm
-from fsdantic import ViewQuery, Workspace
+from fsdantic import FileNotFoundError as FsdFileNotFoundError, ViewQuery, Workspace
+from pydantic import ValidationError
 
-from remora.core.config import Config
+from remora.core.config import BundleConfig, Config, expand_env_vars
 from remora.core.metrics import Metrics
+
+logger = logging.getLogger(__name__)
 
 
 class AgentWorkspace:
@@ -97,6 +101,65 @@ class AgentWorkspace:
                 keys.append(str(key))
         return sorted(keys)
 
+    async def build_companion_context(self) -> str:
+        """Build a compact companion-memory context block from workspace KV."""
+        parts: list[str] = []
+
+        reflections = await self.kv_get("companion/reflections")
+        if isinstance(reflections, list) and reflections:
+            reflection_lines: list[str] = []
+            for entry in reflections[-5:]:
+                if not isinstance(entry, dict):
+                    continue
+                insight = entry.get("insight", "")
+                if isinstance(insight, str) and insight.strip():
+                    reflection_lines.append(f"- {insight.strip()}")
+            if reflection_lines:
+                parts.append("## Prior Reflections")
+                parts.extend(reflection_lines)
+
+        chat_index = await self.kv_get("companion/chat_index")
+        if isinstance(chat_index, list) and chat_index:
+            chat_lines: list[str] = []
+            for entry in chat_index[-5:]:
+                if not isinstance(entry, dict):
+                    continue
+                summary = entry.get("summary", "")
+                if not isinstance(summary, str) or not summary.strip():
+                    continue
+                raw_tags = entry.get("tags", [])
+                tags_source = raw_tags if isinstance(raw_tags, (list, tuple)) else []
+                tags = [str(tag).strip() for tag in tags_source if str(tag).strip()]
+                tag_suffix = f" [{', '.join(tags)}]" if tags else ""
+                chat_lines.append(f"- {summary.strip()}{tag_suffix}")
+            if chat_lines:
+                parts.append("## Recent Activity")
+                parts.extend(chat_lines)
+
+        links = await self.kv_get("companion/links")
+        if isinstance(links, list) and links:
+            link_lines: list[str] = []
+            for entry in links[-10:]:
+                if not isinstance(entry, dict):
+                    continue
+                target = entry.get("target", "")
+                if not isinstance(target, str) or not target.strip():
+                    continue
+                relationship = entry.get("relationship", "related")
+                relation_text = (
+                    relationship.strip()
+                    if isinstance(relationship, str) and relationship.strip()
+                    else "related"
+                )
+                link_lines.append(f"- {relation_text}: {target.strip()}")
+            if link_lines:
+                parts.append("## Known Relationships")
+                parts.extend(link_lines)
+
+        if not parts:
+            return ""
+        return "\n## Companion Memory\n" + "\n".join(parts)
+
 
 class CairnWorkspaceService:
     """Manages per-agent Cairn workspaces."""
@@ -138,10 +201,40 @@ class CairnWorkspaceService:
             if self._metrics is not None:
                 self._metrics.workspace_provisions_total += 1
 
-            agent_workspace = AgentWorkspace(raw_workspace, node_id)
-            self._raw_agent_workspaces[node_id] = raw_workspace
-            self._agent_workspaces[node_id] = agent_workspace
-            return agent_workspace
+        agent_workspace = AgentWorkspace(raw_workspace, node_id)
+        self._raw_agent_workspaces[node_id] = raw_workspace
+        self._agent_workspaces[node_id] = agent_workspace
+        return agent_workspace
+
+    async def read_bundle_config(self, node_id: str) -> BundleConfig:
+        """Read and parse the bundle config for an agent."""
+        workspace = await self.get_agent_workspace(node_id)
+        try:
+            text = await workspace.read("_bundle/bundle.yaml")
+        except (FileNotFoundError, FsdFileNotFoundError):
+            return BundleConfig()
+        try:
+            loaded = yaml.safe_load(text) or {}
+        except yaml.YAMLError:
+            logger.warning("Ignoring malformed _bundle/bundle.yaml for %s", node_id)
+            return BundleConfig()
+        if not isinstance(loaded, dict):
+            return BundleConfig()
+
+        expanded = expand_env_vars(loaded)
+        if not isinstance(expanded, dict):
+            return BundleConfig()
+
+        self_reflect = expanded.get("self_reflect")
+        if isinstance(self_reflect, dict) and not self_reflect.get("enabled"):
+            expanded = dict(expanded)
+            expanded.pop("self_reflect", None)
+
+        try:
+            return BundleConfig.model_validate(expanded)
+        except ValidationError:
+            logger.warning("Invalid bundle config for %s, using defaults", node_id)
+            return BundleConfig()
 
     async def provision_bundle(self, node_id: str, template_dirs: list[Path]) -> None:
         """Copy bundle.yaml and tool scripts from ordered template directories."""

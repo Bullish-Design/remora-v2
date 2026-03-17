@@ -8,7 +8,7 @@
 ## Phase Tracking
 - [x] Phase 1 Model Cleanup & Quick Wins
 - [x] Phase 2 Bug Fixes & Type Safety
-- [ ] Phase 3 Structural Decomposition
+- [x] Phase 3 Structural Decomposition
 - [ ] Phase 4 Turn Pipeline Simplification
 - [ ] Phase 5 Performance & Polish
 
@@ -28,10 +28,10 @@
 
 ### Phase 3
 - [x] 3.1 Decompose the Reconciler
-- [ ] 3.2 Decompose the Web Server
+- [x] 3.2 Decompose the Web Server
 
 ### Phase 4
-- [ ] 4.1 Simplify the Turn Executor
+- [x] 4.1 Simplify the Turn Executor
 - [ ] 4.2 Decompose the Externals God-Object
 
 ### Phase 5

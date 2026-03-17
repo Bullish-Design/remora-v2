@@ -43,6 +43,10 @@ from remora.core.types import EventType, NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
 
+async def _empty_tools(*_args, **_kwargs):  # noqa: ANN001
+    return []
+
+
 @pytest_asyncio.fixture
 async def outbox_env(tmp_path: Path):
     db = await open_database(tmp_path / "outbox.db")
@@ -232,7 +236,7 @@ async def test_actor_processes_inbox_message(actor_env, monkeypatch) -> None:
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -270,7 +274,7 @@ async def test_actor_emits_primary_tag_on_normal_completion(actor_env, monkeypat
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -307,7 +311,7 @@ async def test_actor_emits_reflection_tag_on_self_completion_trigger(actor_env, 
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     trigger_event = AgentCompleteEvent(
@@ -350,7 +354,7 @@ async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) ->
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -433,7 +437,7 @@ def test_prompt_builder_reflection_tag_must_be_primary() -> None:
 @pytest.mark.asyncio
 async def test_build_companion_context_empty(actor_env) -> None:
     workspace = await actor_env["workspace_service"].get_agent_workspace("src/app.py::companion-empty")
-    result = await AgentTurnExecutor._build_companion_context(workspace)
+    result = await workspace.build_companion_context()
     assert result == ""
 
 
@@ -453,7 +457,7 @@ async def test_build_companion_context_with_data(actor_env) -> None:
         [{"target": "test_validate", "relationship": "tested_by", "timestamp": 1.0}],
     )
 
-    result = await AgentTurnExecutor._build_companion_context(workspace)
+    result = await workspace.build_companion_context()
     assert "Companion Memory" in result
     assert "Unicode domains" in result
     assert "email validation" in result
@@ -484,7 +488,7 @@ async def test_companion_context_injected_for_primary_turn(actor_env, monkeypatc
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -538,7 +542,7 @@ async def test_companion_context_not_injected_for_reflection_turn(actor_env, mon
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -576,13 +580,14 @@ async def test_actor_missing_node(actor_env) -> None:
 @pytest.mark.asyncio
 async def test_read_bundle_config_expands_model_from_env_default(actor_env, monkeypatch) -> None:
     monkeypatch.delenv("REMORA_MODEL", raising=False)
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::f")
+    node_id = "src/config.py::f"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write(
         "_bundle/bundle.yaml",
         'model: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"\n',
     )
 
-    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
 
 
@@ -592,35 +597,39 @@ async def test_read_bundle_config_allows_env_override_for_placeholder(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("REMORA_MODEL", "my-org/custom-model")
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::g")
+    node_id = "src/config.py::g"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write("_bundle/bundle.yaml", 'model: "${REMORA_MODEL:-Qwen/Qwen3-4B}"\n')
 
-    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.model == "my-org/custom-model"
 
 
 @pytest.mark.asyncio
 async def test_read_bundle_config_literal_model_overrides_env(actor_env, monkeypatch) -> None:
     monkeypatch.setenv("REMORA_MODEL", "my-org/custom-model")
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::h")
+    node_id = "src/config.py::h"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write("_bundle/bundle.yaml", "model: pinned/model\n")
 
-    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.model == "pinned/model"
 
 
 @pytest.mark.asyncio
 async def test_read_bundle_config_malformed_yaml_returns_empty(actor_env) -> None:
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::bad")
+    node_id = "src/config.py::bad"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write("_bundle/bundle.yaml", "system_prompt: [oops\n")
 
-    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config == BundleConfig()
 
 
 @pytest.mark.asyncio
 async def test_read_bundle_config_parses_self_reflect(actor_env) -> None:
-    workspace = await actor_env["workspace_service"].get_agent_workspace("src/config.py::self-reflect")
+    node_id = "src/config.py::self-reflect"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write(
         "_bundle/bundle.yaml",
         (
@@ -633,7 +642,7 @@ async def test_read_bundle_config_parses_self_reflect(actor_env) -> None:
         ),
     )
 
-    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.self_reflect is not None
     assert bundle_config.self_reflect.enabled is True
     assert bundle_config.self_reflect.model == "Qwen/Qwen3-1.7B"
@@ -643,9 +652,8 @@ async def test_read_bundle_config_parses_self_reflect(actor_env) -> None:
 
 @pytest.mark.asyncio
 async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> None:
-    workspace = await actor_env["workspace_service"].get_agent_workspace(
-        "src/config.py::self-reflect-disabled"
-    )
+    node_id = "src/config.py::self-reflect-disabled"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write(
         "_bundle/bundle.yaml",
         (
@@ -655,7 +663,7 @@ async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> No
         ),
     )
 
-    bundle_config = await AgentTurnExecutor._read_bundle_config(workspace)
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.self_reflect is None
 
 
@@ -682,7 +690,7 @@ async def test_actor_reload_reads_updated_bundle_config_each_turn(actor_env, mon
         return MockKernel()
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", capture_kernel)
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     outbox = Outbox(actor_id=node.node_id, event_store=env["event_store"], correlation_id="corr-a")
@@ -721,7 +729,7 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -767,7 +775,7 @@ async def test_turn_logs_include_correlation_id(actor_env, monkeypatch, caplog) 
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     trigger = Trigger(
@@ -814,7 +822,7 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -863,7 +871,7 @@ async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) 
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: MockKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -908,7 +916,7 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(
         raise ConnectionError("connection refused")
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", fail_create_kernel)
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -965,7 +973,7 @@ async def test_actor_execute_turn_retries_kernel_once(actor_env, monkeypatch) ->
         return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: RetryKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
     monkeypatch.setattr("remora.core.turn_executor.asyncio.sleep", _no_sleep)
 
     actor = _make_actor(env, node.node_id)
@@ -1026,7 +1034,7 @@ async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypat
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: BlockingKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     shared_semaphore = asyncio.Semaphore(1)
     actor_a = Actor(
@@ -1139,7 +1147,7 @@ async def test_actor_emits_kernel_observability_events(actor_env, monkeypatch) -
         return ObservedKernel(kwargs["observer"])
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", capture_kernel)
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     outbox = Outbox(
@@ -1194,7 +1202,7 @@ async def test_actor_chat_mode_injects_prompt(actor_env, monkeypatch) -> None:
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = AgentMessageEvent(
@@ -1246,7 +1254,7 @@ async def test_actor_reactive_mode_injects_prompt(actor_env, monkeypatch) -> Non
             return None
 
     monkeypatch.setattr("remora.core.turn_executor.create_kernel", lambda **_kwargs: CapturingKernel())
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr("remora.core.turn_executor.discover_tools", _empty_tools)
 
     actor = _make_actor(env, node.node_id)
     event = ContentChangedEvent(path=node.file_path, change_type="modified")
