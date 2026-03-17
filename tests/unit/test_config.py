@@ -22,6 +22,7 @@ def test_default_config(monkeypatch) -> None:
     assert config.max_turns == 8
     assert config.bundle_overlays["function"] == "code-agent"
     assert config.bundle_overlays["directory"] == "directory-agent"
+    assert "file" not in config.bundle_overlays
     assert config.language_map[".py"] == "python"
     assert "queries/" in config.query_paths
 

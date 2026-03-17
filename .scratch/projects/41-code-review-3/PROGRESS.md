@@ -19,7 +19,7 @@
 - [x] 1.2 Remove Test-Driven Production Indirection
 - [x] 1.3 Make `_expand_env_vars` Public
 - [x] 1.4 Fix Config Silent Drops
-- [ ] 1.5 Remove Dead Config
+- [x] 1.5 Remove Dead Config
 - [ ] 1.6 Add `project_root` Property to Workspace Service
 
 ### Phase 2

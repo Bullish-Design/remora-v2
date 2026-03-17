@@ -47,7 +47,14 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - Red phase captured with failing test (`DID NOT RAISE`) before validator change.
   - `devenv shell -- pytest tests/unit/test_config.py -q` passed.
   - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`358 passed, 8 skipped`).
+- Completed section 1.5 (remove dead config):
+  - removed `"file": "code-agent"` from default `Config.bundle_overlays`.
+  - updated default-config test to assert `"file"` is not present.
+- Verification for section 1.5:
+  - Red phase captured with failing default-config assertion before config default change.
+  - `devenv shell -- pytest tests/unit/test_config.py -q` passed.
+  - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`358 passed, 8 skipped`).
 
 ## Next Action
-- Commit and push section 1.4 checkpoint.
-- Begin section 1.5 implementation (remove dead `file` bundle overlay default).
+- Commit and push section 1.5 checkpoint.
+- Begin section 1.6 implementation (workspace `project_root` property and web caller update).

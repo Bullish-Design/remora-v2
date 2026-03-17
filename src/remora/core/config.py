@@ -156,7 +156,6 @@ class Config(BaseSettings):
             "function": "code-agent",
             "class": "code-agent",
             "method": "code-agent",
-            "file": "code-agent",
             "directory": "directory-agent",
         }
     )
