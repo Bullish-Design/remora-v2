@@ -86,10 +86,10 @@ class AgentTurnExecutor:
                     return
                 node, workspace, bundle_config = start_result
 
-                system_prompt, model_name, max_turns = self._prompt_builder.build_system_prompt(
-                    bundle_config,
-                    trigger.event,
-                )
+                turn_config = self._prompt_builder.build_turn_config(bundle_config, trigger.event)
+                system_prompt = turn_config.system_prompt
+                model_name = turn_config.model
+                max_turns = turn_config.max_turns
                 is_reflection_turn = (
                     trigger.event is not None
                     and trigger.event.event_type == EventType.AGENT_COMPLETE

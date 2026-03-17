@@ -20,6 +20,15 @@ class CompanionData:
     links: list[dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class TurnConfig:
+    """Configuration for a single agent turn."""
+
+    system_prompt: str
+    model: str
+    max_turns: int
+
+
 class PromptBuilder:
     """Build system and user prompts from bundle config and templates."""
 
@@ -27,11 +36,11 @@ class PromptBuilder:
         self._config = config
         self._default_templates = dict(config.behavior.prompt_templates)
 
-    def build_system_prompt(
+    def build_turn_config(
         self,
         bundle_config: BundleConfig,
         trigger_event: Event | None,
-    ) -> tuple[str, str, int]:
+    ) -> TurnConfig:
         if self._is_reflection_turn(bundle_config, trigger_event):
             return self._build_reflection(bundle_config)
 
@@ -47,7 +56,7 @@ class PromptBuilder:
 
         model_name = bundle_config.model or self._config.behavior.model_default
         max_turns = bundle_config.max_turns or self._config.behavior.max_turns
-        return system_prompt, model_name, max_turns
+        return TurnConfig(system_prompt=system_prompt, model=model_name, max_turns=max_turns)
 
     def build_user_prompt(
         self,
@@ -72,10 +81,10 @@ class PromptBuilder:
         from_agent = getattr(event, "from_agent", None) if event is not None else None
         return "chat" if from_agent == "user" else "reactive"
 
-    def _build_reflection(self, bundle_config: BundleConfig) -> tuple[str, str, int]:
+    def _build_reflection(self, bundle_config: BundleConfig) -> TurnConfig:
         self_reflect = bundle_config.self_reflect
         if self_reflect is None:
-            return "", self._config.behavior.model_default, 1
+            return TurnConfig(system_prompt="", model=self._config.behavior.model_default, max_turns=1)
 
         reflection_prompt = (
             self_reflect.prompt
@@ -86,7 +95,11 @@ class PromptBuilder:
             self_reflect.model or bundle_config.model or self._config.behavior.model_default
         )
         max_turns = self_reflect.max_turns
-        return reflection_prompt, model_name, max_turns
+        return TurnConfig(
+            system_prompt=reflection_prompt,
+            model=model_name,
+            max_turns=max_turns,
+        )
 
     @staticmethod
     def _interpolate(template: str, variables: dict[str, str]) -> str:
@@ -193,4 +206,4 @@ def _event_content(event: Event) -> str:
     return ""
 
 
-__all__ = ["PromptBuilder"]
+__all__ = ["CompanionData", "PromptBuilder", "TurnConfig"]

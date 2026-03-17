@@ -410,10 +410,10 @@ def test_prompt_builder_reflection_override() -> None:
         }
     )
     trigger = AgentCompleteEvent(agent_id="agent-a", tags=("primary",))
-    prompt, model, max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
-    assert prompt == "Reflect on this turn."
-    assert model == "Qwen/Qwen3-1.7B"
-    assert max_turns == 2
+    turn_config = prompt_builder.build_turn_config(bundle_config, trigger)
+    assert turn_config.system_prompt == "Reflect on this turn."
+    assert turn_config.model == "Qwen/Qwen3-1.7B"
+    assert turn_config.max_turns == 2
 
 
 def test_prompt_builder_normal_turn_unaffected_by_self_reflect() -> None:
@@ -431,10 +431,10 @@ def test_prompt_builder_normal_turn_unaffected_by_self_reflect() -> None:
         }
     )
     trigger = ContentChangedEvent(path="src/foo.py")
-    prompt, model, max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
-    assert "Normal prompt" in prompt
-    assert model == "big-model"
-    assert max_turns == 8
+    turn_config = prompt_builder.build_turn_config(bundle_config, trigger)
+    assert "Normal prompt" in turn_config.system_prompt
+    assert turn_config.model == "big-model"
+    assert turn_config.max_turns == 8
 
 
 def test_prompt_builder_reflection_tag_must_be_primary() -> None:
@@ -448,9 +448,9 @@ def test_prompt_builder_reflection_tag_must_be_primary() -> None:
         }
     )
     trigger = AgentCompleteEvent(agent_id="agent-a", tags=("reflection",))
-    prompt, model, _max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
-    assert "Normal prompt" in prompt
-    assert model == "big-model"
+    turn_config = prompt_builder.build_turn_config(bundle_config, trigger)
+    assert "Normal prompt" in turn_config.system_prompt
+    assert turn_config.model == "big-model"
 
 
 def test_prompt_builder_build_user_prompt_interpolates_default_template() -> None:
