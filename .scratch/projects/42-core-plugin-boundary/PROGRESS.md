@@ -21,7 +21,11 @@
 - [x] Query search-path resolution unified through config helper + runtime wiring.
 
 ### Phase 3: Template-driven prompts
-- [ ] Not implemented.
+- [x] Replaced hardcoded `build_prompt` with template-based `build_user_prompt`.
+- [x] Added interpolation contract variables (`node_*`, `event_*`, `turn_mode`, `companion_context`).
+- [x] User prompt template now supports per-bundle override (`bundle.yaml` `prompt_templates.user`).
+- [x] Reflection prompt now resolves from self_reflect override, bundle template, then defaults template.
+- [x] Updated turn executor + tests to use `build_user_prompt`.
 
 ### Phase 4: Bundle search path resolution
 - [x] `bundle_search_paths` and `query_search_paths` now drive resolution.

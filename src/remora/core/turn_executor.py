@@ -93,6 +93,7 @@ class AgentTurnExecutor:
                     and trigger.event.event_type == EventType.AGENT_COMPLETE
                     and "primary" in getattr(trigger.event, "tags", ())
                 )
+                companion_context = ""
                 if not is_reflection_turn:
                     companion_context = await workspace.build_companion_context()
                     if companion_context:
@@ -119,7 +120,12 @@ class AgentTurnExecutor:
                     Message(role="system", content=system_prompt),
                     Message(
                         role="user",
-                        content=self._prompt_builder.build_prompt(node, trigger.event),
+                        content=self._prompt_builder.build_user_prompt(
+                            node,
+                            trigger.event,
+                            bundle_config=bundle_config,
+                            companion_context=companion_context,
+                        ),
                     ),
                 ]
                 user_message = messages[1].content if len(messages) > 1 else ""

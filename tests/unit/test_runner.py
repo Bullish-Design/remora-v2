@@ -21,6 +21,19 @@ from remora.core.graph import NodeStore
 from remora.core.runner import ActorPool
 from remora.core.workspace import CairnWorkspaceService
 
+_USER_TEMPLATE = (
+    "# Node: {node_full_name}\n"
+    "Type: {node_type} | File: {file_path}\n"
+    "Role: {role}\n\n"
+    "## Source Code\n"
+    "```\n"
+    "{source}\n"
+    "```\n\n"
+    "## Trigger\n"
+    "Event: {event_type}\n"
+    "{event_content}\n"
+)
+
 
 @pytest_asyncio.fixture
 async def runner_env(tmp_path: Path):
@@ -33,6 +46,7 @@ async def runner_env(tmp_path: Path):
         workspace_root=".remora-runner-test",
         trigger_cooldown_ms=1000,
         max_trigger_depth=2,
+        prompt_templates={"user": _USER_TEMPLATE},
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -109,13 +123,16 @@ async def test_runner_stop_and_wait(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_build_prompt_via_actor(runner_env) -> None:
-    runner, node_store, _event_store, workspace_service = runner_env
+    _runner, node_store, _event_store, workspace_service = runner_env
     node = make_node("src/app.py::a")
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    prompt = PromptBuilder.build_prompt(
+    prompt_builder = PromptBuilder(
+        Config(prompt_templates={"user": _USER_TEMPLATE}, model_default="mock", max_turns=1)
+    )
+    prompt = prompt_builder.build_user_prompt(
         node,
         AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
     )
@@ -126,7 +143,7 @@ async def test_runner_build_prompt_via_actor(runner_env) -> None:
 
 @pytest.mark.asyncio
 async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
-    runner, node_store, _event_store, workspace_service = runner_env
+    _runner, node_store, _event_store, workspace_service = runner_env
     node = make_node(
         "test-agent",
         node_type="virtual",
@@ -142,13 +159,15 @@ async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
     ws = await workspace_service.get_agent_workspace(node.node_id)
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
-    prompt = PromptBuilder.build_prompt(
+    prompt_builder = PromptBuilder(
+        Config(prompt_templates={"user": _USER_TEMPLATE}, model_default="mock", max_turns=1)
+    )
+    prompt = prompt_builder.build_user_prompt(
         node,
         AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
     )
     assert "Type: virtual | File: " in prompt
-    assert "## Role" in prompt
-    assert "test-agent agent" in prompt
+    assert "Role: test-agent" in prompt
 
 
 @pytest.mark.asyncio

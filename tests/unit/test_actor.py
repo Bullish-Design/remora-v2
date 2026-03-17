@@ -42,6 +42,19 @@ from remora.core.graph import NodeStore
 from remora.core.types import EventType, NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
+_TEST_USER_TEMPLATE = (
+    "# Node: {node_full_name}\n"
+    "Type: {node_type} | File: {file_path}\n"
+    "Role: {role}\n\n"
+    "## Source Code\n"
+    "```\n"
+    "{source}\n"
+    "```\n\n"
+    "## Trigger\n"
+    "Event: {event_type}\n"
+    "{event_content}\n"
+)
+
 
 async def _empty_tools(*_args, **_kwargs):  # noqa: ANN001
     return []
@@ -136,6 +149,9 @@ async def actor_env(tmp_path: Path):
         workspace_root=".remora-actor-test",
         trigger_cooldown_ms=1000,
         max_trigger_depth=2,
+        prompt_templates={"user": _TEST_USER_TEMPLATE},
+        model_default="mock",
+        max_turns=1,
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -432,6 +448,59 @@ def test_prompt_builder_reflection_tag_must_be_primary() -> None:
     prompt, model, _max_turns = prompt_builder.build_system_prompt(bundle_config, trigger)
     assert "Normal prompt" in prompt
     assert model == "big-model"
+
+
+def test_prompt_builder_build_user_prompt_interpolates_default_template() -> None:
+    config = Config(
+        prompt_templates={
+            "user": (
+                "Node={node_full_name}|Type={node_type}|File={file_path}|Role={role}|"
+                "Event={event_type}|Content={event_content}|Mode={turn_mode}|"
+                "Companion={companion_context}|Source={source}"
+            )
+        },
+        model_default="mock",
+        max_turns=1,
+    )
+    prompt_builder = PromptBuilder(config)
+    node = make_node("src/app.py::alpha", role="code-agent", text="def alpha():\n    return 1\n")
+    trigger = AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello")
+
+    prompt = prompt_builder.build_user_prompt(
+        node,
+        trigger,
+        companion_context="memory-block",
+    )
+
+    assert "Node=alpha" in prompt
+    assert "Type=function" in prompt
+    assert "File=src/app.py" in prompt
+    assert "Role=code-agent" in prompt
+    assert "Event=agent_message" in prompt
+    assert "Content=hello" in prompt
+    assert "Mode=chat" in prompt
+    assert "Companion=memory-block" in prompt
+    assert "Source=def alpha():" in prompt
+
+
+def test_prompt_builder_build_user_prompt_bundle_template_override() -> None:
+    config = Config(
+        prompt_templates={"user": "default:{node_name}"},
+        model_default="mock",
+        max_turns=1,
+    )
+    prompt_builder = PromptBuilder(config)
+    node = make_node("src/app.py::alpha", role="code-agent", text="def alpha():\n    return 1\n")
+    trigger = ContentChangedEvent(path="src/app.py")
+    bundle_config = BundleConfig(
+        system_prompt="system",
+        model="mock",
+        max_turns=1,
+        prompt_templates={"user": "bundle:{node_name}:{event_type}"},
+    )
+
+    prompt = prompt_builder.build_user_prompt(node, trigger, bundle_config=bundle_config)
+    assert prompt == "bundle:alpha:content_changed"
 
 
 @pytest.mark.asyncio
