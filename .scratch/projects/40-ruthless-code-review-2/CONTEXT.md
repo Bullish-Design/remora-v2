@@ -252,4 +252,14 @@ Next action:
   - Phase 7 is complete.
 
 Next action:
-- Start Phase 8 Step 8.1 in `core/workspace.py`: extract helper methods from `_materialize_directories`.
+- Start Phase 8 Step 8.1 in `code/reconciler.py`: extract helper methods from `_materialize_directories`.
+- Step 8.1 completed:
+  - added focused helper methods in `code/reconciler.py`:
+    - `_compute_directory_hierarchy`
+    - `_remove_stale_directories`
+    - `_upsert_directory_node`
+  - preserved existing `_materialize_directories` orchestration for now; Step 8.2 will switch it to helper-driven flow
+  - verification: `devenv shell -- python -m pytest tests/unit/test_reconciler.py -q` passed (`22 passed`)
+
+Next action:
+- Step 8.2: simplify `_materialize_directories` to orchestrate via the extracted helper methods.

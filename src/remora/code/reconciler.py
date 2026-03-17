@@ -193,6 +193,134 @@ class FileReconciler:
                 continue
         return mtimes
 
+    def _compute_directory_hierarchy(
+        self, file_paths: set[str]
+    ) -> tuple[set[str], dict[str, list[str]]]:
+        """Compute directory IDs and per-directory children for discovered files."""
+        file_rel_paths = {self._relative_file_path(path) for path in file_paths}
+        dir_paths: set[str] = {"."}
+
+        for rel_file_path in file_rel_paths:
+            current = Path(rel_file_path).parent
+            while True:
+                dir_id = self._normalize_dir_id(current)
+                dir_paths.add(dir_id)
+                if dir_id == "." or current == current.parent:
+                    break
+                current = current.parent
+
+        children_by_dir: dict[str, list[str]] = {dir_id: [] for dir_id in dir_paths}
+        for dir_id in dir_paths:
+            if dir_id == ".":
+                continue
+            parent_id = self._parent_dir_id(dir_id)
+            children_by_dir.setdefault(parent_id, []).append(dir_id)
+        for rel_file_path in file_rel_paths:
+            parent_id = self._parent_dir_id(rel_file_path)
+            children_by_dir.setdefault(parent_id, []).append(rel_file_path)
+
+        return dir_paths, children_by_dir
+
+    async def _remove_stale_directories(
+        self, existing_by_id: dict[str, Node], desired_ids: set[str]
+    ) -> None:
+        """Delete directory nodes no longer present in the desired hierarchy."""
+        stale_ids = sorted(
+            set(existing_by_id) - desired_ids,
+            key=lambda node_id: node_id.count("/"),
+            reverse=True,
+        )
+        for node_id in stale_ids:
+            await self._remove_node(node_id)
+
+    async def _upsert_directory_node(
+        self,
+        dir_id: str,
+        children: list[str],
+        existing: Node | None,
+        *,
+        sync_existing_bundles: bool,
+        refresh_subscriptions: bool,
+    ) -> None:
+        """Create or update one directory projection node."""
+        parent_id = None if dir_id == "." else self._parent_dir_id(dir_id)
+        name = "." if dir_id == "." else Path(dir_id).name
+        source_hash = hashlib.sha256("\n".join(children).encode("utf-8")).hexdigest()
+        mapped_bundle = self._config.resolve_bundle(NodeType.DIRECTORY, name)
+        refresh_bundle = sync_existing_bundles
+
+        directory_node = Node(
+            node_id=dir_id,
+            node_type=NodeType.DIRECTORY,
+            name=name,
+            full_name=dir_id,
+            file_path=dir_id,
+            start_line=0,
+            end_line=0,
+            source_code="",
+            source_hash=source_hash,
+            parent_id=parent_id,
+            status=existing.status if existing is not None else "idle",
+            role=(
+                mapped_bundle
+                if mapped_bundle is not None
+                else (existing.role if existing is not None else None)
+            ),
+        )
+
+        if existing is None:
+            await self._node_store.upsert_node(directory_node)
+            if directory_node.parent_id is not None:
+                await self._node_store.add_edge(
+                    directory_node.parent_id,
+                    directory_node.node_id,
+                    "contains",
+                )
+            await self._register_subscriptions(directory_node)
+            await self._provision_bundle(directory_node.node_id, directory_node.role)
+            await self._event_store.append(
+                NodeDiscoveredEvent(
+                    node_id=directory_node.node_id,
+                    node_type=directory_node.node_type,
+                    file_path=directory_node.file_path,
+                    name=directory_node.name,
+                )
+            )
+            return
+
+        metadata_changed = (
+            existing.parent_id != directory_node.parent_id
+            or existing.file_path != directory_node.file_path
+            or existing.name != directory_node.name
+            or existing.full_name != directory_node.full_name
+            or existing.role != directory_node.role
+        )
+        hash_changed = existing.source_hash != source_hash
+        if metadata_changed or hash_changed:
+            await self._node_store.upsert_node(directory_node)
+            if directory_node.parent_id is not None:
+                await self._node_store.add_edge(
+                    directory_node.parent_id,
+                    directory_node.node_id,
+                    "contains",
+                )
+
+        if refresh_subscriptions:
+            await self._register_subscriptions(directory_node)
+        if refresh_bundle:
+            await self._provision_bundle(directory_node.node_id, directory_node.role)
+
+        if hash_changed:
+            await self._register_subscriptions(directory_node)
+            await self._event_store.append(
+                NodeChangedEvent(
+                    node_id=directory_node.node_id,
+                    old_hash=existing.source_hash,
+                    new_hash=directory_node.source_hash,
+                    file_path=directory_node.file_path,
+                )
+            )
+
     async def _materialize_directories(
         self,
         file_paths: set[str],
