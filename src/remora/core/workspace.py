@@ -28,71 +28,60 @@ class AgentWorkspace:
     def __init__(self, workspace: Workspace, agent_id: str):
         self._workspace = workspace
         self._agent_id = agent_id
-        self._lock = asyncio.Lock()
 
     async def read(self, path: str) -> str:
         """Read a file from the agent workspace."""
-        async with self._lock:
-            content = await self._workspace.files.read(path)
+        content = await self._workspace.files.read(path)
         if isinstance(content, bytes):
             return content.decode("utf-8", errors="replace")
         return str(content)
 
     async def write(self, path: str, content: str | bytes) -> None:
         """Write a file to the agent workspace."""
-        async with self._lock:
-            await self._workspace.files.write(path, content)
+        await self._workspace.files.write(path, content)
 
     async def exists(self, path: str) -> bool:
         """Check existence in the agent workspace."""
-        async with self._lock:
-            return await self._workspace.files.exists(path)
+        return await self._workspace.files.exists(path)
 
     async def list_dir(self, path: str = ".") -> list[str]:
         """List directory entries from the agent workspace."""
-        async with self._lock:
-            return sorted(await self._workspace.files.list_dir(path, output="name"))
+        return sorted(await self._workspace.files.list_dir(path, output="name"))
 
     async def delete(self, path: str) -> None:
         """Delete a file from the agent workspace."""
-        async with self._lock:
-            await self._workspace.files.remove(path)
+        await self._workspace.files.remove(path)
 
     async def list_all_paths(self) -> list[str]:
         """List all file paths in this workspace."""
-        async with self._lock:
-            query = ViewQuery(
-                path_pattern="**/*",
-                recursive=True,
-                include_stats=False,
-                include_content=False,
-            )
-            entries = await self._workspace.files.query(query)
-            return sorted(
-                str(getattr(entry, "path", "")).lstrip("/")
-                for entry in entries
-                if str(getattr(entry, "path", "")).lstrip("/")
-            )
+        query = ViewQuery(
+            path_pattern="**/*",
+            recursive=True,
+            include_stats=False,
+            include_content=False,
+        )
+        entries = await self._workspace.files.query(query)
+        return sorted(
+            str(getattr(entry, "path", "")).lstrip("/")
+            for entry in entries
+            if str(getattr(entry, "path", "")).lstrip("/")
+        )
 
     async def kv_get(self, key: str) -> Any | None:
         """Get a value from the workspace KV store."""
-        async with self._lock:
-            return await self._workspace.kv.get(key, None)
+        return await self._workspace.kv.get(key, None)
 
     async def kv_set(self, key: str, value: Any) -> None:
         """Set a value in the workspace KV store."""
-        async with self._lock:
-            await self._workspace.kv.set(key, value)
+        await self._workspace.kv.set(key, value)
 
     async def kv_delete(self, key: str) -> None:
         """Delete a value from the workspace KV store."""
-        async with self._lock:
-            await self._workspace.kv.delete(key)
+        await self._workspace.kv.delete(key)
 
     async def kv_list(self, prefix: str = "") -> list[str]:
         """List KV keys for a prefix."""
-        async with self._lock:
-            records = await self._workspace.kv.list(prefix=prefix)
+        records = await self._workspace.kv.list(prefix=prefix)
         keys: list[str] = []
         for record in records:
             if isinstance(record, dict):
