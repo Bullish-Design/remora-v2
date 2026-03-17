@@ -510,6 +510,23 @@ def test_prompt_builder_build_user_prompt_bundle_template_override() -> None:
     assert prompt == "bundle:alpha:content_changed"
 
 
+def test_prompt_builder_interpolate_no_double_replacement() -> None:
+    template = "Name: {name}, Source: {source}"
+    variables = {
+        "name": "my_func",
+        "source": "def my_func():\n    return '{name}'",
+    }
+
+    result = PromptBuilder._interpolate(template, variables)
+    assert "Name: my_func" in result
+    assert "return '{name}'" in result
+
+
+def test_prompt_builder_interpolate_unknown_vars_preserved() -> None:
+    result = PromptBuilder._interpolate("{known} {unknown}", {"known": "hello"})
+    assert result == "hello {unknown}"
+
+
 @pytest.mark.asyncio
 async def test_build_companion_context_empty(actor_env) -> None:
     from remora.core.prompt import PromptBuilder

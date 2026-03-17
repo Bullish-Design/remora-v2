@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -103,11 +104,13 @@ class PromptBuilder:
 
     @staticmethod
     def _interpolate(template: str, variables: dict[str, str]) -> str:
-        """Interpolate template vars using simple `{name}` replacement."""
-        result = template
-        for key, value in variables.items():
-            result = result.replace(f"{{{key}}}", value)
-        return result
+        """Interpolate template vars using single-pass regex replacement."""
+
+        def replacer(match: re.Match[str]) -> str:
+            key = match.group(1)
+            return variables.get(key, match.group(0))
+
+        return re.sub(r"\{(\w+)\}", replacer, template)
 
     def _build_template_vars(
         self,
