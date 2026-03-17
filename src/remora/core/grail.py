@@ -7,7 +7,6 @@ import json
 import logging
 import tempfile
 import time
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -26,14 +25,7 @@ _TYPE_MAP = {
     "bool": "boolean",
 }
 _MAX_SCRIPT_CACHE = 256
-_SCRIPT_SOURCE_CACHE: dict[tuple[str, str], str] = {}
-
-
-def _evict_source_cache() -> None:
-    """Evict oldest entries when source cache exceeds the max size."""
-    while len(_SCRIPT_SOURCE_CACHE) > _MAX_SCRIPT_CACHE:
-        oldest_key = next(iter(_SCRIPT_SOURCE_CACHE))
-        del _SCRIPT_SOURCE_CACHE[oldest_key]
+_PARSED_SCRIPT_CACHE: dict[str, grail.GrailScript] = {}
 
 
 def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
@@ -53,24 +45,22 @@ def _build_parameters(script: grail.GrailScript) -> dict[str, Any]:
     return schema
 
 
-@lru_cache(maxsize=256)
-def _cached_script(content_hash: str, normalized_name: str) -> grail.GrailScript:
-    cache_key = (content_hash, normalized_name)
-    source = _SCRIPT_SOURCE_CACHE.get(cache_key)
-    if source is None:
-        raise ValueError(f"Missing script source for cache key {normalized_name}:{content_hash}")
-    with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
-        script_path = Path(temp_dir) / normalized_name
-        script_path.write_text(source, encoding="utf-8")
-        return grail.load(script_path)
-
-
 def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
     content_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+    cached = _PARSED_SCRIPT_CACHE.get(content_hash)
+    if cached is not None:
+        return cached
+
     filename = f"{name}.pym" if not name.endswith(".pym") else name
-    _SCRIPT_SOURCE_CACHE[(content_hash, filename)] = source
-    _evict_source_cache()
-    return _cached_script(content_hash, filename)
+    with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
+        script_path = Path(temp_dir) / filename
+        script_path.write_text(source, encoding="utf-8")
+        script = grail.load(script_path)
+
+    if len(_PARSED_SCRIPT_CACHE) >= _MAX_SCRIPT_CACHE:
+        _PARSED_SCRIPT_CACHE.pop(next(iter(_PARSED_SCRIPT_CACHE)))
+    _PARSED_SCRIPT_CACHE[content_hash] = script
+    return script
 
 
 def _extract_description(script: grail.GrailScript, source: str | None = None) -> str:

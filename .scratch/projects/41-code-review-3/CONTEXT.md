@@ -147,7 +147,14 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - added `test_eventstore_batch_uses_single_commit` in `tests/unit/test_event_store.py`.
   - targeted verification:
     - `devenv shell -- pytest tests/unit/test_event_store.py tests/unit/test_reconciler.py -q` (`30 passed`).
+- Completed section 5.2 (grail cache cleanup):
+  - replaced two-tier script caching in `src/remora/core/grail.py` with a single bounded parsed-script cache:
+    - removed `_SCRIPT_SOURCE_CACHE`, `_evict_source_cache`, and `_cached_script` (`lru_cache`).
+    - added `_PARSED_SCRIPT_CACHE` keyed by source hash with FIFO eviction at `_MAX_SCRIPT_CACHE`.
+  - updated `tests/unit/test_grail.py` cache-bounds test to assert hash eviction against `_PARSED_SCRIPT_CACHE`.
+  - targeted verification:
+    - `devenv shell -- pytest tests/unit/test_grail.py -q` (`17 passed`).
 
 ## Next Action
-- Commit and push section 5.1 checkpoint.
-- Begin section 5.2 implementation (grail cache cleanup).
+- Commit and push section 5.2 checkpoint.
+- Begin section 5.3 implementation (NodeStore.batch rollback fix).

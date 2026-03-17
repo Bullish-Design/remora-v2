@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -160,20 +161,19 @@ def test_load_script_from_source_uses_cache() -> None:
 
 
 def test_script_source_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    grail_module._SCRIPT_SOURCE_CACHE.clear()
-    grail_module._cached_script.cache_clear()
+    grail_module._PARSED_SCRIPT_CACHE.clear()
     monkeypatch.setattr(grail_module, "_MAX_SCRIPT_CACHE", 2)
 
-    _load_script_from_source(SCRIPT_SOURCE + "\n# one", "demo_one")
+    source_one = SCRIPT_SOURCE + "\n# one"
+    _load_script_from_source(source_one, "demo_one")
     _load_script_from_source(SCRIPT_SOURCE + "\n# two", "demo_two")
     _load_script_from_source(SCRIPT_SOURCE + "\n# three", "demo_three")
 
-    assert len(grail_module._SCRIPT_SOURCE_CACHE) == 2
-    cache_filenames = {filename for _hash, filename in grail_module._SCRIPT_SOURCE_CACHE.keys()}
-    assert "demo_one.pym" not in cache_filenames
+    assert len(grail_module._PARSED_SCRIPT_CACHE) == 2
+    source_one_hash = hashlib.sha256(source_one.encode("utf-8")).hexdigest()[:16]
+    assert source_one_hash not in grail_module._PARSED_SCRIPT_CACHE
 
-    grail_module._SCRIPT_SOURCE_CACHE.clear()
-    grail_module._cached_script.cache_clear()
+    grail_module._PARSED_SCRIPT_CACHE.clear()
 
 
 @pytest.mark.asyncio
