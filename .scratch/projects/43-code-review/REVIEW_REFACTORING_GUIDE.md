@@ -541,7 +541,7 @@ def load_config(path: Path | None = None) -> Config:
 **Also update `defaults.yaml`** to use the nested structure if you prefer, but the `_nest_flat_config` function allows backwards-compatible YAML files.
 
 #### 5d. Update ALL callers
-
+ 
 This is the bulk of the work. Every file that accesses `config.<field>` needs to be updated to `config.<sub_model>.<field>`. Here is a mapping of the most important call sites:
 
 | Old Access | New Access | Files Affected |
