@@ -22,6 +22,7 @@ from remora.core.metrics import Metrics
 from remora.core.node import Node
 from remora.core.outbox import Outbox, OutboxObserver
 from remora.core.prompt import PromptBuilder
+from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.types import EventType, NodeStatus
@@ -58,6 +59,7 @@ class AgentTurnExecutor:
         prompt_builder: PromptBuilder,
         trigger_policy: TriggerPolicy,
         search_service: SearchServiceProtocol | None,
+        send_message_limiter: SlidingWindowRateLimiter | None = None,
     ) -> None:
         self._node_store = node_store
         self._event_store = event_store
@@ -69,6 +71,7 @@ class AgentTurnExecutor:
         self._prompt_builder = prompt_builder
         self._trigger_policy = trigger_policy
         self._search_service = search_service
+        self._send_message_limiter = send_message_limiter
 
     async def execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
@@ -208,8 +211,7 @@ class AgentTurnExecutor:
             human_input_timeout_s=self._config.human_input_timeout_s,
             search_content_max_matches=self._config.search_content_max_matches,
             broadcast_max_targets=self._config.broadcast_max_targets,
-            send_message_rate_limit=self._config.send_message_rate_limit,
-            send_message_rate_window_s=self._config.send_message_rate_window_s,
+            send_message_limiter=self._send_message_limiter,
             search_service=self._search_service,
         )
         capabilities = context.to_capabilities_dict()

@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 import time
-from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -34,6 +33,7 @@ from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
+from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.types import ChangeType, EventType, NodeStatus, serialize_enum
 
@@ -43,24 +43,6 @@ if TYPE_CHECKING:
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
-
-
-class RateLimiter:
-    """Simple in-memory sliding window rate limiter."""
-
-    def __init__(self, max_requests: int = 10, window_seconds: float = 60.0) -> None:
-        self._max_requests = max_requests
-        self._window_seconds = window_seconds
-        self._timestamps: deque[float] = deque()
-
-    def allow(self) -> bool:
-        now = time.time()
-        while self._timestamps and self._timestamps[0] < now - self._window_seconds:
-            self._timestamps.popleft()
-        if len(self._timestamps) >= self._max_requests:
-            return False
-        self._timestamps.append(now)
-        return True
 
 
 @dataclass
@@ -75,7 +57,7 @@ class WebDeps:
     workspace_service: CairnWorkspaceService | None
     search_service: SearchServiceProtocol | None
     shutdown_event: asyncio.Event
-    chat_limiters: dict[str, RateLimiter]
+    chat_limiters: dict[str, SlidingWindowRateLimiter]
 
 
 def _is_allowed_origin(origin: str) -> bool:
@@ -101,11 +83,11 @@ def _deps_from_request(request: Request) -> WebDeps:
     return request.app.state.deps
 
 
-def _get_chat_limiter(request: Request, deps: WebDeps) -> RateLimiter:
+def _get_chat_limiter(request: Request, deps: WebDeps) -> SlidingWindowRateLimiter:
     ip = request.client.host if request.client is not None else "unknown"
     limiter = deps.chat_limiters.get(ip)
     if limiter is None:
-        limiter = RateLimiter(max_requests=10, window_seconds=60.0)
+        limiter = SlidingWindowRateLimiter(max_requests=10, window_seconds=60.0)
         deps.chat_limiters[ip] = limiter
     return limiter
 

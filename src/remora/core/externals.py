@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
-import time
 import uuid
-from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from remora.core.events import (
@@ -20,6 +18,7 @@ from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.graph import NodeStore
 from remora.core.node import Node
+from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.types import NodeStatus, NodeType, serialize_enum
 from remora.core.workspace import AgentWorkspace
@@ -42,8 +41,7 @@ class TurnContext:
         human_input_timeout_s: float = 300.0,
         search_content_max_matches: int = 1000,
         broadcast_max_targets: int = 50,
-        send_message_rate_limit: int = 10,
-        send_message_rate_window_s: float = 1.0,
+        send_message_limiter: SlidingWindowRateLimiter | None = None,
         search_service: SearchServiceProtocol | None = None,
     ) -> None:
         self.node_id = node_id
@@ -55,10 +53,8 @@ class TurnContext:
         self._human_input_timeout_s = human_input_timeout_s
         self._search_content_max_matches = max(1, int(search_content_max_matches))
         self._broadcast_max_targets = max(1, int(broadcast_max_targets))
-        self._send_message_rate_limit = max(1, int(send_message_rate_limit))
-        self._send_message_rate_window_s = max(0.001, float(send_message_rate_window_s))
+        self._send_message_limiter = send_message_limiter
         self._search_service = search_service
-        self._send_message_timestamps: dict[str, deque[float]] = {}
 
     async def _emit(self, event: Event) -> int:
         """Emit an event through the outbox."""
@@ -232,15 +228,9 @@ class TurnContext:
         return f"Broadcast sent to {len(limited_targets)} agents"
 
     def _allow_send_message(self) -> bool:
-        now = time.time()
-        timestamps = self._send_message_timestamps.setdefault(self.node_id, deque())
-        cutoff = now - self._send_message_rate_window_s
-        while timestamps and timestamps[0] <= cutoff:
-            timestamps.popleft()
-        if len(timestamps) >= self._send_message_rate_limit:
-            return False
-        timestamps.append(now)
-        return True
+        if self._send_message_limiter is None:
+            return True
+        return self._send_message_limiter.allow(self.node_id)
 
     async def request_human_input(
         self,

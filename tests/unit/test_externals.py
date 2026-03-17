@@ -15,6 +15,7 @@ from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.events.types import CustomEvent
 from remora.core.externals import TurnContext
 from remora.core.graph import NodeStore
+from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.types import NodeStatus, NodeType
 from remora.core.workspace import CairnWorkspaceService
 
@@ -53,6 +54,10 @@ async def _context(
 ) -> TurnContext:
     if outbox is None:
         outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
+    send_message_limiter = SlidingWindowRateLimiter(
+        max_requests=send_message_rate_limit,
+        window_seconds=send_message_rate_window_s,
+    )
     return TurnContext(
         node_id=node_id,
         workspace=workspace,
@@ -63,8 +68,7 @@ async def _context(
         human_input_timeout_s=human_input_timeout_s,
         search_content_max_matches=search_content_max_matches,
         broadcast_max_targets=broadcast_max_targets,
-        send_message_rate_limit=send_message_rate_limit,
-        send_message_rate_window_s=send_message_rate_window_s,
+        send_message_limiter=send_message_limiter,
         search_service=search_service,
     )
 
@@ -555,7 +559,7 @@ async def test_externals_send_message_rate_limit(context_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_externals_send_message_rate_limit_isolated_per_context_instance(
+async def test_externals_send_message_rate_limit_persists_across_turns(
     context_env,
 ) -> None:
     node_store, event_store, workspace_service = context_env
@@ -565,28 +569,31 @@ async def test_externals_send_message_rate_limit_isolated_per_context_instance(
     await node_store.upsert_node(target)
     ws = await workspace_service.get_agent_workspace(sender.node_id)
 
-    first = await _context(
-        sender.node_id,
-        ws,
-        node_store,
-        event_store,
-        send_message_rate_limit=1,
-        send_message_rate_window_s=60.0,
+    limiter = SlidingWindowRateLimiter(max_requests=1, window_seconds=60.0)
+    first = TurnContext(
+        node_id=sender.node_id,
+        workspace=ws,
+        correlation_id="corr-1",
+        node_store=node_store,
+        event_store=event_store,
+        outbox=Outbox(actor_id=sender.node_id, event_store=event_store, correlation_id="corr-1"),
+        send_message_limiter=limiter,
     )
-    second = await _context(
-        sender.node_id,
-        ws,
-        node_store,
-        event_store,
-        send_message_rate_limit=1,
-        send_message_rate_window_s=60.0,
+    second = TurnContext(
+        node_id=sender.node_id,
+        workspace=ws,
+        correlation_id="corr-2",
+        node_store=node_store,
+        event_store=event_store,
+        outbox=Outbox(actor_id=sender.node_id, event_store=event_store, correlation_id="corr-2"),
+        send_message_limiter=limiter,
     )
 
     first_externals = first.to_capabilities_dict()
     second_externals = second.to_capabilities_dict()
 
     assert await first_externals["send_message"](target.node_id, "one")
-    assert await second_externals["send_message"](target.node_id, "fresh-context")
+    assert not await second_externals["send_message"](target.node_id, "blocked-in-next-turn")
 
 
 @pytest.mark.asyncio

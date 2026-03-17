@@ -7,7 +7,7 @@
 
 ## Phase Tracking
 - [x] Phase 1 Model Cleanup & Quick Wins
-- [ ] Phase 2 Bug Fixes & Type Safety
+- [x] Phase 2 Bug Fixes & Type Safety
 - [ ] Phase 3 Structural Decomposition
 - [ ] Phase 4 Turn Pipeline Simplification
 - [ ] Phase 5 Performance & Polish
@@ -24,7 +24,7 @@
 
 ### Phase 2
 - [x] 2.1 Fix Event Type Dispatch
-- [ ] 2.2 Fix the Rate Limiter Bug
+- [x] 2.2 Fix the Rate Limiter Bug
 
 ### Phase 3
 - [ ] 3.1 Decompose the Reconciler

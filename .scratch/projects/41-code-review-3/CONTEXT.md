@@ -74,7 +74,18 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
     - `devenv shell -- pytest tests/unit/test_events.py tests/unit/test_subscription_registry.py tests/unit/test_event_store.py tests/unit/test_reconciler.py tests/unit/test_actor.py tests/unit/test_web_server.py tests/integration/test_e2e.py -q`
   - full suite passed after fixing residual bundle/config fixture references:
     - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` (`359 passed, 8 skipped`).
+- Completed section 2.2 (rate limiter bug fix with actor lifetime state):
+  - added shared `SlidingWindowRateLimiter` in `core/rate_limit.py`.
+  - moved send-message limiter ownership to `Actor` (persistent across turns).
+  - threaded limiter through `AgentTurnExecutor` into each `TurnContext`.
+  - removed per-context timestamp state from `TurnContext`.
+  - updated web chat throttling to use the shared limiter primitive.
+  - updated externals tests to validate cross-turn persistence when sharing limiter.
+- Verification for section 2.2:
+  - targeted run passed:
+    - `devenv shell -- pytest tests/unit/test_externals.py tests/unit/test_actor.py tests/unit/test_web_server.py tests/integration/test_e2e.py -q`
+  - note: user requested no full-suite verification after each step; moving forward use targeted test scopes unless explicitly requested.
 
 ## Next Action
-- Commit and push section 2.1 checkpoint.
-- Begin section 2.2 implementation (actor-scoped send_message rate limiter).
+- Commit and push section 2.2 checkpoint (Phase 2 complete).
+- Begin section 3.1 implementation (reconciler decomposition).

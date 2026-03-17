@@ -15,6 +15,7 @@ from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 from remora.core.outbox import Outbox, OutboxObserver
 from remora.core.prompt import PromptBuilder
+from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.turn_executor import AgentTurnExecutor
@@ -41,6 +42,10 @@ class Actor:
         self._task: asyncio.Task | None = None
         self._last_active: float = time.time()
         self._history: list[Message] = []
+        self._send_message_limiter = SlidingWindowRateLimiter(
+            max_requests=config.send_message_rate_limit,
+            window_seconds=config.send_message_rate_window_s,
+        )
 
         self._trigger_policy = TriggerPolicy(config)
         self._prompt_builder = PromptBuilder(config)
@@ -55,6 +60,7 @@ class Actor:
             prompt_builder=self._prompt_builder,
             trigger_policy=self._trigger_policy,
             search_service=search_service,
+            send_message_limiter=self._send_message_limiter,
         )
 
     @property
