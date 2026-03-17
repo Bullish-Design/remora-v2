@@ -30,7 +30,7 @@ lsp = [
   "lsprotocol>=2024.0",
 ]
 search = [
-  "embeddy[server]>=0.3.11",
+  "embeddy>=0.3.11",
 ]
 search-local = [
   "embeddy[all]>=0.3.11",

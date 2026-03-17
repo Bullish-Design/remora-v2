@@ -47,7 +47,10 @@
 - [x] Added tests for warning/non-warning externals version behavior.
 
 ### Phase 7: Optional search boundary
-- [~] Optional deps exist, but module-level embeddy import boundary cleanup incomplete.
+- [x] Removed module-level embeddy import from `core/search.py`.
+- [x] Added lazy remote client loader (`_load_remote_client_class`) for optional dependency boundary.
+- [x] Updated search tests to validate lazy-import behavior.
+- [x] Kept search dependency optional in `pyproject.toml`.
 
 ### Phase 8: Verification
 - [ ] Pending after implementation completion.

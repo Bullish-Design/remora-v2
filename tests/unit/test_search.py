@@ -83,9 +83,7 @@ async def test_search_service_disabled_returns_empty_results(tmp_path: Path) -> 
 
 @pytest.mark.asyncio
 async def test_search_service_no_embeddy_graceful_degradation(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.search as search_module
-
-    monkeypatch.setattr(search_module, "EmbeddyClient", None)
+    monkeypatch.setattr(SearchService, "_load_remote_client_class", lambda _self: None)
 
     service = SearchService(SearchConfig(enabled=True, mode="remote"), tmp_path)
     await service.initialize()
@@ -95,10 +93,8 @@ async def test_search_service_no_embeddy_graceful_degradation(tmp_path: Path, mo
 
 @pytest.mark.asyncio
 async def test_search_service_remote_mode_connected(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.search as search_module
-
     _MockEmbeddyClient.fail_health = False
-    monkeypatch.setattr(search_module, "EmbeddyClient", _MockEmbeddyClient)
+    monkeypatch.setattr(SearchService, "_load_remote_client_class", lambda _self: _MockEmbeddyClient)
 
     service = SearchService(
         SearchConfig(enabled=True, mode="remote", embeddy_url="http://localhost:8585"),
@@ -122,10 +118,8 @@ async def test_search_service_remote_mode_connected(tmp_path: Path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_search_service_remote_mode_unreachable(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.search as search_module
-
     _MockEmbeddyClient.fail_health = True
-    monkeypatch.setattr(search_module, "EmbeddyClient", _MockEmbeddyClient)
+    monkeypatch.setattr(SearchService, "_load_remote_client_class", lambda _self: _MockEmbeddyClient)
 
     service = SearchService(SearchConfig(enabled=True, mode="remote"), tmp_path)
     await service.initialize()
@@ -142,10 +136,8 @@ def test_collection_for_file() -> None:
 
 @pytest.mark.asyncio
 async def test_index_file_delegates_to_client(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.search as search_module
-
     _MockEmbeddyClient.fail_health = False
-    monkeypatch.setattr(search_module, "EmbeddyClient", _MockEmbeddyClient)
+    monkeypatch.setattr(SearchService, "_load_remote_client_class", lambda _self: _MockEmbeddyClient)
 
     service = SearchService(SearchConfig(enabled=True, mode="remote"), tmp_path)
     await service.initialize()
@@ -156,10 +148,8 @@ async def test_index_file_delegates_to_client(tmp_path: Path, monkeypatch) -> No
 
 @pytest.mark.asyncio
 async def test_delete_source_delegates_to_client(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.search as search_module
-
     _MockEmbeddyClient.fail_health = False
-    monkeypatch.setattr(search_module, "EmbeddyClient", _MockEmbeddyClient)
+    monkeypatch.setattr(SearchService, "_load_remote_client_class", lambda _self: _MockEmbeddyClient)
 
     service = SearchService(SearchConfig(enabled=True, mode="remote"), tmp_path)
     await service.initialize()
@@ -170,10 +160,8 @@ async def test_delete_source_delegates_to_client(tmp_path: Path, monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_index_directory_delegates_to_client(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.search as search_module
-
     _MockEmbeddyClient.fail_health = False
-    monkeypatch.setattr(search_module, "EmbeddyClient", _MockEmbeddyClient)
+    monkeypatch.setattr(SearchService, "_load_remote_client_class", lambda _self: _MockEmbeddyClient)
 
     service = SearchService(SearchConfig(enabled=True, mode="remote"), tmp_path)
     await service.initialize()

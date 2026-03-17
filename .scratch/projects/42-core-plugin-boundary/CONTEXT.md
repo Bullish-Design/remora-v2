@@ -30,9 +30,13 @@
   - Bundle config load now warns if bundle requires newer externals API version.
   - Added `externals_version: 1` to all shipped bundles.
   - Added `docs/externals-contract.md`.
+- Finished Phase 7 optional search cleanup:
+  - Search service no longer imports embeddy at module import time.
+  - Remote client import is lazy and capability-scoped.
+  - Search/unit service tests updated and passing.
 
 ## Remaining gaps
-- Search implementation still has module-level embeddy import boundary (Phase 7).
+- Final Phase 8 verification checklist and freeze validation.
 
 ## Next action
-Implement Phase 7 optional search boundary cleanup.
+Run final verification pass (Phase 8), then close project 42.

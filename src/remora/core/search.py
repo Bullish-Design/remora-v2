@@ -1,4 +1,4 @@
-"""Semantic search service backed by embeddy."""
+"""Semantic search service boundary and optional embeddy-backed implementation."""
 
 from __future__ import annotations
 
@@ -9,11 +9,6 @@ from typing import Any, Protocol, runtime_checkable
 from remora.core.config import SearchConfig
 
 logger = logging.getLogger(__name__)
-
-try:
-    from embeddy.client import EmbeddyClient
-except ImportError:
-    EmbeddyClient = None  # type: ignore[assignment,misc]
 
 
 @runtime_checkable
@@ -62,15 +57,16 @@ class SearchService:
             logger.info("Search service disabled by configuration")
             return
 
-        if EmbeddyClient is None:
-            logger.warning(
-                "Search enabled but embeddy is not installed. "
-                "Install with: pip install remora[search]"
-            )
-            return
-
         if self._config.mode == "remote":
-            self._client = EmbeddyClient(
+            client_cls = self._load_remote_client_class()
+            if client_cls is None:
+                logger.warning(
+                    "Search enabled but embeddy is not installed. "
+                    "Install with: pip install remora[search]"
+                )
+                return
+
+            self._client = client_cls(
                 base_url=self._config.embeddy_url,
                 timeout=self._config.timeout,
             )
@@ -88,6 +84,14 @@ class SearchService:
             return
 
         await self._initialize_local()
+
+    def _load_remote_client_class(self) -> Any | None:
+        """Lazily import embeddy remote client class."""
+        try:
+            from embeddy.client import EmbeddyClient
+        except ImportError:
+            return None
+        return EmbeddyClient
 
     async def _initialize_local(self) -> None:
         """Initialize local in-process embeddy components."""
