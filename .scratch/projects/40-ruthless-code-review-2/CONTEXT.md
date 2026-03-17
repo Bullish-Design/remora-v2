@@ -444,3 +444,10 @@ Next action:
 
 Next action:
 - Step 13.7: remove redundant `subscriptions.create_tables()` invocation from runtime services initialization.
+- Step 13.7 completed:
+  - removed redundant `self.subscriptions.create_tables()` call from `RuntimeServices.initialize()`
+  - `event_store.create_tables()` already initializes subscription tables via dispatcher subscriptions
+  - verification: `devenv shell -- python -m pytest tests/unit/test_services.py tests/integration/test_startup_shutdown.py -q` passed (`3 passed`)
+
+Next action:
+- Step 13.8: run full Phase 13 verification checkpoint and commit/push phase completion.

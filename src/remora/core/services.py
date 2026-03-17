@@ -49,7 +49,6 @@ class RuntimeServices:
     async def initialize(self) -> None:
         """Create tables and initialize services."""
         await self.node_store.create_tables()
-        await self.subscriptions.create_tables()
         await self.event_store.create_tables()
         await self.workspace_service.initialize()
 
