@@ -86,6 +86,30 @@ async def test_bus_unsubscribe() -> None:
 
 
 @pytest.mark.asyncio
+async def test_bus_unsubscribe_clears_all_registrations_for_handler() -> None:
+    bus = EventBus()
+    seen: list[str] = []
+
+    def handler(event: Event) -> None:
+        seen.append(event.event_type)
+
+    bus.subscribe(AgentStartEvent, handler)
+    bus.subscribe(AgentStartEvent, handler)
+    bus.subscribe(AgentMessageEvent, handler)
+    bus.subscribe_all(handler)
+    bus.subscribe_all(handler)
+
+    bus.unsubscribe(handler)
+
+    await bus.emit(AgentStartEvent(agent_id="a"))
+    await bus.emit(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
+    assert seen == []
+    assert AgentStartEvent not in bus._handlers
+    assert AgentMessageEvent not in bus._handlers
+    assert bus._all_handlers == []
+
+
+@pytest.mark.asyncio
 async def test_bus_stream() -> None:
     bus = EventBus()
     async with bus.stream() as events:

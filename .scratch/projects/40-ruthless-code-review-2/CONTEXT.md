@@ -237,3 +237,11 @@ Next action:
 
 Next action:
 - Step 7.3: fix `EventBus.unsubscribe` to remove handlers from all relevant registries and prevent stale registrations.
+- Step 7.3 completed:
+  - updated `EventBus.unsubscribe` to remove all handler registrations (not only the first match)
+  - cleaned up empty typed-handler buckets after unsubscribe to prevent stale registry entries
+  - added regression test to confirm one `unsubscribe()` removes duplicate typed and global registrations
+  - verification: `devenv shell -- python -m pytest tests/unit/test_event_bus.py tests/unit/test_events.py -q` passed (`24 passed`)
+
+Next action:
+- Step 7.4: run Phase 7 verification checkpoint and commit/push phase completion.

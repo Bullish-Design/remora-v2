@@ -58,11 +58,18 @@ class EventBus:
 
     def unsubscribe(self, handler: EventHandler) -> None:
         """Remove a handler from all subscriptions."""
-        for handlers in self._handlers.values():
-            if handler in handlers:
-                handlers.remove(handler)
-        if handler in self._all_handlers:
-            self._all_handlers.remove(handler)
+        empty_event_types: list[type[Event]] = []
+        for event_type, handlers in self._handlers.items():
+            remaining = [registered for registered in handlers if registered is not handler]
+            if remaining:
+                self._handlers[event_type] = remaining
+            else:
+                empty_event_types.append(event_type)
+        for event_type in empty_event_types:
+            del self._handlers[event_type]
+        self._all_handlers = [
+            registered for registered in self._all_handlers if registered is not handler
+        ]
 
     @asynccontextmanager
     async def stream(self, *event_types: type[Event]) -> AsyncIterator[AsyncIterator[Event]]:
