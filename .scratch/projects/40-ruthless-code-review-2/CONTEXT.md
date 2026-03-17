@@ -282,3 +282,10 @@ Next action:
 
 Next action:
 - Start Phase 9 Step 9.1: add `get_latest_event_by_type` to `EventStore` and migrate proposal lookups.
+- Step 9.1 completed:
+  - added `EventStore.get_latest_event_by_type(agent_id, event_type)` for direct latest-event lookup
+  - added unit tests for positive and no-match behavior in `tests/unit/test_event_store.py`
+  - verification: `devenv shell -- python -m pytest tests/unit/test_event_store.py -q` passed (`7 passed`)
+
+Next action:
+- Step 9.2: update web rewrite-proposal lookup helper to use `get_latest_event_by_type` instead of scanning recent events.

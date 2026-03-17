@@ -57,6 +57,34 @@ async def test_eventstore_query_by_agent(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_eventstore_get_latest_event_by_type(tmp_path: Path) -> None:
+    db = await open_database(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
+    await store.append(AgentStartEvent(agent_id="target"))
+    await store.append(AgentMessageEvent(from_agent="x", to_agent="target", content="first"))
+    await store.append(AgentMessageEvent(from_agent="target", to_agent="y", content="latest"))
+
+    event = await store.get_latest_event_by_type("target", "AgentMessageEvent")
+    assert event is not None
+    assert event["event_type"] == "AgentMessageEvent"
+    assert event["payload"]["content"] == "latest"
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_eventstore_get_latest_event_by_type_returns_none(tmp_path: Path) -> None:
+    db = await open_database(tmp_path / "events.db")
+    store = EventStore(db=db)
+    await store.create_tables()
+    await store.append(AgentStartEvent(agent_id="target"))
+
+    event = await store.get_latest_event_by_type("target", "AgentMessageEvent")
+    assert event is None
+    await db.close()
+
+
+@pytest.mark.asyncio
 async def test_eventstore_trigger_flow(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "events.db")
     store = EventStore(db=db)

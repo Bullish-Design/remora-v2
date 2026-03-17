@@ -159,6 +159,31 @@ class EventStore:
             row["payload"] = json.loads(row["payload"])
         return result
 
+    async def get_latest_event_by_type(
+        self,
+        agent_id: str,
+        event_type: str,
+    ) -> dict[str, Any] | None:
+        """Get the latest event of a specific type involving an agent."""
+        cursor = await self._db.execute(
+            """
+            SELECT * FROM events
+            WHERE (agent_id = ? OR from_agent = ? OR to_agent = ?)
+              AND event_type = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (agent_id, agent_id, agent_id, event_type),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+
+        result = dict(row)
+        result["tags"] = json.loads(result.get("tags") or "[]")
+        result["payload"] = json.loads(result["payload"])
+        return result
+
     async def get_events_after(self, after_id: str, limit: int = 500) -> list[dict[str, Any]]:
         """Get events after a given event id, oldest first."""
         try:
