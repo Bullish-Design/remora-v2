@@ -469,3 +469,12 @@ Next action:
 
 Next action:
 - Step 14.2: add dedicated concurrency test coverage for dispatch/subscription/reconcile races.
+- Step 14.2 completed:
+  - added `tests/unit/test_concurrency.py` with coverage for:
+    - simultaneous dispatch to same actor serializing turn execution
+    - concurrent subscription mutation during dispatch without crashes
+    - overlapping reconcile cycles producing idempotent graph state
+  - verification: `devenv shell -- python -m pytest tests/unit/test_concurrency.py -q` passed (`3 passed`)
+
+Next action:
+- Step 14.3: update remaining whitebox actor tests to avoid direct actor internals when public TriggerPolicy/PromptBuilder APIs cover intent.
