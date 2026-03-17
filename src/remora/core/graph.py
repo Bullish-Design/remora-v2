@@ -32,13 +32,19 @@ class Edge:
 class NodeStore:
     """SQLite-backed storage for the Node graph."""
 
-    def __init__(self, db: aiosqlite.Connection):
+    def __init__(self, db: aiosqlite.Connection, tx: Any | None = None):
         self._db = db
+        self._tx = tx
         self._batch_depth = 0
 
     @asynccontextmanager
     async def batch(self):  # noqa: ANN201
         """Group multiple node mutations into a single commit."""
+        if self._tx is not None:
+            async with self._tx.batch():
+                yield
+            return
+
         self._batch_depth += 1
         failed = False
         try:
@@ -54,6 +60,8 @@ class NodeStore:
                 await self._db.commit()
 
     async def _maybe_commit(self) -> None:
+        if self._tx is not None and self._tx.in_batch:
+            return
         if self._batch_depth == 0:
             await self._db.commit()
 
@@ -182,9 +190,7 @@ class NodeStore:
     async def transition_status(self, node_id: str, target: NodeStatus) -> bool:
         """Transition node status atomically when the transition is valid."""
         valid_sources = [
-            state
-            for state, targets in STATUS_TRANSITIONS.items()
-            if target in targets
+            state for state, targets in STATUS_TRANSITIONS.items() if target in targets
         ]
         if not valid_sources:
             return False

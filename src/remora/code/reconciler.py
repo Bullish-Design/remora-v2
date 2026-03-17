@@ -45,6 +45,7 @@ class FileReconciler:
         project_root: Path,
         *,
         search_service: SearchServiceProtocol | None = None,
+        tx: Any | None = None,
     ):
         self._config = config
         self._node_store = node_store
@@ -52,6 +53,7 @@ class FileReconciler:
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
         self._search_service = search_service
+        self._tx = tx
         self._bundle_search_paths = resolve_bundle_search_paths(config, self._project_root)
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
@@ -234,8 +236,8 @@ class FileReconciler:
 
             projected.append(node)
 
-        async with self._node_store.batch():
-            async with self._event_store.batch():
+        if self._tx is not None:
+            async with self._tx.batch():
                 dir_node_id = self._directory_manager.directory_id_for_file(file_path)
                 for node in projected:
                     if node.parent_id is None:

@@ -25,11 +25,13 @@ class EventStore:
         event_bus: EventBus | None = None,
         dispatcher: TriggerDispatcher | None = None,
         metrics: Metrics | None = None,
+        tx: Any | None = None,
     ) -> None:
         self._db = db
         self._event_bus = event_bus or EventBus()
         self._dispatcher = dispatcher or TriggerDispatcher(SubscriptionRegistry(db))
         self._metrics = metrics
+        self._tx = tx
         self._pending_responses: dict[str, asyncio.Future[str]] = {}
         self._batch_depth = 0
         self._batch_buffer: list[Event] = []
@@ -98,6 +100,10 @@ class EventStore:
         event_id = int(cursor.lastrowid)
         if self._metrics is not None:
             self._metrics.events_emitted_total += 1
+
+        if self._tx is not None and self._tx.in_batch:
+            self._tx.defer_event(event)
+            return event_id
 
         if self._batch_depth > 0:
             self._batch_buffer.append(event)
@@ -231,5 +237,6 @@ class EventStore:
             row["tags"] = json.loads(row.get("tags") or "[]")
             row["payload"] = json.loads(row["payload"])
         return result
+
 
 __all__ = ["EventStore"]

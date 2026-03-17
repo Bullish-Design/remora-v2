@@ -15,6 +15,7 @@ from remora.core.graph import NodeStore
 from remora.core.metrics import Metrics
 from remora.core.runner import ActorPool
 from remora.core.search import SearchService, SearchServiceProtocol
+from remora.core.transaction import TransactionContext
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -27,16 +28,17 @@ class RuntimeServices:
         self.db = db
 
         self.metrics = Metrics()
-        self.node_store = NodeStore(db)
-
         self.event_bus = EventBus()
         self.subscriptions = SubscriptionRegistry(db)
         self.dispatcher = TriggerDispatcher(self.subscriptions)
+        self.tx = TransactionContext(db, self.event_bus, self.dispatcher)
+        self.node_store = NodeStore(db, tx=self.tx)
         self.event_store = EventStore(
             db=db,
             event_bus=self.event_bus,
             dispatcher=self.dispatcher,
             metrics=self.metrics,
+            tx=self.tx,
         )
 
         self.workspace_service = CairnWorkspaceService(config, project_root, metrics=self.metrics)
@@ -66,6 +68,7 @@ class RuntimeServices:
             self.workspace_service,
             self.project_root,
             search_service=self.search_service,
+            tx=self.tx,
         )
         await self.reconciler.start(self.event_bus)
 
