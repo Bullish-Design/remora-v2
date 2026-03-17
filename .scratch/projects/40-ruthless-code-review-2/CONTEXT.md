@@ -397,3 +397,9 @@ Next action:
 
 Next action:
 - Step 12.3: commit/push Phase 12 checkpoint and proceed to Phase 13.
+- Step 12.3 completed:
+  - Phase 12 refactor changes committed/pushed after validation.
+  - Phase 12 is complete.
+
+Next action:
+- Start Phase 13 Step 13.1: replace SHA-1 with SHA-256 in workspace safe-id generation.
