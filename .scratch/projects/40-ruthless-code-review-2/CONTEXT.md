@@ -438,3 +438,9 @@ Next action:
 
 Next action:
 - Step 13.6: record guide-directed skip for language-property refactor.
+- Step 13.6 completed:
+  - per guide decision, intentionally skipped language-plugin property-to-class-attribute refactor
+  - rationale: `LanguagePlugin` protocol shape expects property accessors; changing this adds churn and breaks interface assumptions
+
+Next action:
+- Step 13.7: remove redundant `subscriptions.create_tables()` invocation from runtime services initialization.

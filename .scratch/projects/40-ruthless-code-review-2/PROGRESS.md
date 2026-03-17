@@ -104,6 +104,6 @@
 - [x] Step 13.3 Pass configured web port into LSP chat command URI
 - [x] Step 13.4 Skip `_discover` async signature churn (per guide)
 - [x] Step 13.5 Remove dead `name_node` parameter from discovery name builder
-- [ ] Step 13.6 Skip language-property refactor (per guide)
+- [x] Step 13.6 Skip language-property refactor (per guide)
 - [ ] Step 13.7 Remove redundant subscriptions create_tables call
 - [ ] Step 13.8 Verify/commit checkpoint
