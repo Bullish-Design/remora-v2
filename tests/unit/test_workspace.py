@@ -111,6 +111,12 @@ async def test_service_initialize(tmp_path: Path) -> None:
     await service.close()
 
 
+def test_service_project_root_property(tmp_path: Path) -> None:
+    config = Config(workspace_root=".remora-test")
+    service = CairnWorkspaceService(config, tmp_path)
+    assert service.project_root == tmp_path.resolve()
+
+
 @pytest.mark.asyncio
 async def test_service_get_workspace(tmp_path: Path) -> None:
     config = Config(workspace_root=".remora-test")

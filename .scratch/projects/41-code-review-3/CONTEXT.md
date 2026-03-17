@@ -54,7 +54,15 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - Red phase captured with failing default-config assertion before config default change.
   - `devenv shell -- pytest tests/unit/test_config.py -q` passed.
   - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`358 passed, 8 skipped`).
+- Completed section 1.6 (workspace `project_root` property):
+  - added public `project_root` property to `CairnWorkspaceService`.
+  - replaced web server private attribute access (`_project_root`) with `project_root`.
+  - added `test_service_project_root_property`.
+- Verification for section 1.6:
+  - Red phase captured with `AttributeError` on missing `project_root` property.
+  - `devenv shell -- pytest tests/unit/test_workspace.py tests/unit/test_web_server.py -q` passed.
+  - `devenv shell -- pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q` passed (`359 passed, 8 skipped`).
 
 ## Next Action
-- Commit and push section 1.5 checkpoint.
-- Begin section 1.6 implementation (workspace `project_root` property and web caller update).
+- Commit and push section 1.6 checkpoint (Phase 1 complete).
+- Begin section 2.1 implementation (stable `EventType` dispatch).

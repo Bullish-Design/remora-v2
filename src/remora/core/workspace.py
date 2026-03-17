@@ -184,6 +184,11 @@ class CairnWorkspaceService:
         self._raw_agent_workspaces.clear()
         await self._manager.close_all()
 
+    @property
+    def project_root(self) -> Path:
+        """The resolved project root path."""
+        return self._project_root
+
     @staticmethod
     def _safe_id(node_id: str) -> str:
         """Convert node ID to a filesystem-safe deterministic name."""

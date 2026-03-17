@@ -117,11 +117,11 @@ def _resolve_within_project_root(
 ) -> Path:
     candidate = path
     if workspace_service is not None and not candidate.is_absolute():
-        candidate = workspace_service._project_root / candidate
+        candidate = workspace_service.project_root / candidate
     resolved = candidate.resolve()
     if workspace_service is None:
         return resolved
-    project_root = workspace_service._project_root.resolve()
+    project_root = workspace_service.project_root.resolve()
     try:
         resolved.relative_to(project_root)
     except ValueError as exc:

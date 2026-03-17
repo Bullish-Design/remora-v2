@@ -6,7 +6,7 @@
 - done
 
 ## Phase Tracking
-- [ ] Phase 1 Model Cleanup & Quick Wins
+- [x] Phase 1 Model Cleanup & Quick Wins
 - [ ] Phase 2 Bug Fixes & Type Safety
 - [ ] Phase 3 Structural Decomposition
 - [ ] Phase 4 Turn Pipeline Simplification
@@ -20,7 +20,7 @@
 - [x] 1.3 Make `_expand_env_vars` Public
 - [x] 1.4 Fix Config Silent Drops
 - [x] 1.5 Remove Dead Config
-- [ ] 1.6 Add `project_root` Property to Workspace Service
+- [x] 1.6 Add `project_root` Property to Workspace Service
 
 ### Phase 2
 - [ ] 2.1 Fix Event Type Dispatch
