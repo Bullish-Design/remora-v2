@@ -416,3 +416,12 @@ Next action:
 
 Next action:
 - Step 13.3: pass configured web port into LSP server so chat command URIs use runtime port instead of hardcoded 8080.
+- Step 13.3 completed:
+  - added `web_port` parameter to `create_lsp_server` (default 8080)
+  - `remora.chat` now opens `http://localhost:{web_port}/?node=...`
+  - lifecycle now passes `web_port=self._port` when creating the LSP server
+  - added test coverage for custom web-port URI generation
+  - verification: `devenv shell -- python -m pytest tests/unit/test_lsp_server.py tests/unit/test_cli.py tests/integration/test_startup_shutdown.py -q` passed (`25 passed`)
+
+Next action:
+- Step 13.4: record skip decision for `_discover` async signature churn per guide.

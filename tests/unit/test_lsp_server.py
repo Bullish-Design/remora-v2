@@ -317,3 +317,23 @@ async def test_lsp_chat_command_requests_external_document(lsp_env) -> None:
 
     assert shown["uri"] == "http://localhost:8080/?node=src/app.py::a"
     assert shown["external"] is True
+
+
+@pytest.mark.asyncio
+async def test_lsp_chat_command_uses_configured_web_port(lsp_env) -> None:
+    node_store, event_store = lsp_env
+    server = create_lsp_server(node_store, event_store, web_port=8765)
+    handlers = _handlers(server)
+    chat_command = handlers.chat_command
+
+    shown: dict[str, object] = {}
+
+    def fake_show_document(params):  # noqa: ANN001, ANN202
+        shown["uri"] = params.uri
+        shown["external"] = params.external
+
+    server.show_document = fake_show_document  # type: ignore[assignment]
+    await chat_command(server, ["src/app.py::a"])
+
+    assert shown["uri"] == "http://localhost:8765/?node=src/app.py::a"
+    assert shown["external"] is True

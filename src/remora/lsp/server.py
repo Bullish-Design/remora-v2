@@ -95,6 +95,7 @@ def create_lsp_server(
     node_store: NodeStore | None = None,
     event_store: EventStore | None = None,
     db_path: Path | None = None,
+    web_port: int = 8080,
 ) -> LanguageServer:
     """Create an LSP server from shared stores or a standalone sqlite path."""
     server = RemoraLanguageServer("remora", "2.0.0")
@@ -180,7 +181,7 @@ def create_lsp_server(
             return
         ls.show_document(
             lsp.ShowDocumentParams(
-                uri=f"http://localhost:8080/?node={node_id}",
+                uri=f"http://localhost:{web_port}/?node={node_id}",
                 external=True,
             )
         )

@@ -131,7 +131,11 @@ class RemoraLifecycle:
             logger.info("Web server disabled (--no-web)")
 
         if self._lsp:
-            self._lsp_server = create_lsp_server(services.node_store, services.event_store)
+            self._lsp_server = create_lsp_server(
+                services.node_store,
+                services.event_store,
+                web_port=self._port,
+            )
             logger.info("Starting LSP server on stdin/stdout")
             lsp_task = asyncio.create_task(
                 asyncio.to_thread(self._lsp_server.start_io),
