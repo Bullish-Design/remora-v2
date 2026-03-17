@@ -8,7 +8,7 @@ import yaml
 from cairn.runtime import workspace_manager as cairn_wm
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
 
-from remora.core.config import Config
+from remora.core.config import Config, InfraConfig
 from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
 
 
@@ -103,7 +103,7 @@ async def test_workspace_kv_ops(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_initialize(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
     assert (tmp_path / ".remora-test").exists()
@@ -112,14 +112,14 @@ async def test_service_initialize(tmp_path: Path) -> None:
 
 
 def test_service_project_root_property(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     assert service.project_root == tmp_path.resolve()
 
 
 @pytest.mark.asyncio
 async def test_service_get_workspace(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
     workspace = await service.get_agent_workspace("src/app.py::a")
@@ -129,7 +129,7 @@ async def test_service_get_workspace(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_workspace_caching(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
     first = await service.get_agent_workspace("src/app.py::a")
@@ -140,7 +140,7 @@ async def test_service_workspace_caching(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_provision_bundle(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
 
@@ -162,7 +162,7 @@ async def test_service_provision_bundle(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_service_provision_bundle_skips_when_fingerprint_unchanged(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
 
@@ -184,7 +184,7 @@ async def test_service_provision_bundle_skips_when_fingerprint_unchanged(tmp_pat
 
 @pytest.mark.asyncio
 async def test_service_provision_layering(tmp_path: Path) -> None:
-    config = Config(workspace_root=".remora-test")
+    config = Config(infra=InfraConfig(workspace_root=".remora-test"))
     service = CairnWorkspaceService(config, tmp_path)
     await service.initialize()
 
@@ -211,12 +211,7 @@ async def test_service_provision_layering(tmp_path: Path) -> None:
     type_template = tmp_path / "type-template"
     (type_template / "tools").mkdir(parents=True)
     (type_template / "bundle.yaml").write_text(
-        (
-            "name: code-agent\n"
-            "max_turns: 8\n"
-            "prompts:\n"
-            "  chat: TYPE_CHAT\n"
-        ),
+        ("name: code-agent\nmax_turns: 8\nprompts:\n  chat: TYPE_CHAT\n"),
         encoding="utf-8",
     )
     (type_template / "tools" / "shared.pym").write_text("return 'type'\n", encoding="utf-8")

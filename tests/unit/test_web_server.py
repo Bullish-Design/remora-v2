@@ -13,7 +13,7 @@ from structured_agents import Message
 from tests.factories import make_node
 
 from remora import __version__
-from remora.core.config import Config
+from remora.core.config import Config, InfraConfig
 from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
@@ -97,7 +97,7 @@ async def proposal_web_env(tmp_path: Path):
     )
     await node_store.upsert_node(node)
 
-    config = Config(workspace_root=".remora-web-proposals")
+    config = Config(infra=InfraConfig(workspace_root=".remora-web-proposals"))
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
     workspace = await workspace_service.get_agent_workspace(node.node_id)
@@ -134,7 +134,7 @@ async def companion_web_env(tmp_path: Path):
     event_store = EventStore(db=db, event_bus=event_bus)
     await event_store.create_tables()
 
-    config = Config(workspace_root=".remora-web-companion")
+    config = Config(infra=InfraConfig(workspace_root=".remora-web-companion"))
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 

@@ -10,7 +10,7 @@ import typer
 from typer.testing import CliRunner
 
 from remora.__main__ import _configure_file_logging, _configure_logging, _index, _start, app
-from remora.core.config import Config
+from remora.core.config import Config, ProjectConfig, SearchConfig, SearchMode
 
 
 def test_cli_help() -> None:
@@ -252,10 +252,15 @@ async def test_index_happy_path_calls_index_directory_for_each_discovery_path(
     path_a.mkdir(parents=True)
     path_b.mkdir(parents=True)
 
-    config = Config(search={"enabled": True, "mode": "remote"}, discovery_paths=("src", "docs"))
+    config = Config(
+        search=SearchConfig(enabled=True, mode=SearchMode.REMOTE),
+        project=ProjectConfig(discovery_paths=("src", "docs")),
+    )
 
     monkeypatch.setattr(main_module, "load_config", lambda _path: config)
-    monkeypatch.setattr(main_module, "resolve_discovery_paths", lambda *_args, **_kwargs: [path_a, path_b])
+    monkeypatch.setattr(
+        main_module, "resolve_discovery_paths", lambda *_args, **_kwargs: [path_a, path_b]
+    )
     monkeypatch.setattr("remora.core.search.SearchService", FakeService)
 
     await _index(

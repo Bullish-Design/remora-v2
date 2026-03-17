@@ -9,7 +9,7 @@ from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
 from remora.core.actor import Outbox
-from remora.core.config import Config
+from remora.core.config import Config, InfraConfig
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.events.types import CustomEvent
@@ -28,7 +28,7 @@ async def context_env(tmp_path: Path):
     event_store = EventStore(db=db)
     await event_store.create_tables()
 
-    config = Config(workspace_root=".remora-phase5")
+    config = Config(infra=InfraConfig(workspace_root=".remora-phase5"))
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 

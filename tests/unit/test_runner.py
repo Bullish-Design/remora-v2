@@ -10,7 +10,7 @@ import pytest_asyncio
 from tests.factories import make_node
 
 from remora.core.actor import Actor, PromptBuilder, TriggerPolicy
-from remora.core.config import Config
+from remora.core.config import BehaviorConfig, Config, InfraConfig, RuntimeConfig
 from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
@@ -43,10 +43,9 @@ async def runner_env(tmp_path: Path):
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        workspace_root=".remora-runner-test",
-        trigger_cooldown_ms=1000,
-        max_trigger_depth=2,
-        prompt_templates={"user": _USER_TEMPLATE},
+        infra=InfraConfig(workspace_root=".remora-runner-test"),
+        runtime=RuntimeConfig(trigger_cooldown_ms=1000, max_trigger_depth=2),
+        behavior=BehaviorConfig(prompt_templates={"user": _USER_TEMPLATE}),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -130,7 +129,11 @@ async def test_runner_build_prompt_via_actor(runner_env) -> None:
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
     prompt_builder = PromptBuilder(
-        Config(prompt_templates={"user": _USER_TEMPLATE}, model_default="mock", max_turns=1)
+        Config(
+            behavior=BehaviorConfig(
+                prompt_templates={"user": _USER_TEMPLATE}, model_default="mock", max_turns=1
+            )
+        )
     )
     prompt = prompt_builder.build_user_prompt(
         node,
@@ -160,7 +163,11 @@ async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
     await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
 
     prompt_builder = PromptBuilder(
-        Config(prompt_templates={"user": _USER_TEMPLATE}, model_default="mock", max_turns=1)
+        Config(
+            behavior=BehaviorConfig(
+                prompt_templates={"user": _USER_TEMPLATE}, model_default="mock", max_turns=1
+            )
+        )
     )
     prompt = prompt_builder.build_user_prompt(
         node,
@@ -266,8 +273,8 @@ async def test_runner_evict_idle_uses_config_timeout(tmp_path: Path) -> None:
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        workspace_root=".remora-runner-timeout",
-        actor_idle_timeout_s=1.0,
+        infra=InfraConfig(workspace_root=".remora-runner-timeout"),
+        runtime=RuntimeConfig(actor_idle_timeout_s=1.0),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
