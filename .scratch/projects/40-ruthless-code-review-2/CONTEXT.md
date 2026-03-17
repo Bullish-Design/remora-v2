@@ -170,3 +170,23 @@ Next action:
 
 Next action:
 - Step 5.5/5.6: finalize actor slim-down and verify re-exports/import paths across src/tests.
+- Step 5.5 completed:
+  - `core/actor.py` now contains only the `Actor` orchestration class + re-export surface
+  - verified only one class remains in actor module
+- Step 5.6 completed:
+  - verified `from remora.core.actor import ...` usage sites across `src/` and `tests/`
+  - re-export paths are intact for Actor/Outbox/Trigger/PromptBuilder/AgentTurnExecutor
+
+Next action:
+- Step 5.7: run full test verification command for Phase 5 and commit/push the phase completion checkpoint.
+- Step 5.7 completed:
+  - full verification command passed:
+    - `devenv shell -- python -m pytest tests/ --ignore=tests/benchmarks --ignore=tests/integration/cairn -q`
+    - result: `351 passed, 8 skipped, 3 warnings`
+  - decomposition details:
+    - actor module now orchestrates only
+    - extracted modules: `outbox.py`, `trigger.py`, `prompt.py`, `turn_executor.py`
+    - maintained actor-module monkeypatch and logger compatibility during extraction
+
+Next action:
+- Start Phase 6 (`web/server.py` refactor): extract handler dependency dataclass and module-level handler groups.

@@ -59,9 +59,12 @@ class Actor:
             search_service=search_service,
             # Keep these injected from actor module so existing test monkeypatch
             # paths on remora.core.actor continue to work during decomposition.
-            create_kernel_fn=create_kernel,
-            discover_tools_fn=discover_tools,
-            extract_response_text_fn=extract_response_text,
+            create_kernel_fn=lambda **kwargs: create_kernel(**kwargs),
+            discover_tools_fn=lambda workspace, capabilities: discover_tools(
+                workspace,
+                capabilities,
+            ),
+            extract_response_text_fn=lambda result: extract_response_text(result),
         )
 
     @property
