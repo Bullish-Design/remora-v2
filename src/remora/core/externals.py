@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from remora.core.events import (
@@ -27,65 +28,39 @@ if TYPE_CHECKING:
     from remora.core.actor import Outbox
 
 
-class TurnContext:
-    """Per-turn context providing externals API for an agent's tools."""
+class FileCapabilities:
+    """File system operations for agent tools."""
 
-    def __init__(
-        self,
-        node_id: str,
-        workspace: AgentWorkspace,
-        correlation_id: str | None,
-        node_store: NodeStore,
-        event_store: EventStore,
-        outbox: Outbox,
-        human_input_timeout_s: float = 300.0,
-        search_content_max_matches: int = 1000,
-        broadcast_max_targets: int = 50,
-        send_message_limiter: SlidingWindowRateLimiter | None = None,
-        search_service: SearchServiceProtocol | None = None,
-    ) -> None:
-        self.node_id = node_id
-        self.workspace = workspace
-        self.correlation_id = correlation_id
-        self._node_store = node_store
-        self._event_store = event_store
-        self._outbox = outbox
-        self._human_input_timeout_s = human_input_timeout_s
+    def __init__(self, workspace: AgentWorkspace, *, search_content_max_matches: int = 1000) -> None:
+        self._workspace = workspace
         self._search_content_max_matches = max(1, int(search_content_max_matches))
-        self._broadcast_max_targets = max(1, int(broadcast_max_targets))
-        self._send_message_limiter = send_message_limiter
-        self._search_service = search_service
-
-    async def _emit(self, event: Event) -> int:
-        """Emit an event through the outbox."""
-        return await self._outbox.emit(event)
 
     async def read_file(self, path: str) -> str:
-        return await self.workspace.read(path)
+        return await self._workspace.read(path)
 
     async def write_file(self, path: str, content: str) -> bool:
-        await self.workspace.write(path, content)
+        await self._workspace.write(path, content)
         return True
 
     async def list_dir(self, path: str = ".") -> list[str]:
-        return await self.workspace.list_dir(path)
+        return await self._workspace.list_dir(path)
 
     async def file_exists(self, path: str) -> bool:
-        return await self.workspace.exists(path)
+        return await self._workspace.exists(path)
 
     async def search_files(self, pattern: str) -> list[str]:
-        paths = await self.workspace.list_all_paths()
+        paths = await self._workspace.list_all_paths()
         return sorted(path for path in paths if fnmatch.fnmatch(path, f"*{pattern}*"))
 
     async def search_content(self, pattern: str, path: str = ".") -> list[dict[str, Any]]:
         matches: list[dict[str, Any]] = []
-        paths = await self.workspace.list_all_paths()
+        paths = await self._workspace.list_all_paths()
         for file_path in paths:
             normalized = file_path.strip("/")
             if path not in {".", "/", ""} and not normalized.startswith(path.strip("/")):
                 continue
             try:
-                content = await self.workspace.read(normalized)
+                content = await self._workspace.read(normalized)
             except FileNotFoundError:
                 continue
             for index, line in enumerate(content.splitlines(), start=1):
@@ -95,19 +70,52 @@ class TurnContext:
                         return matches
         return matches
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "read_file": self.read_file,
+            "write_file": self.write_file,
+            "list_dir": self.list_dir,
+            "file_exists": self.file_exists,
+            "search_files": self.search_files,
+            "search_content": self.search_content,
+        }
+
+
+class KVCapabilities:
+    """Key-value store operations for agent tools."""
+
+    def __init__(self, workspace: AgentWorkspace) -> None:
+        self._workspace = workspace
+
     async def kv_get(self, key: str) -> Any | None:
-        return await self.workspace.kv_get(key)
+        return await self._workspace.kv_get(key)
 
     async def kv_set(self, key: str, value: Any) -> bool:
-        await self.workspace.kv_set(key, value)
+        await self._workspace.kv_set(key, value)
         return True
 
     async def kv_delete(self, key: str) -> bool:
-        await self.workspace.kv_delete(key)
+        await self._workspace.kv_delete(key)
         return True
 
     async def kv_list(self, prefix: str = "") -> list[str]:
-        return await self.workspace.kv_list(prefix)
+        return await self._workspace.kv_list(prefix)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kv_get": self.kv_get,
+            "kv_set": self.kv_set,
+            "kv_delete": self.kv_delete,
+            "kv_list": self.kv_list,
+        }
+
+
+class GraphCapabilities:
+    """Graph operations for agent tools."""
+
+    def __init__(self, node_id: str, node_store: NodeStore) -> None:
+        self._node_id = node_id
+        self._node_store = node_store
 
     async def graph_get_node(self, target_id: str) -> dict[str, Any]:
         node = await self._node_store.get_node(target_id)
@@ -125,9 +133,7 @@ class TurnContext:
             valid_node_types = {serialize_enum(item) for item in NodeType}
             if node_type_name not in valid_node_types:
                 choices = ", ".join(sorted(valid_node_types))
-                raise ValueError(
-                    f"Invalid node_type '{node_type}'. Expected one of: {choices}"
-                )
+                raise ValueError(f"Invalid node_type '{node_type}'. Expected one of: {choices}")
             normalized_node_type = NodeType(node_type_name)
 
         normalized_status: NodeStatus | None = None
@@ -154,14 +160,38 @@ class TurnContext:
         ]
 
     async def graph_get_children(self, parent_id: str | None = None) -> list[dict[str, Any]]:
-        """Get child nodes. Defaults to current node's children."""
-        target = parent_id or self.node_id
+        target = parent_id or self._node_id
         children = await self._node_store.get_children(target)
         return [node.model_dump() for node in children]
 
     async def graph_set_status(self, target_id: str, new_status: str) -> bool:
         target_enum = NodeStatus(new_status.strip())
         return await self._node_store.transition_status(target_id, target_enum)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "graph_get_node": self.graph_get_node,
+            "graph_query_nodes": self.graph_query_nodes,
+            "graph_get_edges": self.graph_get_edges,
+            "graph_get_children": self.graph_get_children,
+            "graph_set_status": self.graph_set_status,
+        }
+
+
+class EventCapabilities:
+    """Event operations for agent tools."""
+
+    def __init__(
+        self,
+        node_id: str,
+        correlation_id: str | None,
+        event_store: EventStore,
+        emit: Callable[[Event], Awaitable[int]],
+    ) -> None:
+        self._node_id = node_id
+        self._correlation_id = correlation_id
+        self._event_store = event_store
+        self._emit = emit
 
     async def event_emit(
         self,
@@ -172,7 +202,7 @@ class TurnContext:
         event = CustomEvent(
             event_type=event_type,
             payload=payload,
-            correlation_id=self.correlation_id,
+            correlation_id=self._correlation_id,
             tags=tuple(tags or ()),
         )
         await self._emit(event)
@@ -191,7 +221,7 @@ class TurnContext:
             path_glob=path_glob,
             tags=tags,
         )
-        return await self._event_store.subscriptions.register(self.node_id, pattern)
+        return await self._event_store.subscriptions.register(self._node_id, pattern)
 
     async def event_unsubscribe(self, subscription_id: int) -> bool:
         return await self._event_store.subscriptions.unregister(subscription_id)
@@ -199,38 +229,68 @@ class TurnContext:
     async def event_get_history(self, target_id: str, limit: int = 20) -> list[dict[str, Any]]:
         return await self._event_store.get_events_for_agent(target_id, limit=limit)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_emit": self.event_emit,
+            "event_subscribe": self.event_subscribe,
+            "event_unsubscribe": self.event_unsubscribe,
+            "event_get_history": self.event_get_history,
+        }
+
+
+class CommunicationCapabilities:
+    """Inter-agent communication operations for agent tools."""
+
+    def __init__(
+        self,
+        node_id: str,
+        correlation_id: str | None,
+        workspace: AgentWorkspace,
+        node_store: NodeStore,
+        event_store: EventStore,
+        emit: Callable[[Event], Awaitable[int]],
+        *,
+        human_input_timeout_s: float = 300.0,
+        broadcast_max_targets: int = 50,
+        send_message_limiter: SlidingWindowRateLimiter | None = None,
+    ) -> None:
+        self._node_id = node_id
+        self._correlation_id = correlation_id
+        self._workspace = workspace
+        self._node_store = node_store
+        self._event_store = event_store
+        self._emit = emit
+        self._human_input_timeout_s = human_input_timeout_s
+        self._broadcast_max_targets = max(1, int(broadcast_max_targets))
+        self._send_message_limiter = send_message_limiter
+
     async def send_message(self, to_node_id: str, content: str) -> bool:
         if not self._allow_send_message():
             return False
         await self._emit(
             AgentMessageEvent(
-                from_agent=self.node_id,
+                from_agent=self._node_id,
                 to_agent=to_node_id,
                 content=content,
-                correlation_id=self.correlation_id,
+                correlation_id=self._correlation_id,
             )
         )
         return True
 
     async def broadcast(self, pattern: str, content: str) -> str:
         nodes = await self._node_store.list_nodes()
-        target_ids = _resolve_broadcast_targets(self.node_id, pattern, nodes)
+        target_ids = _resolve_broadcast_targets(self._node_id, pattern, nodes)
         limited_targets = target_ids[: self._broadcast_max_targets]
         for target_id in limited_targets:
             await self._emit(
                 AgentMessageEvent(
-                    from_agent=self.node_id,
+                    from_agent=self._node_id,
                     to_agent=target_id,
                     content=content,
-                    correlation_id=self.correlation_id,
+                    correlation_id=self._correlation_id,
                 )
             )
         return f"Broadcast sent to {len(limited_targets)} agents"
-
-    def _allow_send_message(self) -> bool:
-        if self._send_message_limiter is None:
-            return True
-        return self._send_message_limiter.allow(self.node_id)
 
     async def request_human_input(
         self,
@@ -240,14 +300,14 @@ class TurnContext:
         request_id = str(uuid.uuid4())
         future = self._event_store.create_response_future(request_id)
 
-        await self._node_store.transition_status(self.node_id, NodeStatus.AWAITING_INPUT)
+        await self._node_store.transition_status(self._node_id, NodeStatus.AWAITING_INPUT)
         await self._emit(
             HumanInputRequestEvent(
-                agent_id=self.node_id,
+                agent_id=self._node_id,
                 request_id=request_id,
                 question=question,
                 options=tuple(options or ()),
-                correlation_id=self.correlation_id,
+                correlation_id=self._correlation_id,
             )
         )
 
@@ -257,36 +317,46 @@ class TurnContext:
             self._event_store.discard_response_future(request_id)
             raise
         finally:
-            await self._node_store.transition_status(self.node_id, NodeStatus.RUNNING)
+            await self._node_store.transition_status(self._node_id, NodeStatus.RUNNING)
 
     async def propose_changes(self, reason: str = "") -> str:
         proposal_id = str(uuid.uuid4())
         changed_files = await self._collect_changed_files()
-        await self._node_store.transition_status(self.node_id, NodeStatus.AWAITING_REVIEW)
+        await self._node_store.transition_status(self._node_id, NodeStatus.AWAITING_REVIEW)
         await self._emit(
             RewriteProposalEvent(
-                agent_id=self.node_id,
+                agent_id=self._node_id,
                 proposal_id=proposal_id,
                 files=tuple(changed_files),
                 reason=reason,
-                correlation_id=self.correlation_id,
+                correlation_id=self._correlation_id,
             )
         )
         return proposal_id
 
+    def _allow_send_message(self) -> bool:
+        if self._send_message_limiter is None:
+            return True
+        return self._send_message_limiter.allow(self._node_id)
+
     async def _collect_changed_files(self) -> list[str]:
-        all_paths = await self.workspace.list_all_paths()
+        all_paths = await self._workspace.list_all_paths()
         return sorted(path for path in all_paths if not path.startswith("_bundle/"))
 
-    async def get_node_source(self, target_id: str) -> str:
-        node = await self._node_store.get_node(target_id)
-        return node.text if node is not None else ""
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "send_message": self.send_message,
+            "broadcast": self.broadcast,
+            "request_human_input": self.request_human_input,
+            "propose_changes": self.propose_changes,
+        }
 
-    async def my_node_id(self) -> str:
-        return self.node_id
 
-    async def my_correlation_id(self) -> str | None:
-        return self.correlation_id
+class SearchCapabilities:
+    """Semantic search operations for agent tools."""
+
+    def __init__(self, search_service: SearchServiceProtocol | None) -> None:
+        self._search_service = search_service
 
     async def semantic_search(
         self,
@@ -295,7 +365,6 @@ class TurnContext:
         top_k: int = 10,
         mode: str = "hybrid",
     ) -> list[dict[str, Any]]:
-        """Search the codebase using semantic similarity."""
         if self._search_service is None or not self._search_service.available:
             return []
         return await self._search_service.search(query, collection, top_k, mode)
@@ -306,42 +375,109 @@ class TurnContext:
         collection: str | None = None,
         top_k: int = 10,
     ) -> list[dict[str, Any]]:
-        """Find code chunks similar to an existing chunk."""
         if self._search_service is None or not self._search_service.available:
             return []
         return await self._search_service.find_similar(chunk_id, collection, top_k)
 
-    def to_capabilities_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            "read_file": self.read_file,
-            "write_file": self.write_file,
-            "list_dir": self.list_dir,
-            "file_exists": self.file_exists,
-            "search_files": self.search_files,
-            "search_content": self.search_content,
-            "kv_get": self.kv_get,
-            "kv_set": self.kv_set,
-            "kv_delete": self.kv_delete,
-            "kv_list": self.kv_list,
-            "graph_get_node": self.graph_get_node,
-            "graph_query_nodes": self.graph_query_nodes,
-            "graph_get_edges": self.graph_get_edges,
-            "graph_get_children": self.graph_get_children,
-            "graph_set_status": self.graph_set_status,
-            "event_emit": self.event_emit,
-            "event_subscribe": self.event_subscribe,
-            "event_unsubscribe": self.event_unsubscribe,
-            "event_get_history": self.event_get_history,
-            "send_message": self.send_message,
-            "broadcast": self.broadcast,
-            "request_human_input": self.request_human_input,
-            "propose_changes": self.propose_changes,
-            "get_node_source": self.get_node_source,
-            "my_node_id": self.my_node_id,
-            "my_correlation_id": self.my_correlation_id,
             "semantic_search": self.semantic_search,
             "find_similar_code": self.find_similar_code,
         }
+
+
+class IdentityCapabilities:
+    """Agent identity and source lookup operations for agent tools."""
+
+    def __init__(
+        self,
+        node_id: str,
+        correlation_id: str | None,
+        node_store: NodeStore,
+    ) -> None:
+        self._node_id = node_id
+        self._correlation_id = correlation_id
+        self._node_store = node_store
+
+    async def get_node_source(self, target_id: str) -> str:
+        node = await self._node_store.get_node(target_id)
+        return node.text if node is not None else ""
+
+    async def my_node_id(self) -> str:
+        return self._node_id
+
+    async def my_correlation_id(self) -> str | None:
+        return self._correlation_id
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "get_node_source": self.get_node_source,
+            "my_node_id": self.my_node_id,
+            "my_correlation_id": self.my_correlation_id,
+        }
+
+
+class TurnContext:
+    """Per-turn context that composes grouped externals capabilities."""
+
+    def __init__(
+        self,
+        node_id: str,
+        workspace: AgentWorkspace,
+        correlation_id: str | None,
+        node_store: NodeStore,
+        event_store: EventStore,
+        outbox: Outbox,
+        human_input_timeout_s: float = 300.0,
+        search_content_max_matches: int = 1000,
+        broadcast_max_targets: int = 50,
+        send_message_limiter: SlidingWindowRateLimiter | None = None,
+        search_service: SearchServiceProtocol | None = None,
+    ) -> None:
+        self.node_id = node_id
+        self.workspace = workspace
+        self.correlation_id = correlation_id
+        self._outbox = outbox
+
+        self.files = FileCapabilities(
+            workspace,
+            search_content_max_matches=search_content_max_matches,
+        )
+        self.kv = KVCapabilities(workspace)
+        self.graph = GraphCapabilities(node_id, node_store)
+        self.events = EventCapabilities(
+            node_id,
+            correlation_id,
+            event_store,
+            self._emit,
+        )
+        self.comms = CommunicationCapabilities(
+            node_id,
+            correlation_id,
+            workspace,
+            node_store,
+            event_store,
+            self._emit,
+            human_input_timeout_s=human_input_timeout_s,
+            broadcast_max_targets=broadcast_max_targets,
+            send_message_limiter=send_message_limiter,
+        )
+        self.search = SearchCapabilities(search_service)
+        self.identity = IdentityCapabilities(node_id, correlation_id, node_store)
+
+    async def _emit(self, event: Event) -> int:
+        return await self._outbox.emit(event)
+
+    def to_capabilities_dict(self) -> dict[str, Any]:
+        capabilities: dict[str, Any] = {}
+        capabilities.update(self.files.to_dict())
+        capabilities.update(self.kv.to_dict())
+        capabilities.update(self.graph.to_dict())
+        capabilities.update(self.events.to_dict())
+        capabilities.update(self.comms.to_dict())
+        capabilities.update(self.search.to_dict())
+        capabilities.update(self.identity.to_dict())
+        return capabilities
 
 
 def _resolve_broadcast_targets(
@@ -372,4 +508,14 @@ def _resolve_broadcast_targets(
         ]
     return [node_id for node_id in all_ids if pattern in node_id]
 
-__all__ = ["TurnContext"]
+
+__all__ = [
+    "CommunicationCapabilities",
+    "EventCapabilities",
+    "FileCapabilities",
+    "GraphCapabilities",
+    "IdentityCapabilities",
+    "KVCapabilities",
+    "SearchCapabilities",
+    "TurnContext",
+]

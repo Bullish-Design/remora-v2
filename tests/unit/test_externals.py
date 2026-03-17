@@ -13,7 +13,7 @@ from remora.core.config import Config
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.events.types import CustomEvent
-from remora.core.externals import TurnContext
+from remora.core.externals import FileCapabilities, TurnContext
 from remora.core.graph import NodeStore
 from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.types import NodeStatus, NodeType
@@ -604,8 +604,8 @@ async def test_semantic_search_returns_empty_without_service(context_env) -> Non
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, event_store)
 
-    assert await context.semantic_search("auth") == []
-    assert await context.find_similar_code("chunk-1") == []
+    assert await context.search.semantic_search("auth") == []
+    assert await context.search.find_similar_code("chunk-1") == []
 
 
 @pytest.mark.asyncio
@@ -623,8 +623,8 @@ async def test_semantic_search_returns_empty_when_service_unavailable(context_en
         search_service=search_service,
     )
 
-    assert await context.semantic_search("auth") == []
-    assert await context.find_similar_code("chunk-1") == []
+    assert await context.search.semantic_search("auth") == []
+    assert await context.search.find_similar_code("chunk-1") == []
     assert search_service.search_calls == []
     assert search_service.similar_calls == []
 
@@ -644,8 +644,8 @@ async def test_semantic_search_and_find_similar_delegate(context_env) -> None:
         search_service=search_service,
     )
 
-    results = await context.semantic_search("auth", "code", 5, "hybrid")
-    similar = await context.find_similar_code("c1", "code", 3)
+    results = await context.search.semantic_search("auth", "code", 5, "hybrid")
+    similar = await context.search.find_similar_code("c1", "code", 3)
 
     assert results == [{"chunk_id": "c1", "score": 0.9}]
     assert similar == [{"chunk_id": "c1", "score": 0.8}]
@@ -671,3 +671,25 @@ async def test_capabilities_include_search_methods(context_env) -> None:
 
     assert "semantic_search" in externals
     assert "find_similar_code" in externals
+
+
+@pytest.mark.asyncio
+async def test_file_capabilities_standalone_reads_workspace(context_env) -> None:
+    _node_store, _event_store, workspace_service = context_env
+    workspace = await workspace_service.get_agent_workspace("src/app.py::files")
+    await workspace.write("notes/readme.txt", "hello")
+
+    caps = FileCapabilities(workspace)
+    assert await caps.read_file("notes/readme.txt") == "hello"
+
+
+@pytest.mark.asyncio
+async def test_turn_context_exposes_grouped_capabilities(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::grouped")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+
+    assert await context.identity.my_node_id() == node.node_id
+    assert await context.search.semantic_search("anything") == []

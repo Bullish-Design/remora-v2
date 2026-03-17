@@ -126,8 +126,18 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - targeted verification:
     - red phase captured by `devenv shell -- pytest tests/unit/test_actor.py tests/unit/test_workspace.py -q` failing due to missing methods.
     - green phase passed with same command (`57 passed, 1 warning`).
+- Completed section 4.2 (externals decomposition):
+  - split monolithic `TurnContext` into grouped capability classes in `src/remora/core/externals.py`:
+    - `FileCapabilities`, `KVCapabilities`, `GraphCapabilities`, `EventCapabilities`,
+      `CommunicationCapabilities`, `SearchCapabilities`, `IdentityCapabilities`.
+  - kept `TurnContext` as a facade that composes capability groups and flattens with `to_capabilities_dict()`.
+  - added grouped-capability tests in `tests/unit/test_externals.py` and updated direct search calls to `context.search.*`.
+  - targeted verification:
+    - red phase captured by `devenv shell -- pytest tests/unit/test_externals.py -q` with `ImportError: cannot import name 'FileCapabilities'`.
+    - green phase:
+      - `devenv shell -- pytest tests/unit/test_externals.py -q` (`27 passed`)
+      - `devenv shell -- pytest tests/unit/test_actor.py tests/integration/test_e2e.py -q` (`45 passed`).
 
 ## Next Action
-- Commit and push section 3.2 checkpoint (Phase 3 complete).
-- Commit and push section 4.1 checkpoint.
-- Begin section 4.2 implementation (externals decomposition).
+- Commit and push section 4.2 checkpoint (Phase 4 complete).
+- Begin section 5.1 implementation (event store batching).
