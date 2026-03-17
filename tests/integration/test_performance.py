@@ -8,6 +8,7 @@ import pytest
 from tests.factories import make_node
 
 from remora.code.discovery import discover
+from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
 from remora.core.db import open_database
@@ -39,8 +40,14 @@ async def test_perf_discovery_100_nodes(tmp_path: Path) -> None:
     source = "\n".join(f"def f{i}():\n    return {i}\n" for i in range(120))
     file_path.write_text(source, encoding="utf-8")
 
+    registry = LanguageRegistry.from_defaults()
     started = time.perf_counter()
-    nodes = discover([tmp_path / "src"], languages=["python"])
+    nodes = discover(
+        [tmp_path / "src"],
+        languages=["python"],
+        language_registry=registry,
+        language_map={".py": "python"},
+    )
     elapsed = time.perf_counter() - started
 
     functions = [node for node in nodes if node.node_type == "function"]

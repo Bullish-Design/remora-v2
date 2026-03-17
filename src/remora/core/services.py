@@ -32,6 +32,7 @@ class RuntimeServices:
         self.subscriptions = SubscriptionRegistry(db)
         self.dispatcher = TriggerDispatcher(self.subscriptions)
         self.tx = TransactionContext(db, self.event_bus, self.dispatcher)
+        self.subscriptions._tx = self.tx
         self.node_store = NodeStore(db, tx=self.tx)
         self.event_store = EventStore(
             db=db,
@@ -67,6 +68,7 @@ class RuntimeServices:
             self.event_store,
             self.workspace_service,
             self.project_root,
+            self.language_registry,
             search_service=self.search_service,
             tx=self.tx,
         )

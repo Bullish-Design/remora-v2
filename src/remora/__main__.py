@@ -12,6 +12,7 @@ from typing import Annotated
 import typer
 
 from remora.code.discovery import discover as discover_nodes
+from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.core.config import load_config
 from remora.core.lifecycle import RemoraLifecycle
@@ -200,9 +201,15 @@ async def _discover(
     discovery_paths = resolve_discovery_paths(config, project_root)
     query_paths = resolve_query_paths(config, project_root)
 
+    language_registry = LanguageRegistry.from_config(
+        language_defs=config.behavior.languages,
+        query_search_paths=query_paths,
+    )
+
     return discover_nodes(
         discovery_paths,
         language_map=config.behavior.language_map,
+        language_registry=language_registry,
         query_paths=query_paths,
         languages=list(config.project.discovery_languages)
         if config.project.discovery_languages

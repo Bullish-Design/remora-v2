@@ -15,9 +15,11 @@ def test_discover_python_function(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
     write_file(source, "def greet(name):\n    return f'hi {name}'\n")
 
+    registry = LanguageRegistry.from_defaults()
     nodes = discover(
         [tmp_path],
         language_map={".py": "python"},
+        language_registry=registry,
     )
     func = next(node for node in nodes if node.name == "greet")
 
@@ -31,7 +33,8 @@ def test_discover_python_class_and_method(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
     write_file(source, "class Greeter:\n    def hello(self):\n        return 'ok'\n")
 
-    nodes = discover([tmp_path], language_map={".py": "python"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
     klass = next(node for node in nodes if node.name == "Greeter")
     method = next(node for node in nodes if node.name == "hello")
 
@@ -45,14 +48,11 @@ def test_discover_python_decorated_and_async(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
     write_file(
         source,
-        "@decorator\n"
-        "def decorated():\n"
-        "    return 1\n\n"
-        "async def async_fn():\n"
-        "    return 2\n",
+        "@decorator\ndef decorated():\n    return 1\n\nasync def async_fn():\n    return 2\n",
     )
 
-    nodes = discover([tmp_path], language_map={".py": "python"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
     names = {node.name for node in nodes}
 
     assert "decorated" in names
@@ -63,7 +63,8 @@ def test_discover_markdown_sections_hierarchy(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
     write_file(readme, "# Top\n\n## Install\n\n### From Source\n")
 
-    nodes = discover([tmp_path], language_map={".md": "markdown"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".md": "markdown"}, language_registry=registry)
     names = {node.full_name for node in nodes}
 
     assert "Top" in names
@@ -75,7 +76,8 @@ def test_discover_toml_tables(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     write_file(pyproject, "[tool.ruff.lint]\nselect = ['E']\n\n[project]\nname = 'x'\n")
 
-    nodes = discover([tmp_path], language_map={".toml": "toml"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".toml": "toml"}, language_registry=registry)
     names = {node.full_name for node in nodes}
     assert "tool.ruff.lint" in names
     assert "project" in names
@@ -87,9 +89,11 @@ def test_discover_ignores_patterns(tmp_path: Path) -> None:
     write_file(ignored, "def ignored():\n    return 1\n")
     write_file(kept, "def kept():\n    return 2\n")
 
+    registry = LanguageRegistry.from_defaults()
     nodes = discover(
         [tmp_path],
         language_map={".py": "python"},
+        language_registry=registry,
         ignore_patterns=("node_modules",),
     )
     names = {node.name for node in nodes}
@@ -109,9 +113,11 @@ def test_discover_query_override(tmp_path: Path) -> None:
         "(class_definition name: (identifier) @node.name) @node\n",
     )
 
+    registry = LanguageRegistry.from_defaults()
     nodes = discover(
         [tmp_path],
         language_map={".py": "python"},
+        language_registry=registry,
         query_paths=[override_dir],
     )
     names = {node.name for node in nodes}
@@ -122,26 +128,30 @@ def test_discover_multiple_files(tmp_path: Path) -> None:
     write_file(tmp_path / "a.py", "def a():\n    return 1\n")
     write_file(tmp_path / "b.py", "def b():\n    return 2\n")
 
-    nodes = discover([tmp_path], language_map={".py": "python"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
     names = {node.name for node in nodes}
 
     assert {"a", "b"}.issubset(names)
 
 
 def test_discover_empty_dir(tmp_path: Path) -> None:
-    nodes = discover([tmp_path], language_map={".py": "python"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
     assert nodes == []
 
 
 def test_configured_language_not_in_registry_raises(tmp_path: Path) -> None:
     write_file(tmp_path / "x.foo", "hello")
+    registry = LanguageRegistry.from_defaults()
     with pytest.raises(ValueError, match="unknown"):
-        discover([tmp_path], language_map={".foo": "unknown"})
+        discover([tmp_path], language_map={".foo": "unknown"}, language_registry=registry)
 
 
 def test_unconfigured_extension_is_skipped(tmp_path: Path) -> None:
     write_file(tmp_path / "x.foo", "hello")
-    nodes = discover([tmp_path], language_map={".py": "python"})
+    registry = LanguageRegistry.from_defaults()
+    nodes = discover([tmp_path], language_map={".py": "python"}, language_registry=registry)
     assert nodes == []
 
 

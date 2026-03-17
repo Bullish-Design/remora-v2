@@ -71,7 +71,7 @@ STATUS_TRANSITIONS: dict[NodeStatus, set[NodeStatus]] = {
         NodeStatus.AWAITING_INPUT,
         NodeStatus.AWAITING_REVIEW,
     },
-    NodeStatus.AWAITING_INPUT: {NodeStatus.RUNNING, NodeStatus.IDLE},
+    NodeStatus.AWAITING_INPUT: {NodeStatus.RUNNING, NodeStatus.ERROR, NodeStatus.IDLE},
     NodeStatus.AWAITING_REVIEW: {NodeStatus.RUNNING, NodeStatus.IDLE},
     NodeStatus.ERROR: {NodeStatus.IDLE, NodeStatus.RUNNING},
 }

@@ -23,7 +23,8 @@ from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.trigger import Trigger, TriggerPolicy
 from remora.core.types import EventType, NodeStatus
-from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
+from remora.core.workspace import AgentWorkspace, CairnWorkspaceService, IncompatibleBundleError
+from remora.core.externals import EXTERNALS_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,16 @@ class AgentTurnExecutor:
 
         workspace = await self._workspace_service.get_agent_workspace(node_id)
         bundle_config = await self._workspace_service.read_bundle_config(node_id)
+
+        if (
+            bundle_config.externals_version is not None
+            and bundle_config.externals_version > EXTERNALS_VERSION
+        ):
+            raise IncompatibleBundleError(
+                f"Bundle for {node_id} requires externals v{bundle_config.externals_version} "
+                f"but core provides v{EXTERNALS_VERSION}"
+            )
+
         return node, workspace, bundle_config
 
     async def _prepare_turn_context(

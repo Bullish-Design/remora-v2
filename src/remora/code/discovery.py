@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -13,30 +12,21 @@ from remora.code.languages import LanguagePlugin, LanguageRegistry
 from remora.code.paths import walk_source_files
 from remora.core.node import Node
 
-_DEFAULT_LANGUAGE_MAP: dict[str, str] = {
-    ".py": "python",
-    ".md": "markdown",
-    ".toml": "toml",
-}
-
 
 def discover(
     paths: list[Path],
     *,
-    language_map: dict[str, str] | None = None,
+    language_map: dict[str, str],
+    language_registry: LanguageRegistry,
     query_paths: list[Path] | None = None,
     ignore_patterns: tuple[str, ...] = (),
     languages: list[str] | None = None,
-    language_registry: LanguageRegistry | None = None,
 ) -> list[Node]:
     """Discover nodes in files using language-specific tree-sitter queries."""
     requested_languages = {name.lower() for name in languages} if languages else None
-    effective_language_map = {
-        ext.lower(): name.lower()
-        for ext, name in (language_map or _DEFAULT_LANGUAGE_MAP).items()
-    }
+    effective_language_map = {ext.lower(): name.lower() for ext, name in language_map.items()}
     effective_query_paths = [path.resolve() for path in (query_paths or [])]
-    registry = language_registry or _get_language_registry()
+    registry = language_registry
 
     nodes: list[Node] = []
     for source_file in walk_source_files(paths, ignore_patterns):
@@ -56,32 +46,6 @@ def discover(
     return sorted(nodes, key=lambda node: (node.file_path, node.start_byte, node.node_id))
 
 
-@lru_cache(maxsize=16)
-def _get_registry_plugin(name: str) -> LanguagePlugin:
-    plugin = _get_language_registry().get_by_name(name)
-    if plugin is None:
-        raise ValueError(f"Unknown language plugin: {name}")
-    return plugin
-
-
-@lru_cache(maxsize=1)
-def _get_language_registry() -> LanguageRegistry:
-    return LanguageRegistry.from_defaults()
-
-
-@lru_cache(maxsize=16)
-def _get_parser(language: str) -> Parser:
-    plugin = _get_registry_plugin(language)
-    return Parser(plugin.get_language())
-
-
-@lru_cache(maxsize=64)
-def _load_query(language: str, query_file: str) -> Query:
-    plugin = _get_registry_plugin(language)
-    query_text = Path(query_file).read_text(encoding="utf-8")
-    return Query(plugin.get_language(), query_text)
-
-
 def _resolve_query_file(plugin: LanguagePlugin, query_paths: list[Path]) -> Path:
     for query_dir in query_paths:
         candidate = query_dir / f"{plugin.name}.scm"
@@ -96,11 +60,12 @@ def _resolve_query_file(plugin: LanguagePlugin, query_paths: list[Path]) -> Path
 
 def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> list[Node]:
     source_bytes = path.read_bytes()
-    parser = _get_parser(plugin.name)
+    parser = Parser(plugin.get_language())
     tree = parser.parse(source_bytes)
 
     query_file = _resolve_query_file(plugin, query_paths)
-    query = _load_query(plugin.name, str(query_file.resolve()))
+    query_text = query_file.read_text(encoding="utf-8")
+    query = Query(plugin.get_language(), query_text)
     matches = QueryCursor(query).matches(tree.root_node)
 
     entries: list[dict[str, Any]] = []

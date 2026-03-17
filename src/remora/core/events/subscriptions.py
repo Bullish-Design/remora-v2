@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import PurePath
+from typing import Any
 
 import aiosqlite
 from pydantic import BaseModel
@@ -62,9 +63,15 @@ class SubscriptionPattern(BaseModel):
 class SubscriptionRegistry:
     """SQLite-backed subscription store with event_type-indexed in-memory cache."""
 
-    def __init__(self, db: aiosqlite.Connection):
+    def __init__(self, db: aiosqlite.Connection, tx: Any | None = None):
         self._db = db
+        self._tx = tx
         self._cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] | None = None
+
+    async def _maybe_commit(self) -> None:
+        if self._tx is not None and self._tx.in_batch:
+            return
+        await self._maybe_commit()
 
     async def create_tables(self) -> None:
         """Create subscription storage tables."""
@@ -79,7 +86,7 @@ class SubscriptionRegistry:
             CREATE INDEX IF NOT EXISTS idx_subs_agent ON subscriptions(agent_id);
             """
         )
-        await self._db.commit()
+        await self._maybe_commit()
 
     async def register(self, agent_id: str, pattern: SubscriptionPattern) -> int:
         """Register a subscription and return its primary-key ID."""
@@ -90,7 +97,7 @@ class SubscriptionRegistry:
             """,
             (agent_id, json.dumps(pattern.model_dump()), time.time()),
         )
-        await self._db.commit()
+        await self._maybe_commit()
         sub_id = int(cursor.lastrowid)
         if self._cache is not None:
             self._cache_add(sub_id, agent_id, pattern)
@@ -102,7 +109,7 @@ class SubscriptionRegistry:
             "DELETE FROM subscriptions WHERE id = ?",
             (subscription_id,),
         )
-        await self._db.commit()
+        await self._maybe_commit()
         if cursor.rowcount > 0:
             self._cache_remove_subscription(subscription_id)
         return cursor.rowcount > 0
@@ -113,7 +120,7 @@ class SubscriptionRegistry:
             "DELETE FROM subscriptions WHERE agent_id = ?",
             (agent_id,),
         )
-        await self._db.commit()
+        await self._maybe_commit()
         if cursor.rowcount > 0:
             self._cache_remove_agent(agent_id)
         return cursor.rowcount
@@ -162,11 +169,7 @@ class SubscriptionRegistry:
         if self._cache is None:
             return
         for event_type, entries in list(self._cache.items()):
-            filtered = [
-                entry
-                for entry in entries
-                if entry[0] != subscription_id
-            ]
+            filtered = [entry for entry in entries if entry[0] != subscription_id]
             if filtered:
                 self._cache[event_type] = filtered
             else:
@@ -176,11 +179,7 @@ class SubscriptionRegistry:
         if self._cache is None:
             return
         for event_type, entries in list(self._cache.items()):
-            filtered = [
-                entry
-                for entry in entries
-                if entry[1] != agent_id
-            ]
+            filtered = [entry for entry in entries if entry[1] != agent_id]
             if filtered:
                 self._cache[event_type] = filtered
             else:

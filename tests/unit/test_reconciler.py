@@ -10,6 +10,8 @@ import pytest_asyncio
 from tests.factories import make_node, write_bundle_templates, write_file
 
 import remora.code.reconciler as reconciler_module
+from remora.code.languages import LanguageRegistry
+from remora.code.paths import resolve_query_paths
 from remora.code.reconciler import FileReconciler
 from remora.core.config import Config
 from remora.core.db import open_database
@@ -36,21 +38,27 @@ async def reconcile_env(tmp_path: Path):
     write_bundle_templates(bundles_root)
 
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        language_map={".py": "python"},
-        query_search_paths=("@default",),
-        workspace_root=".remora-reconcile",
-        bundle_search_paths=(str(bundles_root),),
+        project=Config.ProjectConfig(discovery_paths=("src",), discovery_languages=("python",)),
+        behavior=Config.BehaviorConfig(
+            language_map={".py": "python"},
+            query_search_paths=("@default",),
+            bundle_search_paths=(str(bundles_root),),
+        ),
+        infra=Config.InfraConfig(workspace_root=".remora-reconcile"),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
+    language_registry = LanguageRegistry.from_config(
+        language_defs=config.behavior.languages,
+        query_search_paths=resolve_query_paths(config, tmp_path),
+    )
     reconciler = FileReconciler(
         config,
         node_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
+        language_registry=language_registry,
     )
 
     yield node_store, event_store, workspace_service, config, reconciler
@@ -314,9 +322,7 @@ async def test_directory_nodes_removed_when_tree_disappears(reconcile_env, tmp_p
     assert ("src", "src/gone", "contains") not in post_edges
     events = await event_store.get_events(limit=50)
     removed_ids = [
-        event["payload"]["node_id"]
-        for event in events
-        if event["event_type"] == "node_removed"
+        event["payload"]["node_id"] for event in events if event["event_type"] == "node_removed"
     ]
     assert "src/gone" in removed_ids
 

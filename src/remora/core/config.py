@@ -213,6 +213,8 @@ class BundleConfig(BaseModel):
     @field_validator("max_turns")
     @classmethod
     def _validate_max_turns(cls, value: int) -> int:
+        if value == 0:
+            return 0
         return max(1, value)
 
     @field_validator("prompts")
@@ -304,43 +306,16 @@ def _find_config_file(start: Path | None = None) -> Path | None:
 
 def _nest_flat_config(flat: dict[str, Any]) -> dict[str, Any]:
     """Map flat config keys into nested sub-model structure."""
+    project_keys = set(ProjectConfig.model_fields)
+    runtime_keys = set(RuntimeConfig.model_fields)
+    infra_keys = set(InfraConfig.model_fields)
+    behavior_keys = set(BehaviorConfig.model_fields)
+
     nested: dict[str, Any] = {}
-
-    project_keys = {
-        "project_path",
-        "discovery_paths",
-        "discovery_languages",
-        "workspace_ignore_patterns",
-    }
-    runtime_keys = {
-        "max_concurrency",
-        "max_trigger_depth",
-        "trigger_cooldown_ms",
-        "human_input_timeout_s",
-        "actor_idle_timeout_s",
-        "send_message_rate_limit",
-        "send_message_rate_window_s",
-        "search_content_max_matches",
-        "broadcast_max_targets",
-    }
-    infra_keys = {"model_base_url", "model_api_key", "timeout_s", "workspace_root"}
-    behavior_keys = {
-        "model_default",
-        "max_turns",
-        "bundle_search_paths",
-        "query_search_paths",
-        "bundle_overlays",
-        "bundle_rules",
-        "languages",
-        "language_map",
-        "prompt_templates",
-        "externals_version",
-    }
-
-    project = {}
-    runtime = {}
-    infra = {}
-    behavior = {}
+    project: dict[str, Any] = {}
+    runtime: dict[str, Any] = {}
+    infra: dict[str, Any] = {}
+    behavior: dict[str, Any] = {}
 
     for key, value in flat.items():
         if key in project_keys:
@@ -351,21 +326,19 @@ def _nest_flat_config(flat: dict[str, Any]) -> dict[str, Any]:
             infra[key] = value
         elif key in behavior_keys:
             behavior[key] = value
-        elif key == "search":
-            nested["search"] = value
-        elif key == "virtual_agents":
-            nested["virtual_agents"] = value
+        elif key in ("search", "virtual_agents", "project", "runtime", "infra", "behavior"):
+            nested[key] = value
         else:
             nested[key] = value
 
     if project:
-        nested["project"] = project
+        nested.setdefault("project", {}).update(project)
     if runtime:
-        nested["runtime"] = runtime
+        nested.setdefault("runtime", {}).update(runtime)
     if infra:
-        nested["infra"] = infra
+        nested.setdefault("infra", {}).update(infra)
     if behavior:
-        nested["behavior"] = behavior
+        nested.setdefault("behavior", {}).update(behavior)
 
     return nested
 
@@ -441,6 +414,10 @@ def _resolve_search_paths(
 __all__ = [
     "BundleConfig",
     "BundleOverlayRule",
+    "ProjectConfig",
+    "RuntimeConfig",
+    "InfraConfig",
+    "BehaviorConfig",
     "SearchConfig",
     "SearchMode",
     "SelfReflectConfig",

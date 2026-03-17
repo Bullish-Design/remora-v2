@@ -10,6 +10,7 @@ import yaml
 
 from remora.code.directories import DirectoryManager
 from remora.code.discovery import discover
+from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_query_paths
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
@@ -43,6 +44,7 @@ class FileReconciler:
         event_store: EventStore,
         workspace_service: CairnWorkspaceService,
         project_root: Path,
+        language_registry: LanguageRegistry,
         *,
         search_service: SearchServiceProtocol | None = None,
         tx: Any | None = None,
@@ -52,6 +54,7 @@ class FileReconciler:
         self._event_store = event_store
         self._workspace_service = workspace_service
         self._project_root = project_root.resolve()
+        self._language_registry = language_registry
         self._search_service = search_service
         self._tx = tx
         self._bundle_search_paths = resolve_bundle_search_paths(config, self._project_root)
@@ -190,6 +193,7 @@ class FileReconciler:
         discovered = discover(
             [Path(file_path)],
             language_map=self._config.behavior.language_map,
+            language_registry=self._language_registry,
             query_paths=resolve_query_paths(self._config, self._project_root),
             ignore_patterns=self._config.project.workspace_ignore_patterns,
             languages=(

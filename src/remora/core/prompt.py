@@ -46,7 +46,7 @@ class PromptBuilder:
             system_prompt = f"{system_prompt}\n\n{mode_prompt}"
 
         model_name = bundle_config.model or self._config.behavior.model_default
-        max_turns = bundle_config.max_turns
+        max_turns = bundle_config.max_turns or self._config.behavior.max_turns
         return system_prompt, model_name, max_turns
 
     def build_user_prompt(

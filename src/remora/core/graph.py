@@ -35,35 +35,26 @@ class NodeStore:
     def __init__(self, db: aiosqlite.Connection, tx: Any | None = None):
         self._db = db
         self._tx = tx
-        self._batch_depth = 0
 
     @asynccontextmanager
     async def batch(self):  # noqa: ANN201
-        """Group multiple node mutations into a single commit."""
+        """Batch context — delegates to TransactionContext when available."""
         if self._tx is not None:
             async with self._tx.batch():
                 yield
-            return
-
-        self._batch_depth += 1
-        failed = False
-        try:
-            yield
-        except BaseException:
-            failed = True
-            if self._batch_depth == 1:
+        else:
+            try:
+                yield
+            except BaseException:
                 await self._db.rollback()
-            raise
-        finally:
-            self._batch_depth -= 1
-            if self._batch_depth == 0 and not failed:
+                raise
+            else:
                 await self._db.commit()
 
     async def _maybe_commit(self) -> None:
         if self._tx is not None and self._tx.in_batch:
             return
-        if self._batch_depth == 0:
-            await self._db.commit()
+        await self._db.commit()
 
     async def create_tables(self) -> None:
         """Create nodes and edges tables with indexes."""

@@ -38,7 +38,6 @@ class TransactionContext:
             failed = True
             if self._depth == 1:
                 await self._db.rollback()
-                self._deferred_events.clear()
             raise
         finally:
             self._depth -= 1

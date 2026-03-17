@@ -16,10 +16,13 @@ from fsdantic import ViewQuery, Workspace
 from pydantic import ValidationError
 
 from remora.core.config import BundleConfig, Config, expand_env_vars
-from remora.core.externals import EXTERNALS_VERSION
 from remora.core.metrics import Metrics
 
 logger = logging.getLogger(__name__)
+
+
+class IncompatibleBundleError(Exception):
+    """Raised when a bundle requires a newer externals version than core provides."""
 
 
 class AgentWorkspace:
@@ -181,13 +184,6 @@ class CairnWorkspaceService:
         except ValidationError:
             logger.warning("Invalid bundle config for %s, using defaults", node_id)
             return BundleConfig()
-        if config.externals_version is not None and config.externals_version > EXTERNALS_VERSION:
-            logger.warning(
-                "Bundle for %s requires externals v%d but core provides v%d",
-                node_id,
-                config.externals_version,
-                EXTERNALS_VERSION,
-            )
         return config
 
     async def provision_bundle(self, node_id: str, template_dirs: list[Path]) -> None:
@@ -248,7 +244,7 @@ class CairnWorkspaceService:
         return self._workspace_root / "agents" / self._safe_id(node_id)
 
 
-__all__ = ["AgentWorkspace", "CairnWorkspaceService"]
+__all__ = ["AgentWorkspace", "CairnWorkspaceService", "IncompatibleBundleError"]
 
 
 def _merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
