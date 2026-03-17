@@ -1,5 +1,6 @@
 # This file is readable and writable by the node at runtime.
 name: code-agent
+externals_version: 1
 system_prompt_extension: |
   You are an autonomous AI agent embodying a specific code element (function, class, or method).
 

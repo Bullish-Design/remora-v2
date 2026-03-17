@@ -25,10 +25,14 @@
   - Config now accepts defaults payload keys merged from `defaults.yaml`.
   - Runtime/integration fixtures that instantiate `Config()` now pass explicit behavior defaults.
   - Legacy bundle-path tests were migrated to `src/remora/defaults/...`.
+- Finished Phase 6 externals versioning:
+  - Added `EXTERNALS_VERSION = 1` in core externals contract.
+  - Bundle config load now warns if bundle requires newer externals API version.
+  - Added `externals_version: 1` to all shipped bundles.
+  - Added `docs/externals-contract.md`.
 
 ## Remaining gaps
-- Externals version contract not wired (Phase 6).
 - Search implementation still has module-level embeddy import boundary (Phase 7).
 
 ## Next action
-Implement Phase 6 externals API versioning and shipped bundle metadata.
+Implement Phase 7 optional search boundary cleanup.

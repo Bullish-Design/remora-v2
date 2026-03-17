@@ -40,7 +40,11 @@
 - [x] Updated bundle/tool tests to assert against `src/remora/defaults/...` paths.
 
 ### Phase 6: Externals versioning
-- [ ] Not implemented.
+- [x] Added `EXTERNALS_VERSION = 1` in `core/externals.py`.
+- [x] `read_bundle_config` now warns when bundle requires newer externals version.
+- [x] Added `externals_version: 1` to all shipped default bundle YAML files.
+- [x] Added `docs/externals-contract.md` documenting the v1 contract.
+- [x] Added tests for warning/non-warning externals version behavior.
 
 ### Phase 7: Optional search boundary
 - [~] Optional deps exist, but module-level embeddy import boundary cleanup incomplete.

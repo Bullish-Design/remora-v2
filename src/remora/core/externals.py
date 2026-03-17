@@ -22,10 +22,12 @@ from remora.core.node import Node
 from remora.core.rate_limit import SlidingWindowRateLimiter
 from remora.core.search import SearchServiceProtocol
 from remora.core.types import NodeStatus, NodeType, serialize_enum
-from remora.core.workspace import AgentWorkspace
 
 if TYPE_CHECKING:
     from remora.core.actor import Outbox
+    from remora.core.workspace import AgentWorkspace
+
+EXTERNALS_VERSION = 1
 
 
 class FileCapabilities:
@@ -515,6 +517,7 @@ def _resolve_broadcast_targets(
 
 
 __all__ = [
+    "EXTERNALS_VERSION",
     "CommunicationCapabilities",
     "EventCapabilities",
     "FileCapabilities",

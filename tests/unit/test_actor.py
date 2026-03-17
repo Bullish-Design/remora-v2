@@ -737,6 +737,38 @@ async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> No
 
 
 @pytest.mark.asyncio
+async def test_read_bundle_config_warns_on_newer_externals_version(actor_env, caplog) -> None:
+    node_id = "src/app.py::externals-version-warn"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
+    await workspace.write("_bundle/bundle.yaml", "externals_version: 999\n")
+
+    with caplog.at_level(logging.WARNING, logger="remora.core.workspace"):
+        bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
+
+    assert bundle_config.externals_version == 999
+    assert any(
+        "requires externals v999 but core provides v1" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_bundle_config_without_externals_version_has_no_warning(
+    actor_env,
+    caplog,
+) -> None:
+    node_id = "src/app.py::externals-version-none"
+    workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
+    await workspace.write("_bundle/bundle.yaml", "model: mock\n")
+
+    with caplog.at_level(logging.WARNING, logger="remora.core.workspace"):
+        bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
+
+    assert bundle_config.externals_version is None
+    assert not any("requires externals" in record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_actor_reload_reads_updated_bundle_config_each_turn(actor_env, monkeypatch) -> None:
     env = actor_env
     node = make_node("src/app.py::dynamic-config")

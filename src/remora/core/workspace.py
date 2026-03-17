@@ -16,6 +16,7 @@ from fsdantic import ViewQuery, Workspace
 from pydantic import ValidationError
 
 from remora.core.config import BundleConfig, Config, expand_env_vars
+from remora.core.externals import EXTERNALS_VERSION
 from remora.core.metrics import Metrics
 
 logger = logging.getLogger(__name__)
@@ -232,10 +233,21 @@ class CairnWorkspaceService:
             expanded.pop("self_reflect", None)
 
         try:
-            return BundleConfig.model_validate(expanded)
+            config = BundleConfig.model_validate(expanded)
         except ValidationError:
             logger.warning("Invalid bundle config for %s, using defaults", node_id)
             return BundleConfig()
+        if (
+            config.externals_version is not None
+            and config.externals_version > EXTERNALS_VERSION
+        ):
+            logger.warning(
+                "Bundle for %s requires externals v%d but core provides v%d",
+                node_id,
+                config.externals_version,
+                EXTERNALS_VERSION,
+            )
+        return config
 
     async def provision_bundle(self, node_id: str, template_dirs: list[Path]) -> None:
         """Copy bundle.yaml and tool scripts from ordered template directories."""
