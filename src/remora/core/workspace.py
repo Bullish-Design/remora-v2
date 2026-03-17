@@ -188,7 +188,7 @@ class CairnWorkspaceService:
     def _safe_id(node_id: str) -> str:
         """Convert node ID to a filesystem-safe deterministic name."""
         normalized = re.sub(r"[^a-zA-Z0-9._-]+", "_", node_id).strip("._-")
-        digest = hashlib.sha1(node_id.encode("utf-8")).hexdigest()[:10]
+        digest = hashlib.sha256(node_id.encode("utf-8")).hexdigest()[:10]
         prefix = normalized[:80] if normalized else "node"
         return f"{prefix}-{digest}"
 

@@ -403,3 +403,9 @@ Next action:
 
 Next action:
 - Start Phase 13 Step 13.1: replace SHA-1 with SHA-256 in workspace safe-id generation.
+- Step 13.1 completed:
+  - changed `CairnWorkspaceService._safe_id` digest algorithm from SHA-1 to SHA-256 (first 10 hex chars retained)
+  - verification: `devenv shell -- python -m pytest tests/unit/test_workspace.py -q` passed (`15 passed`)
+
+Next action:
+- Step 13.2: move web chat rate limiting to per-client limiter instances keyed by request IP.

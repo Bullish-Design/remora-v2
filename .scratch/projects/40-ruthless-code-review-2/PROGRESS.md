@@ -97,3 +97,13 @@
 - [x] Step 12.1 Demote hot-path logs to DEBUG
 - [x] Step 12.2 Document catch-all error boundaries
 - [x] Step 12.3 Verify/commit checkpoint
+
+### Phase 13
+- [x] Step 13.1 Replace SHA-1 with SHA-256 in workspace safe IDs
+- [ ] Step 13.2 Make web chat rate limiting per-client
+- [ ] Step 13.3 Pass configured web port into LSP chat command URI
+- [ ] Step 13.4 Skip `_discover` async signature churn (per guide)
+- [ ] Step 13.5 Remove dead `name_node` parameter from discovery name builder
+- [ ] Step 13.6 Skip language-property refactor (per guide)
+- [ ] Step 13.7 Remove redundant subscriptions create_tables call
+- [ ] Step 13.8 Verify/commit checkpoint
