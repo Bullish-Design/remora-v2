@@ -223,3 +223,10 @@ Next action:
 
 Next action:
 - Start Phase 7 Step 7.1 in `core/events/types.py`: remove the redundant `tags` field from `TurnDigestedEvent` to resolve the field shadow warning.
+- Step 7.1 completed:
+  - removed redundant `tags` field declaration from `TurnDigestedEvent` in `core/events/types.py`
+  - behavior unchanged (field already inherited from base `Event`)
+  - verification: `devenv shell -- python -m pytest tests/unit/test_events.py -q` passed (`14 passed`)
+
+Next action:
+- Step 7.2: override `CustomEvent.to_envelope()` to flatten payload shape (`payload` should not be nested under `payload.payload`).

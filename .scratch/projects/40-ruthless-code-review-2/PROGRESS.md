@@ -61,3 +61,9 @@
 - [x] Step 6.3 Move web helper functions to module level
 - [x] Step 6.4 Simplify `create_app` wiring around `WebDeps`
 - [x] Step 6.5 Verify/refactor-web commit checkpoint
+
+### Phase 7
+- [x] Step 7.1 Fix TurnDigestedEvent.tags shadow
+- [ ] Step 7.2 Fix CustomEvent payload nesting
+- [ ] Step 7.3 Fix EventBus.unsubscribe ghost registrations
+- [ ] Step 7.4 Verify/commit checkpoint

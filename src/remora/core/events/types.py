@@ -195,7 +195,6 @@ class TurnDigestedEvent(Event):
 
     agent_id: str
     summary: str = ""
-    tags: tuple[str, ...] = ()
     has_reflection: bool = False
     has_links: bool = False
 
