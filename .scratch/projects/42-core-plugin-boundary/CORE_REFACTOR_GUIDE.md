@@ -56,7 +56,7 @@ A single `remora` Python package with a clean internal separation between:
 
 ### Prerequisites
 
-Complete project 41 (code review refactor guide) phases 4-5 first. Those phases simplify `turn_executor`, decompose `externals`, batch event commits, and fix transaction management — all changes that should land before we draw the freeze line.
+Complete project 41 (code review refactor guide) phases 4-5 first. Those phases simplify `turn_executor`, decompose `externals`, batch event commits, and fix transaction management — all changes that should land before we draw the freeze line. **DONE**
 
 ---
 
@@ -501,7 +501,7 @@ Available variables for prompt templates:
 | `{node_full_name}` | `Node.full_name` | e.g., `"src/math.py::calculate_total"` |
 | `{node_type}` | `Node.node_type` | e.g., `"function"` |
 | `{file_path}` | `Node.file_path` | e.g., `"src/math.py"` |
-| `{source_code}` | `Node.text` | The full source code text |
+| `{source}` | `Node.text` | The full source code text |
 | `{role}` | `Node.role` | e.g., `"code-agent"` |
 | `{event_type}` | `Event.event_type` | e.g., `"node_changed"` |
 | `{event_content}` | Extracted from event | Message content or change description |
@@ -521,7 +521,7 @@ prompt_templates:
 
     ## Source Code
     ```
-    {source_code}
+    {source}
     ```
 
     ## Trigger
@@ -944,8 +944,8 @@ This means a minimal `remora` install doesn't require embeddy. Search is opt-in.
 
 ### Verification
 
-- Confirm `pip install remora` (without `[search]`) works and search is disabled.
-- Confirm `pip install remora[search]` enables search.
+- Confirm `uv add remora` (without `[search]`) works and search is disabled.
+- Confirm `uv add remora[search]` enables search.
 - Full suite passes.
 
 ---
