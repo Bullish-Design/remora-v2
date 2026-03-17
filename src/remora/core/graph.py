@@ -46,7 +46,7 @@ class NodeStore:
         except BaseException:
             failed = True
             if self._batch_depth == 1:
-                await self._db.execute("ROLLBACK")
+                await self._db.rollback()
             raise
         finally:
             self._batch_depth -= 1

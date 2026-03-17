@@ -154,7 +154,13 @@ Implementation phase started from `.scratch/projects/41-code-review-3/REVIEW_REF
   - updated `tests/unit/test_grail.py` cache-bounds test to assert hash eviction against `_PARSED_SCRIPT_CACHE`.
   - targeted verification:
     - `devenv shell -- pytest tests/unit/test_grail.py -q` (`17 passed`).
+- Completed section 5.3 (NodeStore batch rollback API fix):
+  - replaced raw SQL rollback call in `src/remora/core/graph.py`:
+    - `await self._db.execute("ROLLBACK")` -> `await self._db.rollback()`.
+  - preserved existing `failed` guard semantics for nested batch safety.
+  - targeted verification:
+    - `devenv shell -- pytest tests/unit/test_graph.py -q` (`18 passed`).
 
 ## Next Action
-- Commit and push section 5.2 checkpoint.
-- Begin section 5.3 implementation (NodeStore.batch rollback fix).
+- Commit and push section 5.3 checkpoint.
+- Begin section 5.4 implementation (EventBus coroutine dispatch fix).
