@@ -542,6 +542,17 @@ async def api_search(request: Request) -> JSONResponse:
     )
 
 
+async def _wait_for_shutdown(event: asyncio.Event) -> None:
+    await event.wait()
+
+
+async def _wait_for_disconnect(request: Request) -> None:
+    while True:
+        if await request.is_disconnected():
+            return
+        await asyncio.sleep(0.25)
+
+
 async def sse_stream(request: Request) -> StreamingResponse:
     deps = _deps_from_request(request)
     once = request.query_params.get("once", "").lower() in {"1", "true", "yes"}
@@ -586,17 +597,39 @@ async def sse_stream(request: Request) -> StreamingResponse:
             return
         async with deps.event_bus.stream() as stream:
             stream_iterator = stream.__aiter__()
-            while True:
-                if await request.is_disconnected() or deps.shutdown_event.is_set():
-                    break
-                try:
-                    event = await asyncio.wait_for(stream_iterator.__anext__(), timeout=0.25)
-                except TimeoutError:
-                    continue
-                except StopAsyncIteration:
-                    break
-                payload = json.dumps(event.to_envelope(), separators=(",", ":"))
-                yield f"id: {event.timestamp}\nevent: {event.event_type}\ndata: {payload}\n\n"
+            disconnect_task = asyncio.create_task(_wait_for_disconnect(request))
+            shutdown_task = asyncio.create_task(_wait_for_shutdown(deps.shutdown_event))
+            try:
+                while True:
+                    stream_task = asyncio.create_task(stream_iterator.__anext__())
+                    done, _pending = await asyncio.wait(
+                        {stream_task, disconnect_task, shutdown_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    if stream_task not in done:
+                        stream_task.cancel()
+                        try:
+                            await stream_task
+                        except (asyncio.CancelledError, StopAsyncIteration):
+                            pass
+                        break
+
+                    try:
+                        event = stream_task.result()
+                    except StopAsyncIteration:
+                        break
+                    payload = json.dumps(event.to_envelope(), separators=(",", ":"))
+                    yield f"id: {event.timestamp}\nevent: {event.event_type}\ndata: {payload}\n\n"
+            finally:
+                for task in (disconnect_task, shutdown_task):
+                    if task.done():
+                        continue
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
         if deps.shutdown_event.is_set():
             yield ": server-shutdown\n\n"
 

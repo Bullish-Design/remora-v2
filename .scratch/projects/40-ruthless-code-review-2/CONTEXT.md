@@ -311,3 +311,10 @@ Next action:
 
 Next action:
 - Step 9.5: improve SSE wait loop in `web/server.py` to avoid timeout polling overhead.
+- Step 9.5 completed:
+  - replaced SSE `wait_for(..., timeout=...)` polling loop with task-based waiting
+  - added `_wait_for_shutdown` and `_wait_for_disconnect` helpers to coordinate stream/disconnect/shutdown signals
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
+
+Next action:
+- Step 9.6: remove per-node DB reads in reconciler file reconciliation path (`_do_reconcile_file`) using batched lookup.
