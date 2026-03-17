@@ -387,3 +387,13 @@ Next action:
 
 Next action:
 - Start Phase 12 Step 12.1: demote noisy hot-path logs to DEBUG per guide.
+- Step 12.1 completed:
+  - demoted Grail tool hot-path logs (`Tool start`, `Tool complete`, `Loaded tools`) from INFO to DEBUG
+  - demoted actor turn hot-path logs in `turn_executor.py` (`Agent turn start`, `Model request`, `Agent turn complete`) from INFO to DEBUG
+- Step 12.2 completed:
+  - added explicit one-line boundary rationale comments above each catch-all `except Exception` block across reconciler/lifecycle/search/turn_executor/grail
+  - updated logging tests to capture DEBUG-level hot-path logs after demotion
+  - verification: `devenv shell -- python -m pytest tests/unit/test_actor.py tests/unit/test_grail.py tests/unit/test_reconciler.py tests/unit/test_search.py -q` passed (`88 passed`)
+
+Next action:
+- Step 12.3: commit/push Phase 12 checkpoint and proceed to Phase 13.

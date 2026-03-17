@@ -77,6 +77,7 @@ class SearchService:
                 await self._client.health()
                 self._available = True
                 logger.info("Search service connected to %s", self._config.embeddy_url)
+            # Error boundary: remote embeddy outages should degrade search without crashing startup.
             except Exception:
                 logger.warning(
                     "Embeddy server not reachable at %s; search unavailable",

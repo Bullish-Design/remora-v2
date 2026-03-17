@@ -180,7 +180,7 @@ def test_script_source_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None
 async def test_discover_tools_logs_load_failure(caplog) -> None:
     workspace = _WorkspaceStub({"_bundle/tools/bad.pym": "def broken(:\n"})
 
-    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.grail"):
         tools = await discover_tools(workspace, capabilities={})
 
     assert tools == []
@@ -205,7 +205,7 @@ async def test_grail_tool_execute_logs_start_and_failure(tmp_path: Path, caplog)
         raise RuntimeError("boom")
 
     tool = GrailTool(script=ScriptStub(), capabilities={"echo": fail}, agent_id="node-x")
-    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.grail"):
         result = await tool.execute({"name": "x"}, ToolCall(id="call-3", name="demo", arguments={}))
 
     assert result.is_error is True
@@ -232,7 +232,7 @@ async def test_grail_tool_execute_logs_full_output_not_truncated(caplog) -> None
             return long_output
 
     tool = GrailTool(script=ScriptStub(), capabilities={}, agent_id="node-x")
-    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.grail"):
         result = await tool.execute({}, ToolCall(id="call-9", name="demo", arguments={}))
 
     assert result.is_error is False
@@ -258,7 +258,7 @@ async def test_grail_tool_logging_preserves_newlines_in_output(caplog) -> None:
             return "line1\nline2"
 
     tool = GrailTool(script=ScriptStub(), capabilities={}, agent_id="node-x")
-    with caplog.at_level(logging.INFO, logger="remora.core.grail"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.grail"):
         await tool.execute({}, ToolCall(id="call-10", name="demo", arguments={}))
 
     completion = next(

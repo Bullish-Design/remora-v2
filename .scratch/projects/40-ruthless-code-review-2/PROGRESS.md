@@ -92,3 +92,8 @@
 - [x] Step 11.1 Bound Grail script source cache
 - [x] Step 11.2 Add discovery cache clear helper
 - [x] Step 11.3 Verify/commit checkpoint
+
+### Phase 12
+- [x] Step 12.1 Demote hot-path logs to DEBUG
+- [x] Step 12.2 Document catch-all error boundaries
+- [ ] Step 12.3 Verify/commit checkpoint

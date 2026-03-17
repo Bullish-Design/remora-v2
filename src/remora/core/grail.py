@@ -131,7 +131,7 @@ class GrailTool:
     async def execute(self, arguments: dict[str, Any], context: ToolCall | None) -> ToolResult:
         call_id = context.id if context else ""
         started = time.perf_counter()
-        logger.info(
+        logger.debug(
             "Tool start agent=%s tool=%s call_id=%s source=%s args=%s",
             self._agent_id,
             self._schema.name,
@@ -147,7 +147,7 @@ class GrailTool:
             }
             result = await self._script.run(inputs=arguments, externals=used_capabilities)
             output = result if isinstance(result, str) else json.dumps(result)
-            logger.info(
+            logger.debug(
                 "Tool complete agent=%s tool=%s call_id=%s duration_ms=%.1f output=%s",
                 self._agent_id,
                 self._schema.name,
@@ -161,6 +161,7 @@ class GrailTool:
                 output=output,
                 is_error=False,
             )
+        # Error boundary: tool failures must be returned as ToolResult errors, not raised.
         except Exception as exc:  # noqa: BLE001 - tool boundary must return errors
             logger.exception(
                 "Tool failed agent=%s tool=%s call_id=%s duration_ms=%.1f source=%s args=%s",
@@ -208,10 +209,11 @@ async def discover_tools(
                     source=source,
                 )
             )
+        # Error boundary: invalid tool scripts are skipped so other tools still load.
         except Exception:  # noqa: BLE001 - skip invalid tool and continue
             logger.exception("Failed to load tool %s for agent=%s", filename, agent_id)
 
-    logger.info("Loaded %d Grail tool(s) for agent=%s", len(tools), agent_id)
+    logger.debug("Loaded %d Grail tool(s) for agent=%s", len(tools), agent_id)
     return tools
 
 

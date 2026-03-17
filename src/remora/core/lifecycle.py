@@ -180,10 +180,12 @@ class RemoraLifecycle:
             if self._lsp_server is not None:
                 try:
                     await asyncio.to_thread(self._lsp_server.shutdown)
+                # Error boundary: LSP shutdown failures must not block runtime shutdown.
                 except Exception as exc:  # pragma: no cover - best effort
                     logger.warning("LSP shutdown failed: %s", exc)
                 try:
                     await asyncio.to_thread(self._lsp_server.exit)
+                # Error boundary: force-exit is best-effort cleanup only.
                 except Exception:
                     pass
 

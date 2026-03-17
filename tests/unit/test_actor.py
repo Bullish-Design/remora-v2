@@ -739,7 +739,7 @@ async def test_actor_logs_model_request_and_response(actor_env, monkeypatch, cap
     )
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-log", event=event)
 
-    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
         await actor._execute_turn(trigger, outbox)
 
     messages = [record.getMessage() for record in caplog.records]
@@ -788,7 +788,7 @@ async def test_turn_logs_include_correlation_id(actor_env, monkeypatch, caplog) 
         correlation_id="corr-turn-context",
     )
 
-    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
         await actor._execute_turn(trigger, outbox)
 
     assert any(
@@ -832,7 +832,7 @@ async def test_actor_logs_full_response_not_truncated(actor_env, monkeypatch, ca
     )
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-long", event=event)
 
-    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
         await actor._execute_turn(trigger, outbox)
 
     messages = [record.getMessage() for record in caplog.records]
@@ -881,7 +881,7 @@ async def test_actor_logging_preserves_newlines(actor_env, monkeypatch, caplog) 
     )
     trigger = Trigger(node_id=node.node_id, correlation_id="corr-log-nl", event=event)
 
-    with caplog.at_level(logging.INFO, logger="remora.core.actor"):
+    with caplog.at_level(logging.DEBUG, logger="remora.core.actor"):
         await actor._execute_turn(trigger, outbox)
 
     request = next(

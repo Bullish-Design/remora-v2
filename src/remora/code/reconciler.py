@@ -151,6 +151,7 @@ class FileReconciler:
                         await self._deindex_file_for_search(str(p))
                         self._file_state.pop(str(p), None)
                 self._evict_stale_file_locks(generation)
+            # Error boundary: one failed watch batch must not stop file watching.
             except Exception:  # noqa: BLE001 - isolate one watch batch failure
                 logger.exception("Watch-triggered reconcile failed")
 
@@ -364,6 +365,7 @@ class FileReconciler:
                 await workspace.kv_set("_system/self_reflect", self_reflect)
             else:
                 await workspace.kv_set("_system/self_reflect", None)
+        # Error boundary: bundle metadata sync is best-effort during provisioning.
         except Exception:  # noqa: BLE001 - best effort bundle metadata sync
             logger.debug("Failed to sync self_reflect config for %s", node_id, exc_info=True)
 
@@ -499,6 +501,7 @@ class FileReconciler:
             return
         try:
             await self._search_service.index_file(file_path)
+        # Error boundary: indexing failures should not break reconcile flow.
         except Exception:  # noqa: BLE001
             logger.debug("Search indexing failed for %s", file_path, exc_info=True)
 
@@ -508,6 +511,7 @@ class FileReconciler:
             return
         try:
             await self._search_service.delete_source(file_path)
+        # Error boundary: deindex failures should not break reconcile flow.
         except Exception:  # noqa: BLE001
             logger.debug("Search deindexing failed for %s", file_path, exc_info=True)
 
@@ -723,6 +727,7 @@ class FileReconciler:
                 generation = self._next_reconcile_generation()
                 await self._reconcile_file(str(p), mtime, generation=generation)
                 self._evict_stale_file_locks(generation)
+            # Error boundary: event-triggered reconcile failures are isolated per event.
             except Exception:  # noqa: BLE001 - isolate event failures
                 logger.exception("Event-triggered reconcile failed for %s", file_path)
 

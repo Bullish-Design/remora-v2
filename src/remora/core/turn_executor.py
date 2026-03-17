@@ -113,7 +113,7 @@ class AgentTurnExecutor:
                     outbox,
                 )
 
-                turn_log.info(
+                turn_log.debug(
                     "Agent turn start node=%s corr=%s model=%s tools=%d max_turns=%d trigger=%s",
                     node_id,
                     trigger.correlation_id,
@@ -159,6 +159,7 @@ class AgentTurnExecutor:
                 )
                 if self._metrics is not None:
                     self._metrics.agent_turns_total += 1
+            # Error boundary: a single turn failure must not crash the actor loop.
             except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
                 turn_log.exception("Agent turn failed")
                 if self._metrics is not None:
@@ -250,7 +251,7 @@ class AgentTurnExecutor:
             )
             try:
                 if attempt == 0:
-                    turn_log.info(
+                    turn_log.debug(
                         (
                             "Model request node=%s corr=%s base_url=%s model=%s "
                             "tools=%s system=%s user=%s"
@@ -271,6 +272,7 @@ class AgentTurnExecutor:
                         max_retries + 1,
                     )
                 return await kernel.run(messages, tool_schemas, max_turns=max_turns)
+            # Error boundary: kernel/model failures are retried and surfaced as turn errors.
             except Exception as exc:
                 last_exc = exc
                 if attempt < max_retries:
@@ -301,7 +303,7 @@ class AgentTurnExecutor:
         turn_tags: tuple[str, ...] = ("primary",),
         user_message: str = "",
     ) -> None:
-        turn_log.info(
+        turn_log.debug(
             "Agent turn complete node=%s corr=%s response=%s",
             node_id,
             trigger.correlation_id,
@@ -325,6 +327,7 @@ class AgentTurnExecutor:
             current_node = await self._node_store.get_node(node_id)
             if current_node is not None and current_node.status == NodeStatus.RUNNING:
                 await self._node_store.transition_status(node_id, NodeStatus.IDLE)
+        # Error boundary: status reset is best-effort cleanup during finally path.
         except Exception:  # noqa: BLE001 - best effort cleanup
             turn_log.exception("Failed to reset node status")
         self._trigger_policy.release_depth(depth_key)
