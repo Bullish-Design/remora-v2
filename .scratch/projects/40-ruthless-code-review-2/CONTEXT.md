@@ -215,4 +215,11 @@ Next action:
   - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
 
 Next action:
-- Step 6.5: run the phase verification checkpoint and commit/push the web refactor phase completion.
+- Step 6.5 completed:
+  - ran phase checkpoint verification:
+    - `devenv shell -- python -m pytest tests/unit/test_web_server.py -v`
+    - result: `45 passed, 1 warning`
+  - Phase 6 (`web/server.py` refactor) is now complete.
+
+Next action:
+- Start Phase 7 Step 7.1 in `core/events/types.py`: remove the redundant `tags` field from `TurnDigestedEvent` to resolve the field shadow warning.

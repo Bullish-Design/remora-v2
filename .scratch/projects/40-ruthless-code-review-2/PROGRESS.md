@@ -12,7 +12,7 @@
 - [x] Phase 3 Type the Untyped
 - [x] Phase 4 Extract BundleConfig Model
 - [x] Phase 5 Decompose actor.py
-- [ ] Phase 6 Refactor web/server.py
+- [x] Phase 6 Refactor web/server.py
 - [ ] Phase 7 Fix Event System Issues
 - [ ] Phase 8 Decompose _materialize_directories
 - [ ] Phase 9 Performance Fixes
@@ -60,4 +60,4 @@
 - [x] Step 6.2 Extract web handlers into module-level groups
 - [x] Step 6.3 Move web helper functions to module level
 - [x] Step 6.4 Simplify `create_app` wiring around `WebDeps`
-- [ ] Step 6.5 Verify/refactor-web commit checkpoint
+- [x] Step 6.5 Verify/refactor-web commit checkpoint
