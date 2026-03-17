@@ -20,7 +20,7 @@
 - [x] Phase 11 Clean Up Global State
 - [x] Phase 12 Logging & Error Boundary Cleanup
 - [x] Phase 13 Minor Fixes & Polish
-- [ ] Phase 14 Test Suite Improvements
+- [x] Phase 14 Test Suite Improvements
 
 ## Step Tracking
 
@@ -113,4 +113,4 @@
 - [x] Step 14.2 Add concurrency tests
 - [x] Step 14.3 Fix remaining whitebox tests
 - [x] Step 14.4 Confirm/add missing batch rollback coverage
-- [ ] Step 14.5 Verify/commit checkpoint
+- [x] Step 14.5 Verify/commit checkpoint
