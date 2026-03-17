@@ -6,7 +6,6 @@ import importlib
 from pathlib import Path
 from typing import Any, Protocol
 
-import tree_sitter_python
 from tree_sitter import Language, Query
 
 
@@ -32,6 +31,8 @@ class PythonPlugin:
     def __init__(self, query_path: Path, extensions: list[str] | None = None) -> None:
         self._query_path = query_path
         self._extensions = list(extensions or [".py"])
+        self._module_name = "tree_sitter_python"
+        self._package_name = "tree-sitter-python"
         self._language: Language | None = None
         self._query: Query | None = None
         self._query_paths: list[Path] | None = None
@@ -46,7 +47,12 @@ class PythonPlugin:
 
     def get_language(self) -> Language:
         if self._language is None:
-            self._language = Language(tree_sitter_python.language())
+            mod = _load_language_module(
+                language_name=self.name,
+                module_name=self._module_name,
+                package_name=self._package_name,
+            )
+            self._language = Language(mod.language())
         return self._language
 
     def get_default_query_path(self) -> Path:
@@ -115,6 +121,8 @@ class GenericLanguagePlugin:
         self._name = name
         self._extensions = extensions
         self._query_path = query_path
+        self._module_name = f"tree_sitter_{name}"
+        self._package_name = f"tree-sitter-{name}"
         self._node_type_rules = node_type_rules or {}
         self._default_node_type = default_node_type
         self._language: Language | None = None
@@ -131,7 +139,11 @@ class GenericLanguagePlugin:
 
     def get_language(self) -> Language:
         if self._language is None:
-            mod = importlib.import_module(f"tree_sitter_{self._name}")
+            mod = _load_language_module(
+                language_name=self.name,
+                module_name=self._module_name,
+                package_name=self._package_name,
+            )
             self._language = Language(mod.language())
         return self._language
 
@@ -235,6 +247,16 @@ def _resolve_query_file(filename: str, search_paths: list[Path]) -> Path:
         if candidate.exists():
             return candidate
     raise FileNotFoundError(f"Query file {filename} not found in {search_paths}")
+
+
+def _load_language_module(*, language_name: str, module_name: str, package_name: str) -> Any:
+    try:
+        return importlib.import_module(module_name)
+    except ImportError:
+        raise ImportError(
+            f"Language '{language_name}' requires {package_name}. "
+            f"Install with: pip install remora[{language_name}]"
+        ) from None
 
 
 __all__ = [

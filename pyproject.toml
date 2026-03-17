@@ -18,13 +18,24 @@ dependencies = [
   "starlette>=0.40",
   "uvicorn>=0.30",
   "typer>=0.12",
-  "tree-sitter-python>=0.25.0",
-  "tree-sitter-markdown>=0.5.1",
-  "tree-sitter-toml>=0.7.0",
   "watchfiles>=1.0",
 ]
 
 [project.optional-dependencies]
+python = [
+  "tree-sitter-python>=0.25.0",
+]
+markdown = [
+  "tree-sitter-markdown>=0.5.1",
+]
+toml = [
+  "tree-sitter-toml>=0.7.0",
+]
+all-languages = [
+  "tree-sitter-python>=0.25.0",
+  "tree-sitter-markdown>=0.5.1",
+  "tree-sitter-toml>=0.7.0",
+]
 lsp = [
   "pygls>=1.0",
   "lsprotocol>=2024.0",
@@ -36,6 +47,7 @@ search-local = [
   "embeddy[all]>=0.3.11",
 ]
 dev = [
+  "remora[all-languages]",
   "pytest>=8.0",
   "pytest-asyncio>=0.24",
   "hypothesis>=6.0",

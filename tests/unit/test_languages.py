@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import tree_sitter_markdown
 
 from remora.code.languages import GenericLanguagePlugin, LanguageRegistry, PythonPlugin
@@ -81,3 +82,22 @@ def test_language_registry_supports_custom_language_from_config(
     assert plugin.name == "custom"
     assert plugin.resolve_node_type(make_ts_node("anything")) == "heading"
     assert plugin.get_language() is not None
+
+
+def test_missing_grammar_gives_clear_error(monkeypatch) -> None:
+    plugin = GenericLanguagePlugin(
+        name="fakeland",
+        extensions=[".fake"],
+        query_path=Path("/tmp/fakeland.scm"),
+    )
+
+    def raise_import_error(_name: str):  # noqa: ANN202
+        raise ImportError("not installed")
+
+    monkeypatch.setattr("remora.code.languages.importlib.import_module", raise_import_error)
+
+    with pytest.raises(
+        ImportError,
+        match=r"Install with: pip install remora\[fakeland\]",
+    ):
+        plugin.get_language()
