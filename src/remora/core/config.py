@@ -19,6 +19,17 @@ _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
 _VALID_PROMPT_KEYS = frozenset({"chat", "reactive"})
 
 
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge overlay into base. Overlay values win for non-dict types."""
+    result = dict(base)
+    for key, value in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 class VirtualSubscriptionConfig(BaseModel):
     """Declarative subscription pattern for a virtual agent."""
 
@@ -294,8 +305,8 @@ def load_config(path: Path | None = None) -> Config:
     else:
         user_data = {}
 
-    # Defaults are lowest priority, user config overrides
-    merged = {**defaults, **expand_env_vars(user_data)}
+    # Defaults are lowest priority, user config overrides (deep merge)
+    merged = _deep_merge(defaults, expand_env_vars(user_data))
     return Config(**merged)
 
 

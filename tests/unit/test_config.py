@@ -10,6 +10,7 @@ from remora.core.config import (
     Config,
     SearchConfig,
     SearchMode,
+    _deep_merge,
     _find_config_file,
     expand_env_vars,
     load_config,
@@ -185,3 +186,42 @@ def test_load_from_yaml_with_search_section(tmp_path: Path) -> None:
     assert config.search.embeddy_url == "http://localhost:9595"
     assert config.search.timeout == 60.0
     assert config.search.collection_map[".md"] == "docs"
+
+
+def test_deep_merge_basic() -> None:
+    base = {"a": 1, "b": {"x": 10, "y": 20}}
+    overlay = {"b": {"x": 99}, "c": 3}
+    result = _deep_merge(base, overlay)
+    assert result == {"a": 1, "b": {"x": 99, "y": 20}, "c": 3}
+
+
+def test_deep_merge_overlay_replaces_non_dict() -> None:
+    base = {"a": [1, 2], "b": "text"}
+    overlay = {"a": [3, 4]}
+    result = _deep_merge(base, overlay)
+    assert result == {"a": [3, 4], "b": "text"}
+
+
+def test_load_config_deep_merges_languages(tmp_path: Path) -> None:
+    """User overriding one language should not destroy other default languages."""
+    user_config = tmp_path / "remora.yaml"
+    user_config.write_text(
+        "languages:\n  python:\n    extensions: ['.py', '.pyi']\n",
+        encoding="utf-8",
+    )
+    config = load_config(user_config)
+    assert ".pyi" in config.languages["python"]["extensions"]
+    assert "markdown" in config.languages
+    assert "toml" in config.languages
+
+
+def test_load_config_deep_merges_language_map(tmp_path: Path) -> None:
+    """User adding a language_map entry should not destroy defaults."""
+    user_config = tmp_path / "remora.yaml"
+    user_config.write_text(
+        "language_map:\n  '.rs': rust\n",
+        encoding="utf-8",
+    )
+    config = load_config(user_config)
+    assert config.language_map[".rs"] == "rust"
+    assert config.language_map[".py"] == "python"
