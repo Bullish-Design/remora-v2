@@ -18,7 +18,7 @@ def make_auth_node() -> Node:
         end_line=26,
         start_byte=120,
         end_byte=420,
-        source_code="def validate_token(token: str) -> bool:\n    return True\n",
+        text="def validate_token(token: str) -> bool:\n    return True\n",
         source_hash="abc123",
         parent_id="src/auth.py::AuthService",
         status="idle",
@@ -50,7 +50,7 @@ def test_node_rejects_invalid_status() -> None:
             file_path="src/a.py",
             start_line=1,
             end_line=2,
-            source_code="def a():\n    return 1\n",
+            text="def a():\n    return 1\n",
             source_hash="h-a",
             status="bogus",
         )

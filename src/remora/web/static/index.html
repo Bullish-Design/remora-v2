@@ -603,7 +603,7 @@
       details.appendChild(fileDiv);
 
       const pre = document.createElement("pre");
-      pre.textContent = node.source_code;
+      pre.textContent = node.text;
       details.appendChild(pre);
       selectedNode = node.node_id;
     }
@@ -856,8 +856,8 @@
         fetch(`/api/nodes/${encodeURIComponent(payload.node_id)}`)
           .then((response) => response.json())
           .then((node) => {
-            if (node.source_code) {
-              document.getElementById("companion-source").textContent = node.source_code;
+            if (node.text) {
+              document.getElementById("companion-source").textContent = node.text;
             } else {
               document.getElementById("companion-source").textContent = "(no source)";
             }

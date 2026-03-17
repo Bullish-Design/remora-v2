@@ -28,7 +28,7 @@ def make_perf_node(idx: int):
         file_path="src/perf.py",
         start_line=idx + 1,
         end_line=idx + 1,
-        source_code=f"def {name}():\n    return {idx}\n",
+        text=f"def {name}():\n    return {idx}\n",
     )
 
 

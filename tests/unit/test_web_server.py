@@ -56,7 +56,7 @@ async def web_env(tmp_path: Path):
     node = make_node(
         "src/app.py::a",
         file_path=str(source_path),
-        source_code="def a():\n    return 1\n",
+        text="def a():\n    return 1\n",
         start_line=1,
         end_line=2,
     )
@@ -90,7 +90,7 @@ async def proposal_web_env(tmp_path: Path):
     node = make_node(
         "src/app.py::a",
         file_path=str(source_path),
-        source_code="def a():\n    return 1\n",
+        text="def a():\n    return 1\n",
         start_line=1,
         end_line=2,
         status="awaiting_review",
@@ -217,7 +217,7 @@ async def test_api_edges(web_env) -> None:
     other = make_node(
         "src/app.py::b",
         file_path=str(source_path),
-        source_code="def b():\n    return 2\n",
+        text="def b():\n    return 2\n",
         start_line=1,
         end_line=2,
     )
@@ -236,7 +236,7 @@ async def test_api_all_edges(web_env) -> None:
     other = make_node(
         "src/app.py::b",
         file_path=str(source_path),
-        source_code="def b():\n    return 2\n",
+        text="def b():\n    return 2\n",
         start_line=1,
         end_line=2,
     )

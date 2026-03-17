@@ -23,8 +23,8 @@ def test_graph_html_has_sse_client() -> None:
 
 def test_graph_html_escapes_source_rendering() -> None:
     html = _index_html()
-    assert "<pre>${node.source_code}</pre>" not in html
-    assert "pre.textContent = node.source_code" in html
+    assert "<pre>${node.text}</pre>" not in html
+    assert "pre.textContent = node.text" in html
 
 
 def test_graph_html_uses_batch_edge_endpoint() -> None:

@@ -417,7 +417,7 @@ async def test_externals_code_ops(context_env) -> None:
     source_path.write_text(full_source, encoding="utf-8")
 
     node = make_node("src/app.py::alpha", file_path=str(source_path))
-    node = node.model_copy(update={"source_code": "def alpha():\n    return 1\n"})
+    node = node.model_copy(update={"text": "def alpha():\n    return 1\n"})
     await node_store.upsert_node(node)
     ws = await workspace_service.get_agent_workspace(node.node_id)
     context = await _context(node.node_id, ws, node_store, event_store)

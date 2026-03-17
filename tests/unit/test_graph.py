@@ -242,7 +242,7 @@ async def test_nodestore_get_children(db) -> None:
             parent_id=".",
             start_line=0,
             end_line=0,
-            source_code="",
+            text="",
             source_hash="hash-src",
         )
     )

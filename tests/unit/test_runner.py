@@ -130,7 +130,7 @@ async def test_runner_build_prompt_for_virtual_node(runner_env) -> None:
         "test-agent",
         node_type="virtual",
         file_path="",
-        source_code="",
+        text="",
         role="test-agent",
         name="test-agent",
         full_name="test-agent",

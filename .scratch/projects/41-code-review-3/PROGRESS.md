@@ -15,7 +15,7 @@
 ## Step Tracking
 
 ### Phase 1
-- [ ] 1.1 Unify the Node Model (CSTNode -> Node)
+- [x] 1.1 Unify the Node Model (CSTNode -> Node)
 - [ ] 1.2 Remove Test-Driven Production Indirection
 - [ ] 1.3 Make `_expand_env_vars` Public
 - [ ] 1.4 Fix Config Silent Drops

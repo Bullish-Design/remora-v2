@@ -2,33 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
 from tree_sitter import Parser, Query, QueryCursor
 
 from remora.code.languages import LanguagePlugin, LanguageRegistry
 from remora.code.paths import walk_source_files
-
-
-class CSTNode(BaseModel):
-    """An immutable code/content element discovered from source."""
-
-    model_config = ConfigDict(frozen=True)
-
-    node_id: str
-    node_type: str
-    name: str
-    full_name: str
-    file_path: str
-    text: str
-    start_line: int
-    end_line: int
-    start_byte: int
-    end_byte: int
-    parent_id: str | None = None
+from remora.core.node import Node
 
 
 _DEFAULT_LANGUAGE_MAP: dict[str, str] = {
@@ -46,7 +29,7 @@ def discover(
     ignore_patterns: tuple[str, ...] = (),
     languages: list[str] | None = None,
     language_registry: LanguageRegistry | None = None,
-) -> list[CSTNode]:
+) -> list[Node]:
     """Discover nodes in files using language-specific tree-sitter queries."""
     requested_languages = {name.lower() for name in languages} if languages else None
     effective_language_map = {
@@ -56,7 +39,7 @@ def discover(
     effective_query_paths = [path.resolve() for path in (query_paths or [])]
     registry = language_registry or _get_language_registry()
 
-    nodes: list[CSTNode] = []
+    nodes: list[Node] = []
     for source_file in walk_source_files(paths, ignore_patterns):
         ext = source_file.suffix.lower()
         language_name = effective_language_map.get(ext)
@@ -120,7 +103,7 @@ def _resolve_query_file(plugin: LanguagePlugin, query_paths: list[Path]) -> Path
     raise FileNotFoundError(f"No query file found for language '{plugin.name}'")
 
 
-def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> list[CSTNode]:
+def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> list[Node]:
     source_bytes = path.read_bytes()
     parser = _get_parser(plugin.name)
     tree = parser.parse(source_bytes)
@@ -169,7 +152,7 @@ def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> 
         parent_by_key[key] = parent_key
 
     file_path = str(path)
-    cst_nodes: list[CSTNode] = []
+    nodes_out: list[Node] = []
     seen_ids: set[str] = set()
     for key, entry in by_key.items():
         node = entry["node"]
@@ -191,14 +174,16 @@ def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> 
             candidate_id = f"{file_path}::{full_name}@{node.start_byte}"
         seen_ids.add(candidate_id)
 
-        cst_nodes.append(
-            CSTNode(
+        source_text = _node_text(source_bytes, node)
+        nodes_out.append(
+            Node(
                 node_id=candidate_id,
                 node_type=plugin.resolve_node_type(node),
                 name=name,
                 full_name=full_name,
                 file_path=file_path,
-                text=_node_text(source_bytes, node),
+                text=source_text,
+                source_hash=hashlib.sha256(source_text.encode("utf-8")).hexdigest(),
                 start_line=node.start_point.row + 1,
                 end_line=node.end_point.row + 1,
                 start_byte=node.start_byte,
@@ -207,7 +192,7 @@ def _parse_file(path: Path, plugin: LanguagePlugin, query_paths: list[Path]) -> 
             )
         )
 
-    return cst_nodes
+    return nodes_out
 
 
 def _build_name_from_tree(
@@ -233,4 +218,4 @@ def _node_key(node: Any) -> tuple[int, int, str]:
     return (node.start_byte, node.end_byte, node.type)
 
 
-__all__ = ["CSTNode", "clear_caches", "discover"]
+__all__ = ["discover", "clear_caches"]

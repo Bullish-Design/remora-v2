@@ -231,7 +231,7 @@ async def test_reconciler_content_changed_event_triggers_reconcile(
 
     node = await node_store.get_node(f"{source_file}::event_fn")
     assert node is not None
-    assert "return 2" in node.source_code
+    assert "return 2" in node.text
 
 
 @pytest.mark.asyncio
@@ -574,7 +574,7 @@ async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) ->
         assert virtual.node_type == "virtual"
         assert virtual.role == "test-agent"
         assert virtual.file_path == ""
-        assert virtual.source_code == ""
+        assert virtual.text == ""
 
         matched = await event_store.subscriptions.get_matching_agents(
             NodeChangedEvent(

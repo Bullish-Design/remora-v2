@@ -74,13 +74,13 @@ class PromptBuilder:
                     "Use your tools and incoming events to coordinate work.",
                 ]
             )
-        elif node.source_code:
+        elif node.text:
             parts.extend(
                 [
                     "",
                     "## Source Code",
                     "```",
-                    node.source_code,
+                    node.text,
                     "```",
                 ]
             )

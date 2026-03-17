@@ -23,7 +23,7 @@ class Node(BaseModel):
     end_line: int
     start_byte: int = 0
     end_byte: int = 0
-    source_code: str
+    text: str
     source_hash: str
     parent_id: str | None = None
     status: NodeStatus = NodeStatus.IDLE

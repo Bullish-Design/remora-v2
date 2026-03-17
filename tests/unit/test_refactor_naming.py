@@ -20,7 +20,7 @@ def test_node_uses_role_field() -> None:
         file_path="src/app.py",
         start_line=1,
         end_line=2,
-        source_code="def alpha():\n    return 1\n",
+        text="def alpha():\n    return 1\n",
         source_hash="hash-a",
         role="code-agent",
     )

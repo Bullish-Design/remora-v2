@@ -290,7 +290,7 @@ class TurnContext:
 
     async def get_node_source(self, target_id: str) -> str:
         node = await self._node_store.get_node(target_id)
-        return node.source_code if node is not None else ""
+        return node.text if node is not None else ""
 
     async def my_node_id(self) -> str:
         return self.node_id

@@ -12,7 +12,6 @@ import yaml
 
 from remora.code.discovery import discover
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk_source_files
-from remora.code.projections import project_nodes
 from remora.core.config import Config, VirtualAgentConfig
 from remora.core.events import (
     ContentChangedEvent,
@@ -258,7 +257,7 @@ class FileReconciler:
             file_path=dir_id,
             start_line=0,
             end_line=0,
-            source_code="",
+            text="",
             source_hash=source_hash,
             parent_id=parent_id,
             status=existing.status if existing is not None else "idle",
@@ -437,15 +436,40 @@ class FileReconciler:
         new_ids = {node.node_id for node in discovered}
 
         existing_nodes = await self._node_store.get_nodes_by_ids(sorted(new_ids))
+        existing_by_id = {node.node_id: node for node in existing_nodes}
         old_hashes = {node.node_id: node.source_hash for node in existing_nodes}
+        projected: list[Node] = []
+        bundle_root = Path(self._config.bundle_root)
+        for node in discovered:
+            existing = existing_by_id.get(node.node_id)
 
-        projected = await project_nodes(
-            discovered,
-            self._node_store,
-            self._workspace_service,
-            self._config,
-            sync_existing_bundles=sync_existing_bundles,
-        )
+            if existing is not None and existing.source_hash == node.source_hash:
+                if sync_existing_bundles:
+                    template_dirs = [bundle_root / "system"]
+                    mapped_bundle = self._config.resolve_bundle(node.node_type, node.name)
+                    role = mapped_bundle or existing.role
+                    if role:
+                        template_dirs.append(bundle_root / role)
+                    await self._workspace_service.provision_bundle(node.node_id, template_dirs)
+                projected.append(existing)
+                continue
+
+            mapped_bundle = self._config.resolve_bundle(node.node_type, node.name)
+            node.status = existing.status if existing is not None else "idle"
+            node.role = (
+                mapped_bundle
+                if mapped_bundle is not None
+                else (existing.role if existing is not None else None)
+            )
+            await self._node_store.upsert_node(node)
+
+            if existing is None:
+                template_dirs = [bundle_root / "system"]
+                if mapped_bundle:
+                    template_dirs.append(bundle_root / mapped_bundle)
+                await self._workspace_service.provision_bundle(node.node_id, template_dirs)
+
+            projected.append(node)
 
         async with self._node_store.batch():
             dir_node_id = self._directory_id_for_file(file_path)
@@ -637,7 +661,7 @@ class FileReconciler:
                     end_line=0,
                     start_byte=0,
                     end_byte=0,
-                    source_code="",
+                    text="",
                     source_hash=source_hash,
                     parent_id=None,
                     status=existing_node.status if existing_node is not None else "idle",

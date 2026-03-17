@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import hashlib
 import pytest
-from pydantic import ValidationError
 
-from remora.code.discovery import CSTNode, clear_caches, discover
+from remora.code.discovery import clear_caches, discover
 from remora.code.languages import LanguageRegistry
+from remora.core.node import Node
 from tests.factories import write_file
 
 
@@ -23,6 +24,7 @@ def test_discover_python_function(tmp_path: Path) -> None:
     assert func.node_type == "function"
     assert func.start_line == 1
     assert func.end_line == 2
+    assert func.source_hash == hashlib.sha256(func.text.encode("utf-8")).hexdigest()
 
 
 def test_discover_python_class_and_method(tmp_path: Path) -> None:
@@ -158,7 +160,6 @@ def test_discover_reuses_cached_language_registry(tmp_path: Path, monkeypatch: p
 
     monkeypatch.setattr(discovery_module, "LanguageRegistry", CountingRegistry)
     clear_caches()
-
     discover([tmp_path], language_map={".py": "python"})
     discover([tmp_path], language_map={".py": "python"})
 
@@ -172,19 +173,20 @@ def test_discover_uses_injected_language_registry(tmp_path: Path) -> None:
     assert any(node.name == "greet" for node in nodes)
 
 
-def test_cstnode_frozen() -> None:
-    node = CSTNode(
+def test_discover_returns_mutable_node_model() -> None:
+    node = Node(
         node_id="a::b",
         node_type="function",
         name="b",
         full_name="b",
         file_path="a.py",
         text="def b():\n    pass\n",
+        source_hash=hashlib.sha256("def b():\n    pass\n".encode("utf-8")).hexdigest(),
         start_line=1,
         end_line=2,
         start_byte=0,
         end_byte=17,
     )
 
-    with pytest.raises(ValidationError):
-        node.name = "changed"
+    node.name = "changed"
+    assert node.name == "changed"

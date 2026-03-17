@@ -71,7 +71,7 @@ class NodeStore:
                 end_line INTEGER NOT NULL,
                 start_byte INTEGER DEFAULT 0,
                 end_byte INTEGER DEFAULT 0,
-                source_code TEXT NOT NULL,
+                text TEXT NOT NULL,
                 source_hash TEXT NOT NULL,
                 parent_id TEXT,
                 status TEXT DEFAULT 'idle',

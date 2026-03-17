@@ -11,11 +11,11 @@ from typing import Annotated
 
 import typer
 
-from remora.code.discovery import CSTNode
 from remora.code.discovery import discover as discover_nodes
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.core.config import load_config
 from remora.core.lifecycle import RemoraLifecycle
+from remora.core.node import Node
 from remora.lsp import create_lsp_server_standalone
 
 app = typer.Typer(
@@ -194,7 +194,7 @@ async def _discover(
     *,
     project_root: Path,
     config_path: Path | None,
-) -> list[CSTNode]:
+) -> list[Node]:
     project_root = project_root.resolve()
     config = load_config(config_path)
     discovery_paths = resolve_discovery_paths(config, project_root)
