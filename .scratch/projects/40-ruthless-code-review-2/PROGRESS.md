@@ -16,7 +16,7 @@
 - [x] Phase 7 Fix Event System Issues
 - [x] Phase 8 Decompose _materialize_directories
 - [x] Phase 9 Performance Fixes
-- [ ] Phase 10 Fix Encapsulation Violations
+- [x] Phase 10 Fix Encapsulation Violations
 - [ ] Phase 11 Clean Up Global State
 - [ ] Phase 12 Logging & Error Boundary Cleanup
 - [ ] Phase 13 Minor Fixes & Polish
@@ -86,4 +86,4 @@
 - [x] Step 10.1 Add `NodeStore.count_nodes()`
 - [x] Step 10.2 Use `count_nodes()` in web health endpoint
 - [x] Step 10.3 Update OutboxObserver dispatch strategy
-- [ ] Step 10.4 Verify/commit checkpoint
+- [x] Step 10.4 Verify/commit checkpoint

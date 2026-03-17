@@ -358,3 +358,11 @@ Next action:
 
 Next action:
 - Step 10.4: run phase checkpoint suite (`test_web_server` + `test_actor`) and commit/push Phase 10 completion.
+- Step 10.4 completed:
+  - ran phase checkpoint verification:
+    - `devenv shell -- python -m pytest tests/unit/test_web_server.py tests/unit/test_actor.py -v`
+    - result: `86 passed, 1 warning`
+  - Phase 10 is complete.
+
+Next action:
+- Start Phase 11 Step 11.1: review and clean up Grail cache globals per guide recommendations.
