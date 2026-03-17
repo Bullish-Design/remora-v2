@@ -409,3 +409,10 @@ Next action:
 
 Next action:
 - Step 13.2: move web chat rate limiting to per-client limiter instances keyed by request IP.
+- Step 13.2 completed:
+  - replaced single shared chat limiter with per-client limiter map in `WebDeps`
+  - added `_get_chat_limiter(request, deps)` helper to resolve/create limiter by client IP
+  - verification: `devenv shell -- python -m pytest tests/unit/test_web_server.py -q` passed (`45 passed`)
+
+Next action:
+- Step 13.3: pass configured web port into LSP server so chat command URIs use runtime port instead of hardcoded 8080.

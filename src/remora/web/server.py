@@ -75,7 +75,7 @@ class WebDeps:
     workspace_service: CairnWorkspaceService | None
     search_service: SearchServiceProtocol | None
     shutdown_event: asyncio.Event
-    chat_limiter: RateLimiter
+    chat_limiters: dict[str, RateLimiter]
 
 
 def _is_allowed_origin(origin: str) -> bool:
@@ -99,6 +99,15 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
 def _deps_from_request(request: Request) -> WebDeps:
     return request.app.state.deps
+
+
+def _get_chat_limiter(request: Request, deps: WebDeps) -> RateLimiter:
+    ip = request.client.host if request.client is not None else "unknown"
+    limiter = deps.chat_limiters.get(ip)
+    if limiter is None:
+        limiter = RateLimiter(max_requests=10, window_seconds=60.0)
+        deps.chat_limiters[ip] = limiter
+    return limiter
 
 
 def _resolve_within_project_root(
@@ -222,7 +231,7 @@ async def api_conversation(request: Request) -> JSONResponse:
 
 async def api_chat(request: Request) -> JSONResponse:
     deps = _deps_from_request(request)
-    if not deps.chat_limiter.allow():
+    if not _get_chat_limiter(request, deps).allow():
         return JSONResponse(
             {"error": "Rate limit exceeded. Try again later."},
             status_code=429,
@@ -700,7 +709,7 @@ def create_app(
         workspace_service=workspace_service,
         search_service=search_service,
         shutdown_event=asyncio.Event(),
-        chat_limiter=RateLimiter(max_requests=10, window_seconds=60.0),
+        chat_limiters={},
     )
     app = Starlette(routes=_build_routes(), lifespan=_build_lifespan(deps.shutdown_event))
     app.state.deps = deps

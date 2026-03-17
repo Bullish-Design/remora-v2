@@ -100,7 +100,7 @@
 
 ### Phase 13
 - [x] Step 13.1 Replace SHA-1 with SHA-256 in workspace safe IDs
-- [ ] Step 13.2 Make web chat rate limiting per-client
+- [x] Step 13.2 Make web chat rate limiting per-client
 - [ ] Step 13.3 Pass configured web port into LSP chat command URI
 - [ ] Step 13.4 Skip `_discover` async signature churn (per guide)
 - [ ] Step 13.5 Remove dead `name_node` parameter from discovery name builder
