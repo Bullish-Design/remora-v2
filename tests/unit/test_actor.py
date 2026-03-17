@@ -205,16 +205,14 @@ async def test_actor_depth_cleanup_removes_stale_entries(actor_env, monkeypatch)
     assert "fresh-corr" in policy.depths
 
 
-@pytest.mark.asyncio
-async def test_actor_reset_clears_depth_timestamp(actor_env) -> None:
-    actor = _make_actor(actor_env)
-    assert actor._trigger_policy.should_trigger("corr-reset")
-    turn_log = logging.LoggerAdapter(logging.getLogger(__name__), {})
+def test_trigger_policy_release_clears_depth_timestamp(actor_env) -> None:
+    policy = TriggerPolicy(actor_env["config"])
+    assert policy.should_trigger("corr-reset")
 
-    await actor._turn_executor._reset_agent_state(actor.node_id, "corr-reset", turn_log)
+    policy.release_depth("corr-reset")
 
-    assert "corr-reset" not in actor._trigger_policy.depths
-    assert "corr-reset" not in actor._trigger_policy.depth_timestamps
+    assert "corr-reset" not in policy.depths
+    assert "corr-reset" not in policy.depth_timestamps
 
 
 @pytest.mark.asyncio

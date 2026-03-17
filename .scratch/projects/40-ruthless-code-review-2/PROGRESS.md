@@ -111,6 +111,6 @@
 ### Phase 14
 - [x] Step 14.1 Add lifecycle integration test coverage
 - [x] Step 14.2 Add concurrency tests
-- [ ] Step 14.3 Fix remaining whitebox tests
+- [x] Step 14.3 Fix remaining whitebox tests
 - [ ] Step 14.4 Confirm/add missing batch rollback coverage
 - [ ] Step 14.5 Verify/commit checkpoint

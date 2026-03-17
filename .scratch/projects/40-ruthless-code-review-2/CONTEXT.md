@@ -478,3 +478,10 @@ Next action:
 
 Next action:
 - Step 14.3: update remaining whitebox actor tests to avoid direct actor internals when public TriggerPolicy/PromptBuilder APIs cover intent.
+- Step 14.3 completed:
+  - replaced whitebox actor-internal reset-depth test with direct `TriggerPolicy.release_depth()` behavior test
+  - removed dependency on private actor executor internals in this coverage
+  - verification: `devenv shell -- python -m pytest tests/unit/test_actor.py -q` passed (`41 passed`)
+
+Next action:
+- Step 14.4: confirm existing batch rollback test coverage and add only if missing.
