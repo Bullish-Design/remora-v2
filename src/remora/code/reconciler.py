@@ -434,11 +434,8 @@ class FileReconciler:
         old_ids = self._file_state.get(file_path, (0, set()))[1]
         new_ids = {node.node_id for node in discovered}
 
-        old_hashes: dict[str, str] = {}
-        for node_id in new_ids:
-            existing = await self._node_store.get_node(node_id)
-            if existing is not None:
-                old_hashes[node_id] = existing.source_hash
+        existing_nodes = await self._node_store.get_nodes_by_ids(sorted(new_ids))
+        old_hashes = {node.node_id: node.source_hash for node in existing_nodes}
 
         projected = await project_nodes(
             discovered,

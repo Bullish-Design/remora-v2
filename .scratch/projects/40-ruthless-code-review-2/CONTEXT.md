@@ -318,3 +318,10 @@ Next action:
 
 Next action:
 - Step 9.6: remove per-node DB reads in reconciler file reconciliation path (`_do_reconcile_file`) using batched lookup.
+- Step 9.6 completed:
+  - replaced per-node `get_node` loop in reconciler `_do_reconcile_file` with batched `get_nodes_by_ids` lookup
+  - now computes `old_hashes` from a single query result
+  - verification: `devenv shell -- python -m pytest tests/unit/test_reconciler.py -q` passed (`22 passed`)
+
+Next action:
+- Step 9.7: run the full Phase 9 verification checkpoint, then commit/push Phase 9 completion.
