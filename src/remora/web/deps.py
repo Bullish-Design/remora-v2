@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from remora.core.workspace import CairnWorkspaceService
 
 
+_MAX_CHAT_LIMITERS = 1000
+
+
 @dataclass
 class WebDeps:
     """Shared dependencies for all web handlers."""
@@ -43,6 +46,9 @@ def _get_chat_limiter(request: Request, deps: WebDeps) -> SlidingWindowRateLimit
     ip = request.client.host if request.client is not None else "unknown"
     limiter = deps.chat_limiters.get(ip)
     if limiter is None:
+        if len(deps.chat_limiters) >= _MAX_CHAT_LIMITERS:
+            oldest_key = next(iter(deps.chat_limiters))
+            del deps.chat_limiters[oldest_key]
         limiter = SlidingWindowRateLimiter(max_requests=10, window_seconds=60.0)
         deps.chat_limiters[ip] = limiter
     return limiter

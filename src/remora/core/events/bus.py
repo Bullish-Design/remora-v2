@@ -16,26 +16,36 @@ logger = logging.getLogger(__name__)
 class EventBus:
     """In-memory event dispatch with exact-type subscriptions."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrent_handlers: int = 100) -> None:
         self._handlers: dict[type[Event], list[EventHandler]] = {}
         self._all_handlers: list[EventHandler] = []
+        self._semaphore = asyncio.Semaphore(max_concurrent_handlers)
 
     async def emit(self, event: Event) -> None:
         """Emit an event to exact-type, base Event, and global handlers."""
         event_type = type(event)
-        await self._dispatch_handlers(self._handlers.get(event_type, []), event)
+        await self._dispatch_handlers(self._handlers.get(event_type, []), event, self._semaphore)
         if event_type is not Event:
-            await self._dispatch_handlers(self._handlers.get(Event, []), event)
-        await self._dispatch_handlers(self._all_handlers, event)
+            await self._dispatch_handlers(self._handlers.get(Event, []), event, self._semaphore)
+        await self._dispatch_handlers(self._all_handlers, event, self._semaphore)
 
     @staticmethod
     async def _dispatch_handlers(
-        handlers: list[EventHandler], event: Event
+        handlers: list[EventHandler],
+        event: Event,
+        semaphore: asyncio.Semaphore | None = None,
     ) -> None:
         tasks: list[asyncio.Task[Any]] = []
         for handler in handlers:
             if asyncio.iscoroutinefunction(handler):
-                tasks.append(asyncio.create_task(handler(event)))
+                if semaphore is None:
+                    tasks.append(asyncio.create_task(handler(event)))
+                else:
+                    tasks.append(
+                        asyncio.create_task(
+                            EventBus._run_bounded(handler, event, semaphore)
+                        )
+                    )
                 continue
             try:
                 handler(event)
@@ -56,6 +66,15 @@ class EventBus:
                         result,
                         exc_info=result,
                     )
+
+    @staticmethod
+    async def _run_bounded(
+        handler: Any,
+        event: Event,
+        semaphore: asyncio.Semaphore,
+    ) -> None:
+        async with semaphore:
+            await handler(event)
 
     def subscribe(self, event_type: type[Event], handler: EventHandler) -> None:
         """Register a handler for a specific event type."""

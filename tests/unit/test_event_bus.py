@@ -147,3 +147,23 @@ async def test_failing_handler_does_not_crash_bus() -> None:
     event = AgentStartEvent(agent_id="test")
     await bus.emit(event)
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_event_bus_limits_concurrent_handlers() -> None:
+    bus = EventBus(max_concurrent_handlers=2)
+    active = 0
+    max_active = 0
+
+    async def slow_handler(_event: Event) -> None:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+
+    for _ in range(10):
+        bus.subscribe_all(slow_handler)
+
+    await bus.emit(AgentStartEvent(agent_id="concurrency"))
+    assert max_active <= 2

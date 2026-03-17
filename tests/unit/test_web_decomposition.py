@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from remora.web.deps import WebDeps, _get_chat_limiter
+from remora.core.rate_limit import SlidingWindowRateLimiter
+from remora.web.deps import _MAX_CHAT_LIMITERS, WebDeps, _get_chat_limiter
 from remora.web.routes import chat, cursor, events, health, nodes, proposals, search
 
 
@@ -44,3 +45,25 @@ def test_get_chat_limiter_reuses_per_ip() -> None:
     second = _get_chat_limiter(request, deps)
 
     assert first is second
+
+
+def test_chat_limiter_evicts_oldest_when_capacity_reached() -> None:
+    deps = WebDeps(
+        event_store=SimpleNamespace(),
+        node_store=SimpleNamespace(),
+        event_bus=SimpleNamespace(),
+        metrics=None,
+        actor_pool=None,
+        workspace_service=None,
+        search_service=None,
+        shutdown_event=asyncio.Event(),
+        chat_limiters={},
+    )
+    for i in range(_MAX_CHAT_LIMITERS):
+        deps.chat_limiters[f"ip-{i}"] = SlidingWindowRateLimiter(10, 60.0)
+
+    _get_chat_limiter(SimpleNamespace(client=SimpleNamespace(host="new-ip")), deps)
+
+    assert len(deps.chat_limiters) == _MAX_CHAT_LIMITERS
+    assert "ip-0" not in deps.chat_limiters
+    assert "new-ip" in deps.chat_limiters
