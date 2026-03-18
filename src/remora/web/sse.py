@@ -66,16 +66,20 @@ async def sse_stream(request: Request) -> StreamingResponse:
             return
         async with deps.event_bus.stream() as stream:
             stream_iterator = stream.__aiter__()
-            disconnect_task = asyncio.create_task(_wait_for_disconnect(request))
-            shutdown_task = asyncio.create_task(_wait_for_shutdown(deps.shutdown_event))
+            disconnect_task = asyncio.create_task(
+                _wait_for_disconnect(request), name="sse-disconnect"
+            )
+            shutdown_task = asyncio.create_task(
+                _wait_for_shutdown(deps.shutdown_event), name="sse-shutdown"
+            )
+            sentinel_tasks = {disconnect_task, shutdown_task}
             try:
                 while True:
                     stream_task = asyncio.create_task(stream_iterator.__anext__())
-                    done, _pending = await asyncio.wait(
-                        {stream_task, disconnect_task, shutdown_task},
+                    done, _ = await asyncio.wait(
+                        sentinel_tasks | {stream_task},
                         return_when=asyncio.FIRST_COMPLETED,
                     )
-
                     if stream_task not in done:
                         stream_task.cancel()
                         try:
@@ -83,7 +87,6 @@ async def sse_stream(request: Request) -> StreamingResponse:
                         except (asyncio.CancelledError, StopAsyncIteration):
                             pass
                         break
-
                     try:
                         event = stream_task.result()
                     except StopAsyncIteration:
@@ -91,14 +94,10 @@ async def sse_stream(request: Request) -> StreamingResponse:
                     payload = json.dumps(event.to_envelope(), separators=(",", ":"))
                     yield f"id: {event.timestamp}\nevent: {event.event_type}\ndata: {payload}\n\n"
             finally:
-                for task in (disconnect_task, shutdown_task):
-                    if task.done():
-                        continue
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
+                for task in sentinel_tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*sentinel_tasks, return_exceptions=True)
         if deps.shutdown_event.is_set():
             yield ": server-shutdown\n\n"
 

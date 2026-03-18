@@ -10,6 +10,7 @@ from tests.factories import make_node
 
 from remora.core.agents.actor import Outbox
 from remora.core.model.config import Config, InfraConfig
+from remora.core.services.broker import HumanInputBroker
 from remora.core.storage.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.events.types import CustomEvent
@@ -60,6 +61,7 @@ async def _context(
     send_message_rate_limit: int = 10,
     send_message_rate_window_s: float = 1.0,
     search_service=None,
+    broker=None,
 ) -> TurnContext:
     if outbox is None:
         outbox = Outbox(actor_id=node_id, event_store=event_store, correlation_id=correlation_id)
@@ -79,6 +81,7 @@ async def _context(
         broadcast_max_targets=broadcast_max_targets,
         send_message_limiter=send_message_limiter,
         search_service=search_service,
+        broker=broker,
     )
 
 
@@ -287,12 +290,15 @@ async def test_externals_event_subscribe_supports_tag_filters(context_env) -> No
 @pytest.mark.asyncio
 async def test_request_human_input_blocks_until_response(context_env) -> None:
     node_store, event_store, workspace_service = context_env
+    broker = HumanInputBroker()
     node = make_node("src/app.py::human")
     await node_store.upsert_node(node)
     assert await node_store.transition_status(node.node_id, NodeStatus.RUNNING)
 
     ws = await workspace_service.get_agent_workspace(node.node_id)
-    context = await _context(node.node_id, ws, node_store, event_store, "corr-human")
+    context = await _context(
+        node.node_id, ws, node_store, event_store, "corr-human", broker=broker
+    )
     externals = context.to_capabilities_dict()
 
     task = asyncio.create_task(externals["request_human_input"]("Proceed?", ["yes", "no"]))
@@ -308,7 +314,7 @@ async def test_request_human_input_blocks_until_response(context_env) -> None:
     assert awaiting is not None
     assert awaiting.status == NodeStatus.AWAITING_INPUT
 
-    assert event_store.resolve_response(request_id, "yes")
+    assert broker.resolve(request_id, "yes")
     assert await task == "yes"
 
     resumed = await node_store.get_node(node.node_id)
@@ -319,6 +325,7 @@ async def test_request_human_input_blocks_until_response(context_env) -> None:
 @pytest.mark.asyncio
 async def test_request_human_input_times_out_and_resets_status(context_env) -> None:
     node_store, event_store, workspace_service = context_env
+    broker = HumanInputBroker()
     node = make_node("src/app.py::human-timeout")
     await node_store.upsert_node(node)
     assert await node_store.transition_status(node.node_id, NodeStatus.RUNNING)
@@ -331,6 +338,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
         event_store,
         "corr-human-timeout",
         human_input_timeout_s=0.01,
+        broker=broker,
     )
     externals = context.to_capabilities_dict()
 
@@ -340,7 +348,7 @@ async def test_request_human_input_times_out_and_resets_status(context_env) -> N
     events = await event_store.get_events(limit=10)
     request = next(event for event in events if event["event_type"] == "human_input_request")
     request_id = request["payload"]["request_id"]
-    assert not event_store.resolve_response(request_id, "late")
+    assert not broker.resolve(request_id, "late")
 
     resumed = await node_store.get_node(node.node_id)
     assert resumed is not None

@@ -21,8 +21,9 @@ from remora.core.events import (
     EventStore,
     RewriteProposalEvent,
 )
-from remora.core.storage.graph import NodeStore
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
+from remora.core.storage.graph import NodeStore
 from remora.core.storage.workspace import CairnWorkspaceService
 from remora.web.server import create_app
 
@@ -62,10 +63,12 @@ async def web_env(tmp_path: Path):
     )
     await node_store.upsert_node(node)
 
+    broker = HumanInputBroker()
     app = create_app(
         event_store,
         node_store,
         event_bus,
+        human_input_broker=broker,
     )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -301,7 +304,9 @@ async def test_api_respond_returns_404_when_request_not_pending(web_env) -> None
 @pytest.mark.asyncio
 async def test_api_respond_resolves_pending_request_and_emits_event(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
-    future = event_store.create_response_future("req-1")
+    # Access the broker that was wired into the app via create_app
+    broker: HumanInputBroker = client._transport.app.state.deps.human_input_broker
+    future = broker.create_future("req-1")
 
     response = await client.post(
         "/api/nodes/src/app.py::a/respond",
