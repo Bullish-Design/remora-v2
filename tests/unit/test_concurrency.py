@@ -6,13 +6,30 @@ from pathlib import Path
 import pytest
 from tests.factories import make_node, write_bundle_templates, write_file
 
+from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
+from remora.code.subscriptions import SubscriptionManager
 from remora.core.actor import Actor, TriggerPolicy
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig, RuntimeConfig
+from remora.core.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    ProjectConfig,
+    RuntimeConfig,
+    resolve_query_search_paths,
+)
 from remora.core.db import open_database
-from remora.core.events import AgentMessageEvent, EventStore, SubscriptionPattern
+from remora.core.events import (
+    AgentMessageEvent,
+    EventBus,
+    EventStore,
+    SubscriptionPattern,
+    SubscriptionRegistry,
+    TriggerDispatcher,
+)
 from remora.core.graph import NodeStore
 from remora.core.runner import ActorPool
+from remora.core.transaction import TransactionContext
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -22,9 +39,14 @@ async def test_concurrent_dispatch_serializes_for_single_actor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db = await open_database(tmp_path / "dispatch.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     config = Config(
@@ -95,7 +117,12 @@ async def test_concurrent_dispatch_serializes_for_single_actor(
 @pytest.mark.asyncio
 async def test_subscription_modification_during_dispatch_does_not_crash(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "subscriptions.db")
-    event_store = EventStore(db=db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     await event_store.subscriptions.register("agent-stable", SubscriptionPattern(to_agent="target"))
 
@@ -132,9 +159,14 @@ async def test_subscription_modification_during_dispatch_does_not_crash(tmp_path
 @pytest.mark.asyncio
 async def test_overlapping_reconcile_cycles_are_idempotent(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "reconcile-concurrency.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
@@ -155,12 +187,20 @@ async def test_overlapping_reconcile_cycles_are_idempotent(tmp_path: Path) -> No
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
+    language_registry = LanguageRegistry.from_config(
+        language_defs=config.behavior.languages,
+        query_search_paths=resolve_query_search_paths(config, tmp_path),
+    )
+    subscription_manager = SubscriptionManager(event_store, workspace_service)
     reconciler = FileReconciler(
         config,
         node_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
+        language_registry=language_registry,
+        subscription_manager=subscription_manager,
+        tx=tx,
     )
 
     try:

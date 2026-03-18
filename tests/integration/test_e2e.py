@@ -9,18 +9,29 @@ from structured_agents import Message
 from structured_agents.types import ToolCall, ToolResult, ToolSchema
 from tests.factories import write_file
 
+from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
+from remora.code.subscriptions import SubscriptionManager
 from remora.core.actor import Outbox, Trigger
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
+from remora.core.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    ProjectConfig,
+    resolve_query_search_paths,
+)
 from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
     EventBus,
     EventStore,
+    SubscriptionRegistry,
+    TriggerDispatcher,
 )
 from remora.core.graph import NodeStore
 from remora.core.runner import ActorPool
+from remora.core.transaction import TransactionContext
 from remora.core.workspace import CairnWorkspaceService
 
 _E2E_USER_TEMPLATE = (
@@ -89,9 +100,13 @@ async def _setup_runtime(tmp_path: Path):
 
     db = await open_database(tmp_path / "e2e.db")
     event_bus = EventBus()
-    node_store = NodeStore(db)
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db, event_bus=event_bus)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     config = Config(
@@ -114,15 +129,23 @@ async def _setup_runtime(tmp_path: Path):
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
+    language_registry = LanguageRegistry.from_config(
+        language_defs=config.behavior.languages,
+        query_search_paths=resolve_query_search_paths(config, tmp_path),
+    )
+    subscription_manager = SubscriptionManager(event_store, workspace_service)
     reconciler = FileReconciler(
         config,
         node_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
+        language_registry=language_registry,
+        subscription_manager=subscription_manager,
+        tx=tx,
     )
     code_nodes = await reconciler.full_scan()
-    runner = ActorPool(event_store, node_store, workspace_service, config)
+    runner = ActorPool(event_store, node_store, workspace_service, config, dispatcher=dispatcher)
 
     return {
         "source_path": source_path,

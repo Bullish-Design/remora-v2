@@ -9,16 +9,26 @@ from tests.factories import make_node
 
 from remora.code.discovery import discover
 from remora.code.languages import LanguageRegistry
+from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
+from remora.core.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    ProjectConfig,
+    resolve_query_search_paths,
+)
 from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
+    EventBus,
     EventStore,
     SubscriptionPattern,
     SubscriptionRegistry,
+    TriggerDispatcher,
 )
 from remora.core.graph import NodeStore
+from remora.core.transaction import TransactionContext
 from remora.core.workspace import CairnWorkspaceService
 
 
@@ -58,7 +68,12 @@ async def test_perf_discovery_100_nodes(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "perf-nodes.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
 
     started = time.perf_counter()
@@ -111,9 +126,14 @@ async def test_perf_reconciler_load_1000_files_10_nodes_each(
         )
 
     db = await open_database(tmp_path / "perf-reconciler.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     config = Config(
         project=ProjectConfig(
@@ -135,12 +155,20 @@ async def test_perf_reconciler_load_1000_files_10_nodes_each(
     # Keep the load test focused on reconcile projection/storage behavior.
     monkeypatch.setattr(workspace_service, "provision_bundle", _noop_provision_bundle)
 
+    language_registry = LanguageRegistry.from_config(
+        language_defs=config.behavior.languages,
+        query_search_paths=resolve_query_search_paths(config, tmp_path),
+    )
+    subscription_manager = SubscriptionManager(event_store, workspace_service)
     reconciler = FileReconciler(
         config,
         node_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
+        language_registry=language_registry,
+        subscription_manager=subscription_manager,
+        tx=tx,
     )
 
     try:
