@@ -22,24 +22,26 @@ class EventStore:
     def __init__(
         self,
         db: aiosqlite.Connection,
-        event_bus: EventBus,
-        dispatcher: TriggerDispatcher,
-        tx: TransactionContext,
+        event_bus: EventBus | None = None,
+        dispatcher: TriggerDispatcher | None = None,
+        tx: TransactionContext | None = None,
         metrics: Metrics | None = None,
     ) -> None:
         self._db = db
-        self._event_bus = event_bus
+        self._event_bus = event_bus or EventBus()
         self._dispatcher = dispatcher
         self._tx = tx
         self._metrics = metrics
         self._pending_responses: dict[str, asyncio.Future[str]] = {}
 
     @property
-    def dispatcher(self) -> TriggerDispatcher:
+    def dispatcher(self) -> TriggerDispatcher | None:
         return self._dispatcher
 
     @property
     def subscriptions(self):  # noqa: ANN201
+        if self._dispatcher is None:
+            return None
         return self._dispatcher.subscriptions
 
     async def create_tables(self) -> None:
@@ -64,7 +66,8 @@ class EventStore:
             """
         )
         await self._db.commit()
-        await self._dispatcher.subscriptions.create_tables()
+        if self._dispatcher is not None:
+            await self._dispatcher.subscriptions.create_tables()
 
     async def append(self, event: Event) -> int:
         """Append an event and fan-out to bus and matching subscription triggers."""
@@ -99,18 +102,23 @@ class EventStore:
         if self._metrics is not None:
             self._metrics.events_emitted_total += 1
 
-        if self._tx.in_batch:
+        if self._tx is not None and self._tx.in_batch:
             self._tx.defer_event(event)
             return event_id
 
         await self._db.commit()
-        await self._event_bus.emit(event)
-        await self._dispatcher.dispatch(event)
+        if self._event_bus is not None:
+            await self._event_bus.emit(event)
+        if self._dispatcher is not None:
+            await self._dispatcher.dispatch(event)
         return event_id
 
     @asynccontextmanager
     async def batch(self):  # noqa: ANN201
         """Convenience alias for self._tx.batch()."""
+        if self._tx is None:
+            yield
+            return
         async with self._tx.batch():
             yield
 

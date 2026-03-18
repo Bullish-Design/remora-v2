@@ -33,3 +33,27 @@ async def db(tmp_path):
     database = await open_database(tmp_path / "test.db")
     yield database
     await database.close()
+
+
+@pytest_asyncio.fixture
+async def db_with_deps(tmp_path):
+    """Database with NodeStore and EventStore dependencies initialized."""
+    from remora.core.events import EventBus, EventStore, SubscriptionRegistry
+    from remora.core.events.dispatcher import TriggerDispatcher
+    from remora.core.storage.graph import NodeStore
+    from remora.core.storage.transaction import TransactionContext
+
+    database = await open_database(tmp_path / "test.db")
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(database)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(database, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(database, tx=tx)
+    await node_store.create_tables()
+    event_store = EventStore(database, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
+    await event_store.create_tables()
+
+    yield database, node_store, event_store, tx
+
+    await database.close()

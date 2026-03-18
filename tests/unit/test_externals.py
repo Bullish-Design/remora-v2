@@ -23,9 +23,18 @@ from remora.core.storage.workspace import CairnWorkspaceService
 @pytest_asyncio.fixture
 async def context_env(tmp_path: Path):
     db = await open_database(tmp_path / "phase5.db")
-    node_store = NodeStore(db)
+    from remora.core.events import EventBus, SubscriptionRegistry
+    from remora.core.events.dispatcher import TriggerDispatcher
+    from remora.core.storage.transaction import TransactionContext
+
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     config = Config(infra=InfraConfig(workspace_root=".remora-phase5"))

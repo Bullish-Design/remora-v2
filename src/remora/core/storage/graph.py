@@ -33,17 +33,23 @@ class Edge:
 class NodeStore:
     """SQLite-backed storage for the Node graph."""
 
-    def __init__(self, db: aiosqlite.Connection, tx: TransactionContext):
+    def __init__(self, db: aiosqlite.Connection, tx: TransactionContext | None = None):
         self._db = db
         self._tx = tx
 
     @asynccontextmanager
     async def batch(self):  # noqa: ANN201
         """Convenience alias for self._tx.batch()."""
+        if self._tx is None:
+            yield
+            return
         async with self._tx.batch():
             yield
 
     async def _maybe_commit(self) -> None:
+        if self._tx is None:
+            await self._db.commit()
+            return
         if self._tx.in_batch:
             return
         await self._db.commit()

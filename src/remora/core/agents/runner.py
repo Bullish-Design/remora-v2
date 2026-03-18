@@ -47,8 +47,9 @@ class ActorPool:
         self._semaphore = asyncio.Semaphore(config.runtime.max_concurrency)
         self._actors: dict[str, Actor] = {}
 
-        # Set ourselves as the dispatcher's router
-        self._dispatcher.router = self._route_to_actor
+        # Set ourselves as the dispatcher's router (if dispatcher exists)
+        if self._dispatcher is not None:
+            self._dispatcher.router = self._route_to_actor
 
     def _route_to_actor(self, agent_id: str, event: Event) -> None:
         """Route an event to the target agent's inbox, creating the actor if needed."""

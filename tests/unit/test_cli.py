@@ -261,7 +261,7 @@ async def test_index_happy_path_calls_index_directory_for_each_discovery_path(
     monkeypatch.setattr(
         main_module, "resolve_discovery_paths", lambda *_args, **_kwargs: [path_a, path_b]
     )
-    monkeypatch.setattr("remora.core.search.SearchService", FakeService)
+    monkeypatch.setattr("remora.core.services.search.SearchService", FakeService)
 
     await _index(
         project_root=tmp_path,

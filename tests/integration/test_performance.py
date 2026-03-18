@@ -9,8 +9,8 @@ from tests.factories import make_node
 
 from remora.code.discovery import discover
 from remora.code.languages import LanguageRegistry
-from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
+from remora.code.subscriptions import SubscriptionManager
 from remora.core.model.config import (
     BehaviorConfig,
     Config,

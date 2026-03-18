@@ -35,9 +35,18 @@ from remora.core.storage.workspace import CairnWorkspaceService
 @pytest_asyncio.fixture
 async def reconcile_env(tmp_path: Path):
     db = await open_database(tmp_path / "reconcile.db")
-    node_store = NodeStore(db)
+    from remora.core.events import EventBus, SubscriptionRegistry
+    from remora.core.events.dispatcher import TriggerDispatcher
+    from remora.core.storage.transaction import TransactionContext
+
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
@@ -714,10 +723,19 @@ async def test_provision_bundle_clears_self_reflect_when_disabled(
 
 @pytest.mark.asyncio
 async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) -> None:
+    from remora.core.events import EventBus, SubscriptionRegistry
+    from remora.core.events.dispatcher import TriggerDispatcher
+    from remora.core.storage.transaction import TransactionContext
+
     db = await open_database(tmp_path / "virtual.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     bundles_root = tmp_path / "bundles"
@@ -796,9 +814,18 @@ async def test_reconciler_handles_external_paths(tmp_path: Path) -> None:
     write_file(source_file, "def outside_fn():\n    return 1\n")
 
     db = await open_database(tmp_path / "external-paths.db")
-    node_store = NodeStore(db)
+    from remora.core.events import EventBus, SubscriptionRegistry
+    from remora.core.events.dispatcher import TriggerDispatcher
+    from remora.core.storage.transaction import TransactionContext
+
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
 
     bundles_root = tmp_path / "bundles"

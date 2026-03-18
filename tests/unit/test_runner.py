@@ -37,10 +37,19 @@ _USER_TEMPLATE = (
 
 @pytest_asyncio.fixture
 async def runner_env(tmp_path: Path):
+    from remora.core.events import EventBus, SubscriptionRegistry
+    from remora.core.events.dispatcher import TriggerDispatcher
+    from remora.core.storage.transaction import TransactionContext
+
     db = await open_database(tmp_path / "runner.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     config = Config(
         infra=InfraConfig(workspace_root=".remora-runner-test"),
@@ -258,7 +267,7 @@ async def test_runner_passes_search_service_to_actor(runner_env, monkeypatch) ->
         async def stop(self) -> None:
             self._running = False
 
-    monkeypatch.setattr("remora.core.runner.Actor", FakeActor)
+    monkeypatch.setattr("remora.core.agents.runner.Actor", FakeActor)
 
     actor = runner.get_or_create_actor("agent-search")
     assert actor is not None
