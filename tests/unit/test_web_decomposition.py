@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.web.deps import _MAX_CHAT_LIMITERS, WebDeps, _get_chat_limiter
 from remora.web.routes import chat, cursor, events, health, nodes, proposals, search
@@ -32,6 +33,7 @@ def test_get_chat_limiter_reuses_per_ip() -> None:
         event_store=SimpleNamespace(),
         node_store=SimpleNamespace(),
         event_bus=SimpleNamespace(),
+        human_input_broker=HumanInputBroker(),
         metrics=None,
         actor_pool=None,
         workspace_service=None,
@@ -52,6 +54,7 @@ def test_chat_limiter_evicts_oldest_when_capacity_reached() -> None:
         event_store=SimpleNamespace(),
         node_store=SimpleNamespace(),
         event_bus=SimpleNamespace(),
+        human_input_broker=HumanInputBroker(),
         metrics=None,
         actor_pool=None,
         workspace_service=None,

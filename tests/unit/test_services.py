@@ -73,8 +73,9 @@ class _DummyActorPool:
         dispatcher=None,
         metrics=None,
         search_service=None,
+        broker=None,
     ) -> None:
-        del event_store, node_store, workspace_service, config, dispatcher, metrics
+        del event_store, node_store, workspace_service, config, dispatcher, metrics, broker
         type(self).last_search_service = search_service
 
     async def stop_and_wait(self) -> None:
