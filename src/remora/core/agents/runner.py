@@ -10,6 +10,7 @@ from remora.core.agents.actor import Actor
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
 from remora.core.model.config import Config
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.search import SearchServiceProtocol
 from remora.core.storage.graph import NodeStore
@@ -34,6 +35,7 @@ class ActorPool:
         dispatcher: TriggerDispatcher | None = None,
         metrics: Metrics | None = None,
         search_service: SearchServiceProtocol | None = None,
+        broker: HumanInputBroker | None = None,
     ):
         self._event_store = event_store
         self._dispatcher = dispatcher or event_store.dispatcher
@@ -42,6 +44,7 @@ class ActorPool:
         self._config = config
         self._metrics = metrics
         self._search_service = search_service
+        self._broker = broker
         self._running = False
         self._accepting_events = True
         self._semaphore = asyncio.Semaphore(config.runtime.max_concurrency)
@@ -71,6 +74,7 @@ class ActorPool:
                 semaphore=self._semaphore,
                 metrics=self._metrics,
                 search_service=self._search_service,
+                broker=self._broker,
             )
             actor.start()
             self._actors[node_id] = actor

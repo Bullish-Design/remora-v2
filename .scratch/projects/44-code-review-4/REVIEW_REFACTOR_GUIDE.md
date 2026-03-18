@@ -817,7 +817,7 @@ rg "getattr\(event" src/remora/
 
 ---
 
-## Phase 7: Namespace Capability Functions
+## Phase 7: Namespace Capability Functions (TODO: Does this work with Grail??)
 
 **Why:** `TurnContext.to_capabilities_dict()` merges all capability groups into one flat dict. If two groups define a function with the same name, the last one wins silently. The fix: prefix each function name with its group namespace.
 

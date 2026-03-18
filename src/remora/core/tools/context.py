@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.core.services.search import SearchServiceProtocol
 from remora.core.tools.capabilities import (
@@ -42,6 +43,7 @@ class TurnContext:
         broadcast_max_targets: int = 50,
         send_message_limiter: SlidingWindowRateLimiter | None = None,
         search_service: SearchServiceProtocol | None = None,
+        broker: HumanInputBroker | None = None,
     ) -> None:
         self.node_id = node_id
         self.workspace = workspace
@@ -67,6 +69,7 @@ class TurnContext:
             node_store,
             event_store,
             self._emit,
+            broker=broker,
             human_input_timeout_s=human_input_timeout_s,
             broadcast_max_targets=broadcast_max_targets,
             send_message_limiter=send_message_limiter,

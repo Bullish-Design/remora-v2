@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import Any
@@ -32,7 +31,6 @@ class EventStore:
         self._dispatcher = dispatcher
         self._tx = tx
         self._metrics = metrics
-        self._pending_responses: dict[str, asyncio.Future[str]] = {}
 
     @property
     def dispatcher(self) -> TriggerDispatcher | None:
@@ -121,29 +119,6 @@ class EventStore:
             return
         async with self._tx.batch():
             yield
-
-    def create_response_future(self, request_id: str) -> asyncio.Future[str]:
-        """Create and register a pending human-input response future."""
-        future = asyncio.get_running_loop().create_future()
-        self._pending_responses[request_id] = future
-        return future
-
-    def resolve_response(self, request_id: str, response: str) -> bool:
-        """Resolve and remove a pending human-input response future."""
-        future = self._pending_responses.pop(request_id, None)
-        if future is None or future.done():
-            return False
-        future.set_result(response)
-        return True
-
-    def discard_response_future(self, request_id: str) -> bool:
-        """Remove an unresolved pending future (e.g. timeout/cancel)."""
-        future = self._pending_responses.pop(request_id, None)
-        if future is None:
-            return False
-        if not future.done():
-            future.cancel()
-        return True
 
     async def get_events(self, limit: int = 100) -> list[dict[str, Any]]:
         """Get recent events, newest first."""

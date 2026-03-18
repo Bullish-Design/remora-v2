@@ -43,7 +43,7 @@ async def api_respond(request: Request) -> JSONResponse:
         return JSONResponse({"error": "request_id and response required"}, status_code=400)
 
     node_id = request.path_params["node_id"]
-    resolved = deps.event_store.resolve_response(request_id, response_text)
+    resolved = deps.human_input_broker.resolve(request_id, response_text)
     if not resolved:
         return JSONResponse({"error": "no pending request"}, status_code=404)
 

@@ -10,10 +10,11 @@ from starlette.requests import Request
 
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
-from remora.core.storage.graph import NodeStore
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.core.services.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
 
 if TYPE_CHECKING:
     from remora.core.agents.runner import ActorPool
@@ -30,6 +31,7 @@ class WebDeps:
     event_store: EventStore
     node_store: NodeStore
     event_bus: EventBus
+    human_input_broker: HumanInputBroker
     metrics: Metrics | None
     actor_pool: ActorPool | None
     workspace_service: CairnWorkspaceService | None

@@ -16,9 +16,10 @@ from starlette.staticfiles import StaticFiles
 
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
-from remora.core.storage.graph import NodeStore
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
 from remora.web.deps import WebDeps
 from remora.web.middleware import CSRFMiddleware
 from remora.web.routes import chat, cursor, events, health, nodes, proposals, search
@@ -70,6 +71,7 @@ def create_app(
     event_store: EventStore,
     node_store: NodeStore,
     event_bus: EventBus,
+    human_input_broker: HumanInputBroker | None = None,
     metrics: Metrics | None = None,
     actor_pool: ActorPool | None = None,
     workspace_service: CairnWorkspaceService | None = None,
@@ -80,6 +82,7 @@ def create_app(
         event_store=event_store,
         node_store=node_store,
         event_bus=event_bus,
+        human_input_broker=human_input_broker or HumanInputBroker(),
         metrics=metrics,
         actor_pool=actor_pool,
         workspace_service=workspace_service,

@@ -115,6 +115,7 @@ class RemoraLifecycle:
                 services.event_store,
                 services.node_store,
                 services.event_bus,
+                human_input_broker=services.human_input_broker,
                 metrics=services.metrics,
                 actor_pool=services.runner,
                 workspace_service=services.workspace_service,

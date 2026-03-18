@@ -24,6 +24,7 @@ from remora.core.model.errors import (
 )
 from remora.core.model.node import Node
 from remora.core.model.types import EventType, NodeStatus
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.core.services.search import SearchServiceProtocol
@@ -64,6 +65,7 @@ class AgentTurnExecutor:
         trigger_policy: TriggerPolicy,
         search_service: SearchServiceProtocol | None,
         send_message_limiter: SlidingWindowRateLimiter | None = None,
+        broker: HumanInputBroker | None = None,
     ) -> None:
         self._node_store = node_store
         self._event_store = event_store
@@ -76,6 +78,7 @@ class AgentTurnExecutor:
         self._trigger_policy = trigger_policy
         self._search_service = search_service
         self._send_message_limiter = send_message_limiter
+        self._broker = broker
 
     async def execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
@@ -240,6 +243,7 @@ class AgentTurnExecutor:
             broadcast_max_targets=self._config.runtime.broadcast_max_targets,
             send_message_limiter=self._send_message_limiter,
             search_service=self._search_service,
+            broker=self._broker,
         )
         capabilities = context.to_capabilities_dict()
         tools = await discover_tools(workspace, capabilities)

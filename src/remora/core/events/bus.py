@@ -38,15 +38,10 @@ class EventBus:
         event: Event,
         semaphore: asyncio.Semaphore | None = None,
     ) -> None:
-        tasks: list[asyncio.Task[Any]] = []
+        async_handlers: list[EventHandler] = []
         for handler in handlers:
             if asyncio.iscoroutinefunction(handler):
-                if semaphore is None:
-                    tasks.append(asyncio.create_task(handler(event)))
-                else:
-                    tasks.append(
-                        asyncio.create_task(EventBus._run_bounded(handler, event, semaphore))
-                    )
+                async_handlers.append(handler)
                 continue
             try:
                 handler(event)
@@ -57,25 +52,37 @@ class EventBus:
                     exc,
                     exc_info=exc,
                 )
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, Exception):
-                    logger.exception(
-                        "Event handler failed for %s: %s",
-                        event.event_type,
-                        result,
-                        exc_info=result,
-                    )
+        if async_handlers:
+            async with asyncio.TaskGroup() as tg:
+                for handler in async_handlers:
+                    if semaphore is None:
+                        tg.create_task(EventBus._run_guarded(handler, event))
+                    else:
+                        tg.create_task(
+                            EventBus._run_guarded(handler, event, semaphore=semaphore)
+                        )
 
     @staticmethod
-    async def _run_bounded(
+    async def _run_guarded(
         handler: Any,
         event: Event,
-        semaphore: asyncio.Semaphore,
+        *,
+        semaphore: asyncio.Semaphore | None = None,
     ) -> None:
-        async with semaphore:
-            await handler(event)
+        """Run an async handler, catching errors so TaskGroup doesn't abort siblings."""
+        try:
+            if semaphore is not None:
+                async with semaphore:
+                    await handler(event)
+            else:
+                await handler(event)
+        except Exception as exc:
+            logger.exception(
+                "Event handler failed for %s: %s",
+                event.event_type,
+                exc,
+                exc_info=exc,
+            )
 
     def subscribe(self, event_type: str, handler: EventHandler) -> None:
         """Register a handler for a specific event type string."""

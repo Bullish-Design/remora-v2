@@ -15,6 +15,7 @@ from remora.core.agents.turn import AgentTurnExecutor
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
 from remora.core.model.config import Config
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.core.services.search import SearchServiceProtocol
@@ -35,6 +36,7 @@ class Actor:
         semaphore: asyncio.Semaphore,
         metrics: Metrics | None = None,
         search_service: SearchServiceProtocol | None = None,
+        broker: HumanInputBroker | None = None,
     ) -> None:
         self.node_id = node_id
         self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
@@ -61,6 +63,7 @@ class Actor:
             trigger_policy=self._trigger_policy,
             search_service=search_service,
             send_message_limiter=self._send_message_limiter,
+            broker=broker,
         )
 
     @property

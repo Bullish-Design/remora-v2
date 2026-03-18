@@ -10,6 +10,7 @@ import aiosqlite
 from remora.core.agents.runner import ActorPool
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
 from remora.core.model.config import Config, resolve_query_search_paths
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.search import SearchService, SearchServiceProtocol
 from remora.core.storage.graph import NodeStore
@@ -29,6 +30,7 @@ class RuntimeServices:
         self.db = db
 
         self.metrics = Metrics()
+        self.human_input_broker = HumanInputBroker()
         self.event_bus = EventBus()
         self.dispatcher = TriggerDispatcher()
         self.tx = TransactionContext(db, self.event_bus, self.dispatcher)
@@ -89,6 +91,7 @@ class RuntimeServices:
             dispatcher=self.dispatcher,
             metrics=self.metrics,
             search_service=self.search_service,
+            broker=self.human_input_broker,
         )
 
     async def close(self) -> None:

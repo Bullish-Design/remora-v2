@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import aiosqlite
@@ -43,14 +44,22 @@ class TransactionContext:
             if self._depth == 0:
                 if not failed:
                     await self._db.commit()
-                    for event in self._deferred_events:
-                        await self._event_bus.emit(event)
-                        await self._dispatcher.dispatch(event)
-                self._deferred_events.clear()
+                    events = list(self._deferred_events)
+                    self._deferred_events.clear()
+                    async with asyncio.TaskGroup() as tg:
+                        for event in events:
+                            tg.create_task(self._fan_out(event))
+                else:
+                    self._deferred_events.clear()
 
     @property
     def in_batch(self) -> bool:
         return self._depth > 0
+
+    async def _fan_out(self, event: Event) -> None:
+        """Emit to bus and dispatch to subscriptions for a single event."""
+        await self._event_bus.emit(event)
+        await self._dispatcher.dispatch(event)
 
     def defer_event(self, event: Event) -> None:
         """Buffer an event for fan-out after the outermost batch commits."""

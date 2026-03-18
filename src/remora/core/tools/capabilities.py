@@ -17,6 +17,7 @@ from remora.core.events import (
 )
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
+from remora.core.services.broker import HumanInputBroker
 from remora.core.model.node import Node
 from remora.core.model.types import NodeStatus, NodeType, serialize_enum
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
@@ -254,6 +255,7 @@ class CommunicationCapabilities:
         event_store: EventStore,
         emit: Callable[[Event], Awaitable[int]],
         *,
+        broker: HumanInputBroker | None = None,
         human_input_timeout_s: float = 300.0,
         broadcast_max_targets: int = 50,
         send_message_limiter: SlidingWindowRateLimiter | None = None,
@@ -263,6 +265,7 @@ class CommunicationCapabilities:
         self._workspace = workspace
         self._node_store = node_store
         self._event_store = event_store
+        self._broker = broker
         self._emit = emit
         self._human_input_timeout_s = human_input_timeout_s
         self._broadcast_max_targets = max(1, int(broadcast_max_targets))
@@ -301,8 +304,10 @@ class CommunicationCapabilities:
         question: str,
         options: list[str] | None = None,
     ) -> str:
+        if self._broker is None:
+            raise RuntimeError("HumanInputBroker not available")
         request_id = str(uuid.uuid4())
-        future = self._event_store.create_response_future(request_id)
+        future = self._broker.create_future(request_id)
 
         await self._node_store.transition_status(self._node_id, NodeStatus.AWAITING_INPUT)
         await self._emit(
@@ -320,7 +325,7 @@ class CommunicationCapabilities:
             await self._node_store.transition_status(self._node_id, NodeStatus.RUNNING)
             return result
         except TimeoutError:
-            self._event_store.discard_response_future(request_id)
+            self._broker.discard(request_id)
             raise
 
     async def propose_changes(self, reason: str = "") -> str:
