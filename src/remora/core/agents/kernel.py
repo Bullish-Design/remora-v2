@@ -12,6 +12,8 @@ from structured_agents import (
     get_response_parser,
 )
 
+from remora.core.model.errors import ModelError
+
 
 def create_kernel(
     *,
@@ -47,6 +49,14 @@ def create_kernel(
     )
 
 
+async def run_kernel(kernel: AgentKernel, *args: Any, **kwargs: Any) -> Any:
+    """Run the kernel with ModelError wrapping at the boundary."""
+    try:
+        return await kernel.run(*args, **kwargs)
+    except Exception as exc:
+        raise ModelError(f"Model call failed: {exc}") from exc
+
+
 def extract_response_text(result: Any) -> str:
     """Extract the final text content from a kernel run result."""
     if hasattr(result, "final_message"):
@@ -56,4 +66,4 @@ def extract_response_text(result: Any) -> str:
     return str(result)
 
 
-__all__ = ["create_kernel", "extract_response_text"]
+__all__ = ["create_kernel", "extract_response_text", "run_kernel"]

@@ -3,7 +3,27 @@
 from __future__ import annotations
 
 
-class IncompatibleBundleError(Exception):
+class RemoraError(Exception):
+    """Base for all expected Remora failures."""
+
+
+class ModelError(RemoraError):
+    """LLM backend failures — timeouts, rate limits, API errors."""
+
+
+class ToolError(RemoraError):
+    """Grail tool script execution failures."""
+
+
+class WorkspaceError(RemoraError):
+    """Cairn workspace / filesystem failures."""
+
+
+class SubscriptionError(RemoraError):
+    """Event routing or subscription matching failures."""
+
+
+class IncompatibleBundleError(RemoraError):
     """Raised when a bundle's externals version exceeds the runtime's."""
 
     def __init__(self, bundle_version: int, runtime_version: int) -> None:
@@ -15,4 +35,11 @@ class IncompatibleBundleError(Exception):
         )
 
 
-__all__ = ["IncompatibleBundleError"]
+__all__ = [
+    "RemoraError",
+    "ModelError",
+    "ToolError",
+    "WorkspaceError",
+    "SubscriptionError",
+    "IncompatibleBundleError",
+]

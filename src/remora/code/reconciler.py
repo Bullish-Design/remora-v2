@@ -7,7 +7,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import aiosqlite
 import yaml
+from fsdantic import FileNotFoundError as FsdFileNotFoundError
 
 from remora.code.directories import DirectoryManager
 from remora.code.discovery import discover
@@ -16,7 +18,6 @@ from remora.code.paths import resolve_query_paths
 from remora.code.subscriptions import SubscriptionManager
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
-from remora.core.model.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
 from remora.core.events import (
     ContentChangedEvent,
     Event,
@@ -25,12 +26,13 @@ from remora.core.events import (
     NodeChangedEvent,
     NodeDiscoveredEvent,
     NodeRemovedEvent,
-    SubscriptionPattern,
 )
-from remora.core.storage.graph import NodeStore
+from remora.core.model.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
+from remora.core.model.errors import RemoraError, WorkspaceError
 from remora.core.model.node import Node
+from remora.core.model.types import NodeStatus
 from remora.core.services.search import SearchServiceProtocol
-from remora.core.model.types import EventType, NodeType, NodeStatus
+from remora.core.storage.graph import NodeStore
 from remora.core.storage.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -164,7 +166,7 @@ class FileReconciler:
                     self._file_state.pop(str(path), None)
             self._evict_stale_file_locks(generation)
         # Error boundary: one failed watch batch must not stop file watching.
-        except Exception:  # noqa: BLE001 - isolate one watch batch failure
+        except (OSError, RemoraError, aiosqlite.Error):
             logger.exception("Watch-triggered reconcile failed")
 
     async def _reconcile_file(
@@ -313,7 +315,7 @@ class FileReconciler:
         try:
             await self._search_service.index_file(file_path)
         # Error boundary: indexing failures should not break reconcile flow.
-        except Exception:  # noqa: BLE001
+        except (OSError, RemoraError):
             logger.debug("Search indexing failed for %s", file_path, exc_info=True)
 
     async def _deindex_file_for_search(self, file_path: str) -> None:
@@ -323,7 +325,7 @@ class FileReconciler:
         try:
             await self._search_service.delete_source(file_path)
         # Error boundary: deindex failures should not break reconcile flow.
-        except Exception:  # noqa: BLE001
+        except (OSError, RemoraError):
             logger.debug("Search deindexing failed for %s", file_path, exc_info=True)
 
     def _file_lock(self, file_path: str, generation: int) -> asyncio.Lock:
@@ -379,7 +381,12 @@ class FileReconciler:
 
         workspace = await self._workspace_service.get_agent_workspace(node_id)
         try:
-            text = await workspace.read("_bundle/bundle.yaml")
+            try:
+                text = await workspace.read("_bundle/bundle.yaml")
+            except (FileNotFoundError, FsdFileNotFoundError) as exc:
+                raise WorkspaceError(
+                    f"Missing bundle metadata for node '{node_id}': {exc}"
+                ) from exc
             loaded = yaml.safe_load(text) or {}
             self_reflect = loaded.get("self_reflect") if isinstance(loaded, dict) else None
             if isinstance(self_reflect, dict) and self_reflect.get("enabled"):
@@ -387,7 +394,7 @@ class FileReconciler:
             else:
                 await workspace.kv_set("_system/self_reflect", None)
         # Error boundary: bundle metadata sync is best-effort during provisioning.
-        except Exception:  # noqa: BLE001 - best effort bundle metadata sync
+        except (OSError, WorkspaceError, yaml.YAMLError):
             logger.debug("Failed to sync self_reflect config for %s", node_id, exc_info=True)
 
     async def _on_content_changed(self, event: Event) -> None:
@@ -403,7 +410,7 @@ class FileReconciler:
                 await self._reconcile_file(str(path), mtime, generation=generation)
                 self._evict_stale_file_locks(generation)
             # Error boundary: event-triggered reconcile failures are isolated per event.
-            except Exception:  # noqa: BLE001 - isolate event failures
+            except (OSError, RemoraError, aiosqlite.Error):
                 logger.exception("Event-triggered reconcile failed for %s", file_path)
 
 

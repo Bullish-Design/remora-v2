@@ -6,16 +6,22 @@ import asyncio
 import logging
 from typing import Any
 
+import aiosqlite
 from structured_agents import Message
 
-from remora.core.agents.kernel import create_kernel, extract_response_text
+from remora.core.agents.kernel import create_kernel, extract_response_text, run_kernel
 from remora.core.agents.outbox import Outbox, OutboxObserver
 from remora.core.agents.prompt import PromptBuilder
 from remora.core.agents.trigger import Trigger, TriggerPolicy
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
 from remora.core.model.config import BundleConfig, Config
-from remora.core.model.errors import IncompatibleBundleError
+from remora.core.model.errors import (
+    IncompatibleBundleError,
+    ModelError,
+    ToolError,
+    WorkspaceError,
+)
 from remora.core.model.node import Node
 from remora.core.model.types import EventType, NodeStatus
 from remora.core.services.metrics import Metrics
@@ -166,7 +172,7 @@ class AgentTurnExecutor:
                 if self._metrics is not None:
                     self._metrics.agent_turns_total += 1
             # Error boundary: a single turn failure must not crash the actor loop.
-            except Exception as exc:  # noqa: BLE001 - boundary should never crash loop
+            except (ModelError, ToolError, WorkspaceError, IncompatibleBundleError) as exc:
                 turn_log.exception("Agent turn failed")
                 if self._metrics is not None:
                     self._metrics.agent_turns_failed += 1
@@ -256,14 +262,17 @@ class AgentTurnExecutor:
         tool_schemas = [tool.schema for tool in tools]
 
         for attempt in range(max_retries + 1):
-            kernel = create_kernel(
-                model_name=model_name,
-                base_url=self._config.infra.model_base_url,
-                api_key=self._config.infra.model_api_key,
-                timeout=self._config.infra.timeout_s,
-                tools=tools,
-                observer=OutboxObserver(outbox=outbox, agent_id=node_id),
-            )
+            try:
+                kernel = create_kernel(
+                    model_name=model_name,
+                    base_url=self._config.infra.model_base_url,
+                    api_key=self._config.infra.model_api_key,
+                    timeout=self._config.infra.timeout_s,
+                    tools=tools,
+                    observer=OutboxObserver(outbox=outbox, agent_id=node_id),
+                )
+            except OSError as exc:
+                raise ModelError(f"Model call failed: {exc}") from exc
             try:
                 if attempt == 0:
                     turn_log.debug(
@@ -286,9 +295,9 @@ class AgentTurnExecutor:
                         attempt + 1,
                         max_retries + 1,
                     )
-                return await kernel.run(messages, tool_schemas, max_turns=max_turns)
+                return await run_kernel(kernel, messages, tool_schemas, max_turns=max_turns)
             # Error boundary: kernel/model failures are retried and surfaced as turn errors.
-            except Exception as exc:
+            except (ModelError, OSError, TimeoutError) as exc:
                 last_exc = exc
                 if attempt < max_retries:
                     backoff = 2.0**attempt
@@ -343,7 +352,7 @@ class AgentTurnExecutor:
             if current_node is not None and current_node.status == NodeStatus.RUNNING:
                 await self._node_store.transition_status(node_id, NodeStatus.IDLE)
         # Error boundary: status reset is best-effort cleanup during finally path.
-        except Exception:  # noqa: BLE001 - best effort cleanup
+        except (OSError, aiosqlite.Error):
             turn_log.exception("Failed to reset node status")
         self._trigger_policy.release_depth(depth_key)
 

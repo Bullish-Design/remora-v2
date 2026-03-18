@@ -17,8 +17,6 @@ from remora.core.storage.db import open_database
 if TYPE_CHECKING:
     from remora.core.events import Event
     from remora.core.services.container import RuntimeServices
-    from remora.lsp import LanguageServer
-    from remora.web.server import Starlette
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +55,6 @@ class RemoraLifecycle:
 
     async def start(self) -> None:
         """Initialize services and launch background runtime tasks."""
-        from remora.core.events import Event
         from remora.core.services.container import RuntimeServices
 
         db_path = self._project_root / self._config.infra.workspace_root / "remora.db"
@@ -192,12 +189,12 @@ class RemoraLifecycle:
                 try:
                     await asyncio.to_thread(self._lsp_server.shutdown)
                 # Error boundary: LSP shutdown failures must not block runtime shutdown.
-                except Exception as exc:  # pragma: no cover - best effort
+                except OSError as exc:
                     logger.warning("LSP shutdown failed: %s", exc)
                 try:
                     await asyncio.to_thread(self._lsp_server.exit)
                 # Error boundary: force-exit is best-effort cleanup only.
-                except Exception:
+                except OSError:
                     pass
 
             if reconciler_stop_task is not None and reconciler_stop_task not in self._tasks:

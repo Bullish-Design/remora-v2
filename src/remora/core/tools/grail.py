@@ -12,8 +12,10 @@ from typing import Any
 
 import grail
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
+from grail.errors import GrailError
 from structured_agents.types import ToolCall, ToolResult, ToolSchema
 
+from remora.core.model.errors import ToolError
 from remora.core.storage.workspace import AgentWorkspace
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,10 @@ def _load_script_from_source(source: str, name: str) -> grail.GrailScript:
     with tempfile.TemporaryDirectory(prefix="remora-grail-") as temp_dir:
         script_path = Path(temp_dir) / filename
         script_path.write_text(source, encoding="utf-8")
-        script = grail.load(script_path)
+        try:
+            script = grail.load(script_path)
+        except GrailError as exc:
+            raise ToolError(f"Failed to load tool script '{filename}': {exc}") from exc
 
     if len(_PARSED_SCRIPT_CACHE) >= _MAX_SCRIPT_CACHE:
         _PARSED_SCRIPT_CACHE.pop(next(iter(_PARSED_SCRIPT_CACHE)))
@@ -130,29 +135,33 @@ class GrailTool:
             arguments,
         )
         try:
-            used_capabilities = {
-                name: fn
-                for name, fn in self._capabilities.items()
-                if name in self._script.externals
-            }
-            result = await self._script.run(inputs=arguments, externals=used_capabilities)
-            output = result if isinstance(result, str) else json.dumps(result)
-            logger.debug(
-                "Tool complete agent=%s tool=%s call_id=%s duration_ms=%.1f output=%s",
-                self._agent_id,
-                self._schema.name,
-                call_id or "-",
-                (time.perf_counter() - started) * 1000.0,
-                output,
-            )
-            return ToolResult(
-                call_id=call_id,
-                name=self._schema.name,
-                output=output,
-                is_error=False,
-            )
-        # Error boundary: tool failures must be returned as ToolResult errors, not raised.
-        except Exception as exc:  # noqa: BLE001 - tool boundary must return errors
+            try:
+                used_capabilities = {
+                    name: fn
+                    for name, fn in self._capabilities.items()
+                    if name in self._script.externals
+                }
+                result = await self._script.run(inputs=arguments, externals=used_capabilities)
+                output = result if isinstance(result, str) else json.dumps(result)
+                logger.debug(
+                    "Tool complete agent=%s tool=%s call_id=%s duration_ms=%.1f output=%s",
+                    self._agent_id,
+                    self._schema.name,
+                    call_id or "-",
+                    (time.perf_counter() - started) * 1000.0,
+                    output,
+                )
+                return ToolResult(
+                    call_id=call_id,
+                    name=self._schema.name,
+                    output=output,
+                    is_error=False,
+                )
+            except ToolError:
+                raise
+            except Exception as exc:
+                raise ToolError(f"Tool '{self._schema.name}' failed: {exc}") from exc
+        except ToolError as exc:
             logger.exception(
                 "Tool failed agent=%s tool=%s call_id=%s duration_ms=%.1f source=%s args=%s",
                 self._agent_id,
@@ -200,7 +209,7 @@ async def discover_tools(
                 )
             )
         # Error boundary: invalid tool scripts are skipped so other tools still load.
-        except Exception:  # noqa: BLE001 - skip invalid tool and continue
+        except (OSError, SyntaxError, ToolError):
             logger.exception("Failed to load tool %s for agent=%s", filename, agent_id)
 
     logger.debug("Loaded %d Grail tool(s) for agent=%s", len(tools), agent_id)

@@ -11,16 +11,8 @@ from tests.factories import make_node, write_bundle_templates, write_file
 
 import remora.code.reconciler as reconciler_module
 from remora.code.languages import LanguageRegistry
-from remora.code.paths import resolve_query_paths
 from remora.code.reconciler import FileReconciler
 from remora.code.subscriptions import SubscriptionManager
-from remora.core.model.config import (
-    BehaviorConfig,
-    Config,
-    InfraConfig,
-    ProjectConfig,
-)
-from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
     AgentMessageEvent,
@@ -28,6 +20,14 @@ from remora.core.events import (
     EventStore,
     NodeChangedEvent,
 )
+from remora.core.model.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    ProjectConfig,
+)
+from remora.core.model.errors import RemoraError
+from remora.core.storage.db import open_database
 from remora.core.storage.graph import NodeStore
 from remora.core.storage.workspace import CairnWorkspaceService
 
@@ -262,7 +262,7 @@ async def test_reconciler_survives_cycle_error(reconcile_env, tmp_path: Path, mo
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            raise RuntimeError("simulated failure")
+            raise RemoraError("simulated failure")
         reconciler.stop()
 
     monkeypatch.setitem(sys.modules, "watchfiles", SimpleNamespace(awatch=fake_awatch))
@@ -513,7 +513,7 @@ class _MockSearchService:
     async def index_file(self, file_path: str) -> None:
         self.indexed.append(file_path)
         if self.fail_index:
-            raise RuntimeError("index failed")
+            raise RemoraError("index failed")
 
     async def delete_source(self, file_path: str) -> None:
         self.deindexed.append(file_path)

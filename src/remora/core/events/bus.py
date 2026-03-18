@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from remora.core.events.types import Event, EventHandler
+from remora.core.model.errors import RemoraError
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +43,12 @@ class EventBus:
                     tasks.append(asyncio.create_task(handler(event)))
                 else:
                     tasks.append(
-                        asyncio.create_task(
-                            EventBus._run_bounded(handler, event, semaphore)
-                        )
+                        asyncio.create_task(EventBus._run_bounded(handler, event, semaphore))
                     )
                 continue
             try:
                 handler(event)
-            except Exception as exc:  # noqa: BLE001 - isolate failing handlers
+            except (RemoraError, OSError) as exc:
                 logger.exception(
                     "Event handler failed for %s: %s",
                     event.event_type,
