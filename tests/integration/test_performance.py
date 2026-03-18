@@ -142,6 +142,7 @@ async def test_perf_reconciler_load_1000_files_10_nodes_each(
         ),
         behavior=BehaviorConfig(
             language_map={".py": "python"},
+            languages={"python": {"extensions": [".py"]}},
             query_search_paths=("@default",),
         ),
         infra=InfraConfig(workspace_root=".remora-perf-reconciler"),

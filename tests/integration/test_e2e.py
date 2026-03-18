@@ -115,6 +115,9 @@ async def _setup_runtime(tmp_path: Path):
             discovery_languages=("python",),
         ),
         behavior=BehaviorConfig(
+            language_map={".py": "python"},
+            languages={"python": {"extensions": [".py"]}},
+            query_search_paths=("@default",),
             bundle_search_paths=(str(bundles_root),),
             bundle_overlays={
                 "function": "code-agent",
@@ -199,7 +202,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
             return None
 
     monkeypatch.setattr(
-        "remora.core.turn_executor.create_kernel",
+        "remora.core.agents.turn.create_kernel",
         lambda **kwargs: MockKernel(kwargs.get("tools", [])),
     )
 
@@ -236,7 +239,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
     async def fake_discover_tools(_workspace, capabilities):  # noqa: ANN001, ANN202
         return [FakeRewriteTool(capabilities)]
 
-    monkeypatch.setattr("remora.core.turn_executor.discover_tools", fake_discover_tools)
+    monkeypatch.setattr("remora.core.agents.turn.discover_tools", fake_discover_tools)
     actor = runtime["runner"].get_or_create_actor(node.node_id)
     outbox = Outbox(
         actor_id=node.node_id,
@@ -338,7 +341,7 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
             return None
 
     monkeypatch.setattr(
-        "remora.core.turn_executor.create_kernel",
+        "remora.core.agents.turn.create_kernel",
         lambda **kwargs: ScriptedKernel(kwargs.get("tools", [])),
     )
 

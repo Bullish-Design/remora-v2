@@ -29,6 +29,7 @@ async def test_lifecycle_discovers_nodes_serves_health_and_shuts_down(tmp_path: 
         ),
         behavior=BehaviorConfig(
             language_map={".py": "python"},
+            languages={"python": {"extensions": [".py"]}},
             query_search_paths=("@default",),
         ),
         infra=InfraConfig(workspace_root=".remora-lifecycle-test"),

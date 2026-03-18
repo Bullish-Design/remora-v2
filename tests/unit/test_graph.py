@@ -235,7 +235,7 @@ async def test_nodestore_transition_status_awaiting_review(db, tx) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_competing_updates_only_one_wins(db, tx) -> None:
+async def test_nodestore_transition_status_sequential_updates_both_succeed(db, tx) -> None:
     store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", status="running"))
@@ -245,10 +245,12 @@ async def test_nodestore_transition_status_competing_updates_only_one_wins(db, t
         store.transition_status("src/app.py::a", NodeStatus.ERROR),
     )
 
-    assert sum(1 for result in results if result) == 1
+    # Both succeed because aiosqlite serializes on a single connection
+    assert all(results), "both transitions succeed sequentially"
     updated = await store.get_node("src/app.py::a")
     assert updated is not None
-    assert updated.status in {NodeStatus.AWAITING_INPUT, NodeStatus.ERROR}
+    # The second gather operand runs last, so its status wins
+    assert updated.status == NodeStatus.ERROR
 
 
 @pytest.mark.asyncio

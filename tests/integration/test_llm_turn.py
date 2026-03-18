@@ -10,13 +10,13 @@ from tests.factories import write_file
 
 from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
+from remora.code.subscriptions import SubscriptionManager
 from remora.core.agents.actor import Actor, Outbox, Trigger
 from remora.core.model.config import (
     BehaviorConfig,
     Config,
     InfraConfig,
     ProjectConfig,
-    resolve_query_search_paths,
 )
 from remora.core.storage.db import open_database
 from remora.core.events import (
@@ -270,6 +270,7 @@ async def _setup_llm_runtime(
             discovery_languages=("python",),
         ),
         behavior=BehaviorConfig(
+            language_map={".py": "python"},
             bundle_search_paths=(str(bundles_root),),
             bundle_overlays={
                 "function": "code-agent",
@@ -290,10 +291,7 @@ async def _setup_llm_runtime(
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 
-    language_registry = LanguageRegistry.from_config(
-        language_defs=config.behavior.languages,
-        query_search_paths=resolve_query_search_paths(config, tmp_path),
-    )
+    language_registry = LanguageRegistry.from_defaults()
     subscription_manager = SubscriptionManager(event_store, workspace_service)
     reconciler = FileReconciler(
         config,
@@ -333,9 +331,14 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
     _write_llm_test_bundles(bundles_root, model_name)
 
     db = await open_database(tmp_path / "llm-turn.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     config = Config(
         project=ProjectConfig(
@@ -343,6 +346,7 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
             discovery_languages=("python",),
         ),
         behavior=BehaviorConfig(
+            language_map={".py": "python"},
             bundle_search_paths=(str(bundles_root),),
             bundle_overlays={
                 "function": "code-agent",
@@ -364,12 +368,17 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
     await workspace_service.initialize()
 
     try:
+        language_registry = LanguageRegistry.from_defaults()
+        subscription_manager = SubscriptionManager(event_store, workspace_service)
         reconciler = FileReconciler(
             config,
             node_store,
             event_store,
             workspace_service,
             project_root=tmp_path,
+            language_registry=language_registry,
+            subscription_manager=subscription_manager,
+            tx=tx,
         )
         nodes = await reconciler.full_scan()
         node = next(candidate for candidate in nodes if candidate.node_type != "directory")
@@ -559,9 +568,14 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
     _write_virtual_agent_bundles(bundles_root, model_name)
 
     db = await open_database(tmp_path / "llm-turn-virtual.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     config = Config(
         project=ProjectConfig(
@@ -569,6 +583,7 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
             discovery_languages=("python",),
         ),
         behavior=BehaviorConfig(
+            language_map={".py": "python"},
             bundle_search_paths=(str(bundles_root),),
             bundle_overlays={
                 "function": "code-agent",
@@ -578,18 +593,6 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
             prompt_templates={"user": _LLM_USER_TEMPLATE},
             model_default=model_name,
             max_turns=8,
-            virtual_agents=(
-                {
-                    "id": "test-agent",
-                    "role": "test-agent",
-                    "subscriptions": (
-                        {
-                            "event_types": ["node_changed"],
-                            "path_glob": "src/**",
-                        },
-                    ),
-                },
-            ),
         ),
         infra=InfraConfig(
             workspace_root=".remora-llm-int",
@@ -597,17 +600,34 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
             model_api_key=model_api_key,
             timeout_s=timeout_s,
         ),
+        virtual_agents=(
+            {
+                "id": "test-agent",
+                "role": "test-agent",
+                "subscriptions": (
+                    {
+                        "event_types": ["node_changed"],
+                        "path_glob": "src/**",
+                    },
+                ),
+            },
+        ),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 
     try:
+        language_registry = LanguageRegistry.from_defaults()
+        subscription_manager = SubscriptionManager(event_store, workspace_service)
         reconciler = FileReconciler(
             config,
             node_store,
             event_store,
             workspace_service,
             project_root=tmp_path,
+            language_registry=language_registry,
+            subscription_manager=subscription_manager,
+            tx=tx,
         )
         await reconciler.full_scan()
 

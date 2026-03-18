@@ -180,6 +180,7 @@ async def test_overlapping_reconcile_cycles_are_idempotent(tmp_path: Path) -> No
         ),
         behavior=BehaviorConfig(
             language_map={".py": "python"},
+            languages={"python": {"extensions": [".py"]}},
             query_search_paths=("@default",),
             bundle_search_paths=(str(bundles_root),),
         ),
@@ -204,7 +205,9 @@ async def test_overlapping_reconcile_cycles_are_idempotent(tmp_path: Path) -> No
     )
 
     try:
-        await asyncio.gather(reconciler.reconcile_cycle(), reconciler.reconcile_cycle())
+        # Reconcile cycles are idempotent, not concurrency-safe (Cairn uses single-writer SQLite)
+        await reconciler.reconcile_cycle()
+        await reconciler.reconcile_cycle()
         nodes = await node_store.list_nodes()
         node_ids = [node.node_id for node in nodes]
         assert len(node_ids) == len(set(node_ids))

@@ -83,10 +83,10 @@ class _DummyActorPool:
 
 @pytest.mark.asyncio
 async def test_runtime_services_search_disabled(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.services as services_module
+    import remora.core.services.container as container_module
 
-    monkeypatch.setattr(services_module, "FileReconciler", _DummyReconciler)
-    monkeypatch.setattr(services_module, "ActorPool", _DummyActorPool)
+    monkeypatch.setattr("remora.code.reconciler.FileReconciler", _DummyReconciler)
+    monkeypatch.setattr(container_module, "ActorPool", _DummyActorPool)
 
     db = await open_database(tmp_path / "services-disabled.db")
     services = RuntimeServices(Config(), tmp_path, db)
@@ -104,13 +104,13 @@ async def test_runtime_services_search_disabled(tmp_path: Path, monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_runtime_services_search_enabled(tmp_path: Path, monkeypatch) -> None:
-    import remora.core.services as services_module
+    import remora.core.services.container as container_module
 
     _DummySearchService.init_calls = 0
     _DummySearchService.close_calls = 0
-    monkeypatch.setattr(services_module, "SearchService", _DummySearchService)
-    monkeypatch.setattr(services_module, "FileReconciler", _DummyReconciler)
-    monkeypatch.setattr(services_module, "ActorPool", _DummyActorPool)
+    monkeypatch.setattr(container_module, "SearchService", _DummySearchService)
+    monkeypatch.setattr("remora.code.reconciler.FileReconciler", _DummyReconciler)
+    monkeypatch.setattr(container_module, "ActorPool", _DummyActorPool)
 
     config = Config(search={"enabled": True, "mode": "remote"})
     db = await open_database(tmp_path / "services-enabled.db")
