@@ -36,9 +36,13 @@ from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
     ContentChangedEvent,
+    EventBus,
     EventStore,
+    SubscriptionRegistry,
+    TriggerDispatcher,
 )
 from remora.core.graph import NodeStore
+from remora.core.transaction import TransactionContext
 from remora.core.types import EventType, NodeStatus
 from remora.core.workspace import CairnWorkspaceService
 
@@ -141,9 +145,14 @@ async def test_recording_outbox_no_persistence() -> None:
 @pytest_asyncio.fixture
 async def actor_env(tmp_path: Path):
     db = await open_database(tmp_path / "actor.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     config = Config(
         infra=InfraConfig(workspace_root=".remora-actor-test"),
@@ -767,35 +776,25 @@ async def test_read_bundle_config_ignores_disabled_self_reflect(actor_env) -> No
 
 
 @pytest.mark.asyncio
-async def test_read_bundle_config_warns_on_newer_externals_version(actor_env, caplog) -> None:
-    node_id = "src/app.py::externals-version-warn"
+async def test_read_bundle_config_passes_through_externals_version(actor_env) -> None:
+    """read_bundle_config returns the version as-is; enforcement is in the turn executor."""
+    node_id = "src/app.py::externals-version-pass"
     workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write("_bundle/bundle.yaml", "externals_version: 999\n")
 
-    with caplog.at_level(logging.WARNING, logger="remora.core.workspace"):
-        bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
-
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.externals_version == 999
-    assert any(
-        "requires externals v999 but core provides v1" in record.getMessage()
-        for record in caplog.records
-    )
 
 
 @pytest.mark.asyncio
-async def test_read_bundle_config_without_externals_version_has_no_warning(
-    actor_env,
-    caplog,
-) -> None:
+async def test_read_bundle_config_defaults_externals_version_to_none(actor_env) -> None:
+    """Without explicit externals_version, bundle config defaults to None."""
     node_id = "src/app.py::externals-version-none"
     workspace = await actor_env["workspace_service"].get_agent_workspace(node_id)
     await workspace.write("_bundle/bundle.yaml", "model: mock\n")
 
-    with caplog.at_level(logging.WARNING, logger="remora.core.workspace"):
-        bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
-
+    bundle_config = await actor_env["workspace_service"].read_bundle_config(node_id)
     assert bundle_config.externals_version is None
-    assert not any("requires externals" in record.getMessage() for record in caplog.records)
 
 
 @pytest.mark.asyncio
