@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from remora.core.config import Config, InfraConfig
-from remora.core.node import Node
+from remora.core.model.config import Config, InfraConfig
+from remora.core.model.node import Node
 
 
 def test_new_core_symbols_exist() -> None:

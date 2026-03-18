@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from remora.core.config import SearchConfig
-from remora.core.search import SearchService
+from remora.core.model.config import SearchConfig
+from remora.core.services.search import SearchService
 
 
 class _MockEmbeddyClient:

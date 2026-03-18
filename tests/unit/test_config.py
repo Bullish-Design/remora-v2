@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from remora.core.config import (
+from remora.core.model.config import (
     BehaviorConfig,
     BundleConfig,
     Config,

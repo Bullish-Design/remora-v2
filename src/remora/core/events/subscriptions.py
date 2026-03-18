@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import PurePath
-from typing import Any
+
 from pydantic import BaseModel
 
 from remora.core.events.types import Event
@@ -63,10 +63,10 @@ class SubscriptionRegistry:
 
     def __init__(self, db: aiosqlite.Connection):
         self._db = db
-        self._tx: "TransactionContext | None" = None
+        self._tx: TransactionContext | None = None
         self._cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] | None = None
 
-    def set_tx(self, tx: "TransactionContext") -> None:
+    def set_tx(self, tx: TransactionContext) -> None:
         """Wire the TransactionContext after construction (breaks init cycle)."""
         self._tx = tx
 

@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from remora.core.config import SearchConfig
+from remora.core.model.config import SearchConfig
 
 logger = logging.getLogger(__name__)
 

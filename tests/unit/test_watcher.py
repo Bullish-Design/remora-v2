@@ -5,7 +5,7 @@ from pathlib import Path
 from tests.factories import write_file
 
 from remora.code.watcher import FileWatcher
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
+from remora.core.model.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
 
 
 def _config() -> Config:

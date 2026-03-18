@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from remora.core.events import ContentChangedEvent, RewriteAcceptedEvent, RewriteRejectedEvent
-from remora.core.types import ChangeType, NodeStatus
+from remora.core.model.types import ChangeType, NodeStatus
 from remora.web.deps import _deps_from_request
 from remora.web.paths import _latest_rewrite_proposal, _workspace_path_to_disk_path
 

@@ -6,12 +6,13 @@ import hashlib
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from remora.core.config import Config
-from remora.core.events import EventStore, NodeChangedEvent, NodeDiscoveredEvent
-from remora.core.graph import NodeStore
-from remora.core.node import Node
-from remora.core.types import NodeType
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.model.config import Config
+from remora.core.events.store import EventStore
+from remora.core.events.types import NodeChangedEvent, NodeDiscoveredEvent
+from remora.core.storage.graph import NodeStore
+from remora.core.model.node import Node
+from remora.core.model.types import NodeType
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 class DirectoryManager:

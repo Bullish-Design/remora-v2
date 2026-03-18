@@ -10,14 +10,14 @@ from starlette.requests import Request
 
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
-from remora.core.graph import NodeStore
-from remora.core.metrics import Metrics
-from remora.core.rate_limit import SlidingWindowRateLimiter
-from remora.core.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
+from remora.core.services.metrics import Metrics
+from remora.core.services.rate_limit import SlidingWindowRateLimiter
+from remora.core.services.search import SearchServiceProtocol
 
 if TYPE_CHECKING:
-    from remora.core.runner import ActorPool
-    from remora.core.workspace import CairnWorkspaceService
+    from remora.core.agents.runner import ActorPool
+    from remora.core.storage.workspace import CairnWorkspaceService
 
 
 _MAX_CHAT_LIMITERS = 1000

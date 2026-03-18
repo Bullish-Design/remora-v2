@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from remora.core.config import Config
-from remora.core.db import open_database
-from remora.core.services import RuntimeServices
+from remora.core.model.config import Config
+from remora.core.storage.db import open_database
+from remora.core.services.container import RuntimeServices
 
 
 class _DummySearchService:

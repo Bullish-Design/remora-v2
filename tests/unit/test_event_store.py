@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
@@ -16,7 +16,7 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
-from remora.core.transaction import TransactionContext
+from remora.core.storage.transaction import TransactionContext
 
 
 @pytest_asyncio.fixture

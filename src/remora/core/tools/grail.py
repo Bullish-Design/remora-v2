@@ -14,7 +14,7 @@ import grail
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
 from structured_agents.types import ToolCall, ToolResult, ToolSchema
 
-from remora.core.workspace import AgentWorkspace
+from remora.core.storage.workspace import AgentWorkspace
 
 logger = logging.getLogger(__name__)
 

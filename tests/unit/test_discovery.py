@@ -7,7 +7,7 @@ import pytest
 
 from remora.code.discovery import discover
 from remora.code.languages import LanguageRegistry
-from remora.core.node import Node
+from remora.core.model.node import Node
 from tests.factories import write_file
 
 

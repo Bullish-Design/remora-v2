@@ -7,7 +7,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from remora.core.events import CursorFocusEvent
-from remora.core.types import serialize_enum
+from remora.core.model.types import serialize_enum
 from remora.web.deps import _deps_from_request
 
 

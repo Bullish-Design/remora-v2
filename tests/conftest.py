@@ -7,7 +7,7 @@ import logging
 import pytest
 import pytest_asyncio
 
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 
 
 def _remove_closed_root_stream_handlers() -> None:

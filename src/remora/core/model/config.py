@@ -13,7 +13,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from remora.core.types import NodeType, serialize_enum
+from remora.core.model.types import NodeType, serialize_enum
 from remora.core.utils import deep_merge
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")

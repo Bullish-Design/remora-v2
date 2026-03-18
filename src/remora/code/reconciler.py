@@ -16,7 +16,7 @@ from remora.code.paths import resolve_query_paths
 from remora.code.subscriptions import SubscriptionManager
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
-from remora.core.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
+from remora.core.model.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
 from remora.core.events import (
     ContentChangedEvent,
     Event,
@@ -27,11 +27,11 @@ from remora.core.events import (
     NodeRemovedEvent,
     SubscriptionPattern,
 )
-from remora.core.graph import NodeStore
-from remora.core.node import Node
-from remora.core.search import SearchServiceProtocol
-from remora.core.types import EventType, NodeType, NodeStatus
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.model.node import Node
+from remora.core.services.search import SearchServiceProtocol
+from remora.core.model.types import EventType, NodeType, NodeStatus
+from remora.core.storage.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
 

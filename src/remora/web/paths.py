@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from remora.core.events.store import EventStore
-from remora.core.types import EventType
+from remora.core.model.types import EventType
 
 
 def _resolve_within_project_root(

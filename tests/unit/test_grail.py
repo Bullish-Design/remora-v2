@@ -9,8 +9,13 @@ import grail
 import pytest
 from structured_agents.types import ToolCall
 
-import remora.core.grail as grail_module
-from remora.core.grail import GrailTool, _build_parameters, _load_script_from_source, discover_tools
+import remora.core.tools.grail as grail_module
+from remora.core.tools.grail import (
+    GrailTool,
+    _build_parameters,
+    _load_script_from_source,
+    discover_tools,
+)
 
 SCRIPT_SOURCE = """
 from grail import Input, external

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 from remora.code.directories import DirectoryManager
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
+from remora.core.model.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
 
 
 def _config() -> Config:

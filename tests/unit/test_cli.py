@@ -10,7 +10,7 @@ import typer
 from typer.testing import CliRunner
 
 from remora.__main__ import _configure_file_logging, _configure_logging, _index, _start, app
-from remora.core.config import Config, ProjectConfig, SearchConfig, SearchMode
+from remora.core.model.config import Config, ProjectConfig, SearchConfig, SearchMode
 
 
 def test_cli_help() -> None:

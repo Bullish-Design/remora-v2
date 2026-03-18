@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from structured_agents import AgentKernel, Message
 
-from remora.core.kernel import create_kernel, extract_response_text
+from remora.core.agents.kernel import create_kernel, extract_response_text
 
 
 def test_create_kernel() -> None:

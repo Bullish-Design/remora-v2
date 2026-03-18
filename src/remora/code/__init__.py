@@ -7,7 +7,7 @@ from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk
 from remora.code.reconciler import FileReconciler
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
-from remora.core.node import Node
+from remora.core.model.node import Node
 
 __all__ = [
     "Node",

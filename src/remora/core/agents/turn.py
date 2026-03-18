@@ -8,23 +8,23 @@ from typing import Any
 
 from structured_agents import Message
 
-from remora.core.config import BundleConfig, Config
-from remora.core.errors import IncompatibleBundleError
+from remora.core.agents.kernel import create_kernel, extract_response_text
+from remora.core.agents.outbox import Outbox, OutboxObserver
+from remora.core.agents.prompt import PromptBuilder
+from remora.core.agents.trigger import Trigger, TriggerPolicy
 from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
 from remora.core.events.store import EventStore
-from remora.core.externals import EXTERNALS_VERSION, TurnContext
-from remora.core.grail import GrailTool, discover_tools
-from remora.core.graph import NodeStore
-from remora.core.kernel import create_kernel, extract_response_text
-from remora.core.metrics import Metrics
-from remora.core.node import Node
-from remora.core.outbox import Outbox, OutboxObserver
-from remora.core.prompt import PromptBuilder
-from remora.core.rate_limit import SlidingWindowRateLimiter
-from remora.core.search import SearchServiceProtocol
-from remora.core.trigger import Trigger, TriggerPolicy
-from remora.core.types import EventType, NodeStatus
-from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
+from remora.core.model.config import BundleConfig, Config
+from remora.core.model.errors import IncompatibleBundleError
+from remora.core.model.node import Node
+from remora.core.model.types import EventType, NodeStatus
+from remora.core.services.metrics import Metrics
+from remora.core.services.rate_limit import SlidingWindowRateLimiter
+from remora.core.services.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.workspace import AgentWorkspace, CairnWorkspaceService
+from remora.core.tools.context import EXTERNALS_VERSION, TurnContext
+from remora.core.tools.grail import GrailTool, discover_tools
 
 logger = logging.getLogger(__name__)
 

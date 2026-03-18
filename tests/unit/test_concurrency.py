@@ -9,8 +9,8 @@ from tests.factories import make_node, write_bundle_templates, write_file
 from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
 from remora.code.subscriptions import SubscriptionManager
-from remora.core.actor import Actor, TriggerPolicy
-from remora.core.config import (
+from remora.core.agents.actor import Actor, TriggerPolicy
+from remora.core.model.config import (
     BehaviorConfig,
     Config,
     InfraConfig,
@@ -18,7 +18,7 @@ from remora.core.config import (
     RuntimeConfig,
     resolve_query_search_paths,
 )
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     EventBus,
@@ -27,10 +27,10 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
-from remora.core.graph import NodeStore
-from remora.core.runner import ActorPool
-from remora.core.transaction import TransactionContext
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.agents.runner import ActorPool
+from remora.core.storage.transaction import TransactionContext
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 @pytest.mark.asyncio

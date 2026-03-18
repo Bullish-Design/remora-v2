@@ -6,16 +6,16 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 
-from remora.core.config import Config, VirtualAgentConfig
+from remora.core.model.config import Config, VirtualAgentConfig
 from remora.core.events import (
     EventStore,
     NodeChangedEvent,
     NodeDiscoveredEvent,
     SubscriptionPattern,
 )
-from remora.core.graph import NodeStore
-from remora.core.node import Node
-from remora.core.types import NodeType
+from remora.core.storage.graph import NodeStore
+from remora.core.model.node import Node
+from remora.core.model.types import NodeType
 
 
 class RegisterSubscriptionsFn:

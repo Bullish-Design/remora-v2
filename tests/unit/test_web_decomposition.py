@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from remora.core.rate_limit import SlidingWindowRateLimiter
+from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.web.deps import _MAX_CHAT_LIMITERS, WebDeps, _get_chat_limiter
 from remora.web.routes import chat, cursor, events, health, nodes, proposals, search
 

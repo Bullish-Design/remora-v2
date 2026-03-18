@@ -7,23 +7,23 @@ from pathlib import Path
 
 import aiosqlite
 
-from remora.code.languages import LanguageRegistry
-from remora.code.reconciler import FileReconciler
-from remora.code.subscriptions import SubscriptionManager
-from remora.core.config import Config, resolve_query_search_paths
+from remora.core.agents.runner import ActorPool
 from remora.core.events import EventBus, EventStore, SubscriptionRegistry, TriggerDispatcher
-from remora.core.graph import NodeStore
-from remora.core.metrics import Metrics
-from remora.core.runner import ActorPool
-from remora.core.search import SearchService, SearchServiceProtocol
-from remora.core.transaction import TransactionContext
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.model.config import Config, resolve_query_search_paths
+from remora.core.services.metrics import Metrics
+from remora.core.services.search import SearchService, SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.transaction import TransactionContext
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 class RuntimeServices:
     """Central container holding runtime services."""
 
     def __init__(self, config: Config, project_root: Path, db: aiosqlite.Connection):
+        from remora.code.languages import LanguageRegistry
+        from remora.code.subscriptions import SubscriptionManager
+
         self.config = config
         self.project_root = project_root.resolve()
         self.db = db
@@ -50,11 +50,14 @@ class RuntimeServices:
         )
 
         self.search_service: SearchServiceProtocol | None = None
-        self.reconciler: FileReconciler | None = None
-        self.runner: ActorPool | None = None
+        self.reconciler = None
+        self.runner = None
+        self._subscription_manager = SubscriptionManager
 
     async def initialize(self) -> None:
         """Create tables and initialize services."""
+        from remora.code.reconciler import FileReconciler
+
         await self.node_store.create_tables()
         await self.event_store.create_tables()
         await self.workspace_service.initialize()
@@ -63,7 +66,7 @@ class RuntimeServices:
             self.search_service = SearchService(self.config.search, self.project_root)
             await self.search_service.initialize()
 
-        subscription_manager = SubscriptionManager(self.event_store, self.workspace_service)
+        subscription_manager = self._subscription_manager(self.event_store, self.workspace_service)
 
         self.reconciler = FileReconciler(
             self.config,

@@ -8,16 +8,16 @@ import pytest_asyncio
 from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
-from remora.core.actor import Outbox
-from remora.core.config import Config, InfraConfig
-from remora.core.db import open_database
+from remora.core.agents.actor import Outbox
+from remora.core.model.config import Config, InfraConfig
+from remora.core.storage.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore
 from remora.core.events.types import CustomEvent
-from remora.core.externals import FileCapabilities, TurnContext
-from remora.core.graph import NodeStore
-from remora.core.rate_limit import SlidingWindowRateLimiter
-from remora.core.types import NodeStatus, NodeType
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.tools.context import FileCapabilities, TurnContext
+from remora.core.storage.graph import NodeStore
+from remora.core.services.rate_limit import SlidingWindowRateLimiter
+from remora.core.model.types import NodeStatus, NodeType
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 @pytest_asyncio.fixture

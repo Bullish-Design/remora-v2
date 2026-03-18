@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from remora.code.paths import resolve_discovery_paths, walk_source_files
-from remora.core.config import Config
+from remora.core.model.config import Config
 
 
 class FileWatcher:

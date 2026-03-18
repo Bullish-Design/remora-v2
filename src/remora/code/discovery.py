@@ -10,7 +10,7 @@ from tree_sitter import Parser, Query, QueryCursor
 
 from remora.code.languages import LanguagePlugin, LanguageRegistry
 from remora.code.paths import walk_source_files
-from remora.core.node import Node
+from remora.core.model.node import Node
 
 
 def discover(

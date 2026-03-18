@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from remora.core.events import EventStore, SubscriptionPattern
-from remora.core.node import Node
-from remora.core.types import EventType, NodeType
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.model.node import Node
+from remora.core.model.types import EventType, NodeType
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 class SubscriptionManager:

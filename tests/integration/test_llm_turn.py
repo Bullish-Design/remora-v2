@@ -10,15 +10,15 @@ from tests.factories import write_file
 
 from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
-from remora.core.actor import Actor, Outbox, Trigger
-from remora.core.config import (
+from remora.core.agents.actor import Actor, Outbox, Trigger
+from remora.core.model.config import (
     BehaviorConfig,
     Config,
     InfraConfig,
     ProjectConfig,
     resolve_query_search_paths,
 )
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
@@ -28,9 +28,9 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
-from remora.core.graph import NodeStore
-from remora.core.transaction import TransactionContext
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.transaction import TransactionContext
+from remora.core.storage.workspace import CairnWorkspaceService
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
 _REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")

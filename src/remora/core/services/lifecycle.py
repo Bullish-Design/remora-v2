@@ -7,16 +7,18 @@ import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
-from remora.core.config import Config
-from remora.core.db import open_database
-from remora.core.events import Event
-from remora.core.services import RuntimeServices
-from remora.lsp import create_lsp_server
-from remora.web.server import create_app
+from remora.core.model.config import Config
+from remora.core.storage.db import open_database
+
+if TYPE_CHECKING:
+    from remora.core.events import Event
+    from remora.core.services.container import RuntimeServices
+    from remora.lsp import LanguageServer
+    from remora.web.server import Starlette
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,9 @@ class RemoraLifecycle:
 
     async def start(self) -> None:
         """Initialize services and launch background runtime tasks."""
+        from remora.core.events import Event
+        from remora.core.services.container import RuntimeServices
+
         db_path = self._project_root / self._config.infra.workspace_root / "remora.db"
         db_path.parent.mkdir(parents=True, exist_ok=True)
         log_path = db_path.parent / "remora.log"
@@ -107,6 +112,8 @@ class RemoraLifecycle:
         self._tasks = [runner_task, reconciler_task]
 
         if not self._no_web:
+            from remora.web.server import create_app
+
             web_app = create_app(
                 services.event_store,
                 services.node_store,
@@ -131,6 +138,8 @@ class RemoraLifecycle:
             logger.info("Web server disabled (--no-web)")
 
         if self._lsp:
+            from remora.lsp import create_lsp_server
+
             self._lsp_server = create_lsp_server(
                 services.node_store,
                 services.event_store,

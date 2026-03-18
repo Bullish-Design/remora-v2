@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from remora.core.node import Node
+from remora.core.model.node import Node
 from tests.factories import make_node
 
 

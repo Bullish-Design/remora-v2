@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from remora.core.types import ChangeType, EventType
+from remora.core.model.types import ChangeType, EventType
 
 
 class Event(BaseModel):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from remora.core.metrics import Metrics
+from remora.core.services.metrics import Metrics
 
 
 def test_metrics_snapshot() -> None:

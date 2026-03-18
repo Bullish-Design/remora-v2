@@ -6,10 +6,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from remora.core.config import BundleConfig, Config
 from remora.core.events.types import Event
-from remora.core.node import Node
-from remora.core.types import EventType, serialize_enum
+from remora.core.model.config import BundleConfig, Config
+from remora.core.model.node import Node
+from remora.core.model.types import EventType, serialize_enum
 
 
 @dataclass

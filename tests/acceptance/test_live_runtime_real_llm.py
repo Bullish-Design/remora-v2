@@ -18,8 +18,8 @@ import pytest
 from tests.factories import write_file
 
 from remora.__main__ import _configure_file_logging
-from remora.core.config import load_config
-from remora.core.lifecycle import RemoraLifecycle
+from remora.core.model.config import load_config
+from remora.core.services.lifecycle import RemoraLifecycle
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
 _REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from remora.core.node import Node
-from remora.core.types import NodeStatus, NodeType
+from remora.core.model.node import Node
+from remora.core.model.types import NodeStatus, NodeType
 
 
 def make_node(

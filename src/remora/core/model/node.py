@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from remora.core.types import NodeStatus, NodeType, serialize_enum
+from remora.core.model.types import NodeStatus, NodeType, serialize_enum
 
 
 class Node(BaseModel):

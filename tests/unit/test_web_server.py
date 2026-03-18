@@ -13,17 +13,17 @@ from structured_agents import Message
 from tests.factories import make_node
 
 from remora import __version__
-from remora.core.config import Config, InfraConfig
-from remora.core.db import open_database
+from remora.core.model.config import Config, InfraConfig
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     EventBus,
     EventStore,
     RewriteProposalEvent,
 )
-from remora.core.graph import NodeStore
-from remora.core.metrics import Metrics
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.services.metrics import Metrics
+from remora.core.storage.workspace import CairnWorkspaceService
 from remora.web.server import create_app
 
 

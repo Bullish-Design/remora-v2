@@ -5,7 +5,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-from remora.core.config import Config, resolve_query_search_paths
+from remora.core.model.config import Config, resolve_query_search_paths
 
 
 def resolve_discovery_paths(config: Config, project_root: Path) -> list[Path]:

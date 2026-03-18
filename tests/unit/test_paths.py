@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths, walk_source_files
-from remora.core.config import BehaviorConfig, Config, ProjectConfig
+from remora.core.model.config import BehaviorConfig, Config, ProjectConfig
 
 
 def test_resolve_paths_relative_to_project_root(tmp_path: Path) -> None:

@@ -8,18 +8,18 @@ import uuid
 
 from structured_agents import Message
 
-from remora.core.config import Config
+from remora.core.agents.outbox import Outbox
+from remora.core.agents.prompt import PromptBuilder
+from remora.core.agents.trigger import Trigger, TriggerPolicy
+from remora.core.agents.turn import AgentTurnExecutor
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
-from remora.core.graph import NodeStore
-from remora.core.metrics import Metrics
-from remora.core.outbox import Outbox
-from remora.core.prompt import PromptBuilder
-from remora.core.rate_limit import SlidingWindowRateLimiter
-from remora.core.search import SearchServiceProtocol
-from remora.core.trigger import Trigger, TriggerPolicy
-from remora.core.turn_executor import AgentTurnExecutor
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.model.config import Config
+from remora.core.services.metrics import Metrics
+from remora.core.services.rate_limit import SlidingWindowRateLimiter
+from remora.core.services.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 class Actor:

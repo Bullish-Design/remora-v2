@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from structured_agents.types import ToolCall
 
-from remora.core.grail import discover_tools
+from remora.core.tools.grail import discover_tools
 
 
 class _WorkspaceStub:

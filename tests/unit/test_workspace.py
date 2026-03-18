@@ -8,8 +8,8 @@ import yaml
 from cairn.runtime import workspace_manager as cairn_wm
 from fsdantic import FileNotFoundError as FsdFileNotFoundError
 
-from remora.core.config import Config, InfraConfig
-from remora.core.workspace import AgentWorkspace, CairnWorkspaceService
+from remora.core.model.config import Config, InfraConfig
+from remora.core.storage.workspace import AgentWorkspace, CairnWorkspaceService
 
 
 @pytest.mark.asyncio

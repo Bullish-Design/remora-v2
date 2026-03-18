@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from remora.core.config import Config
 from remora.core.events.types import Event
+from remora.core.model.config import Config
 
 _DEPTH_TTL_MS = 5 * 60 * 1000
 _DEPTH_CLEANUP_INTERVAL = 100

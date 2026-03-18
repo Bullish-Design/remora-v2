@@ -6,14 +6,14 @@ import asyncio
 import logging
 import time
 
-from remora.core.actor import Actor
-from remora.core.config import Config
+from remora.core.agents.actor import Actor
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
-from remora.core.graph import NodeStore
-from remora.core.metrics import Metrics
-from remora.core.search import SearchServiceProtocol
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.model.config import Config
+from remora.core.services.metrics import Metrics
+from remora.core.services.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.workspace import CairnWorkspaceService
 
 logger = logging.getLogger(__name__)
 

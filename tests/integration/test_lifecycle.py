@@ -8,8 +8,8 @@ import httpx
 import pytest
 from tests.factories import write_file
 
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
-from remora.core.lifecycle import RemoraLifecycle
+from remora.core.model.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
+from remora.core.services.lifecycle import RemoraLifecycle
 
 
 def _free_port() -> int:

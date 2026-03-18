@@ -16,16 +16,16 @@ from starlette.staticfiles import StaticFiles
 
 from remora.core.events.bus import EventBus
 from remora.core.events.store import EventStore
-from remora.core.graph import NodeStore
-from remora.core.metrics import Metrics
-from remora.core.search import SearchServiceProtocol
+from remora.core.storage.graph import NodeStore
+from remora.core.services.metrics import Metrics
+from remora.core.services.search import SearchServiceProtocol
 from remora.web.deps import WebDeps
 from remora.web.middleware import CSRFMiddleware
 from remora.web.routes import chat, cursor, events, health, nodes, proposals, search
 
 if TYPE_CHECKING:
-    from remora.core.runner import ActorPool
-    from remora.core.workspace import CairnWorkspaceService
+    from remora.core.agents.runner import ActorPool
+    from remora.core.storage.workspace import CairnWorkspaceService
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML: str | None = None

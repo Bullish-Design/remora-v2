@@ -15,15 +15,15 @@ from fsdantic import FileNotFoundError as FsdFileNotFoundError
 from fsdantic import ViewQuery, Workspace
 from pydantic import ValidationError
 
-from remora.core.config import BundleConfig, Config, expand_env_vars
-from remora.core.errors import IncompatibleBundleError
-from remora.core.metrics import Metrics
+from remora.core.model.config import BundleConfig, Config, expand_env_vars
+from remora.core.model.errors import IncompatibleBundleError
+from remora.core.services.metrics import Metrics
 from remora.core.utils import deep_merge
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from remora.core.prompt import CompanionData
+    from remora.core.agents.prompt import CompanionData
 
 
 class AgentWorkspace:
@@ -104,7 +104,7 @@ class AgentWorkspace:
 
     async def get_companion_data(self) -> CompanionData:
         """Retrieve raw companion memory data from workspace KV."""
-        from remora.core.prompt import CompanionData
+        from remora.core.agents.prompt import CompanionData
 
         reflections = await self.kv_get("companion/reflections")
         chat_index = await self.kv_get("companion/chat_index")

@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlparse
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
@@ -20,10 +20,10 @@ from remora.core.events import (
     TriggerDispatcher,
 )
 from remora.core.events.store import EventStore
-from remora.core.graph import NodeStore
-from remora.core.node import Node
-from remora.core.transaction import TransactionContext
-from remora.core.types import ChangeType, serialize_enum
+from remora.core.storage.graph import NodeStore
+from remora.core.model.node import Node
+from remora.core.storage.transaction import TransactionContext
+from remora.core.model.types import ChangeType, serialize_enum
 
 _STATUS_ICONS = {
     "idle": "○",

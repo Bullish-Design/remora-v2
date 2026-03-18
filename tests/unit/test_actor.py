@@ -20,7 +20,7 @@ from structured_agents.events import (
 from tests.doubles import RecordingOutbox
 from tests.factories import make_node
 
-from remora.core.actor import (
+from remora.core.agents.actor import (
     Actor,
     AgentTurnExecutor,
     Outbox,
@@ -28,8 +28,8 @@ from remora.core.actor import (
     Trigger,
     TriggerPolicy,
 )
-from remora.core.config import BehaviorConfig, BundleConfig, Config, InfraConfig, RuntimeConfig
-from remora.core.db import open_database
+from remora.core.model.config import BehaviorConfig, BundleConfig, Config, InfraConfig, RuntimeConfig
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
     AgentErrorEvent,
@@ -41,10 +41,10 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
-from remora.core.graph import NodeStore
-from remora.core.transaction import TransactionContext
-from remora.core.types import EventType, NodeStatus
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.transaction import TransactionContext
+from remora.core.model.types import EventType, NodeStatus
+from remora.core.storage.workspace import CairnWorkspaceService
 
 _TEST_USER_TEMPLATE = (
     "# Node: {node_full_name}\n"
@@ -543,7 +543,7 @@ def test_prompt_builder_interpolate_unknown_vars_preserved() -> None:
 
 @pytest.mark.asyncio
 async def test_build_companion_context_empty(actor_env) -> None:
-    from remora.core.prompt import PromptBuilder
+    from remora.core.agents.prompt import PromptBuilder
 
     workspace = await actor_env["workspace_service"].get_agent_workspace(
         "src/app.py::companion-empty"
@@ -555,7 +555,7 @@ async def test_build_companion_context_empty(actor_env) -> None:
 
 @pytest.mark.asyncio
 async def test_build_companion_context_with_data(actor_env) -> None:
-    from remora.core.prompt import PromptBuilder
+    from remora.core.agents.prompt import PromptBuilder
 
     workspace = await actor_env["workspace_service"].get_agent_workspace(
         "src/app.py::companion-data"

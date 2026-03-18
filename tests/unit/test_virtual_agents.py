@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from remora.code.virtual_agents import VirtualAgentManager
-from remora.core.config import VirtualAgentConfig, VirtualSubscriptionConfig
+from remora.core.model.config import VirtualAgentConfig, VirtualSubscriptionConfig
 
 
 def test_virtual_agent_manager_builds_patterns() -> None:

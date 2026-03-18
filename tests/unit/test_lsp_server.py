@@ -8,9 +8,9 @@ from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 from tests.factories import make_node
 
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 from remora.core.events import EventStore
-from remora.core.graph import NodeStore
+from remora.core.storage.graph import NodeStore
 from remora.lsp.server import (
     DocumentStore,
     _find_node_at_line,

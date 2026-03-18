@@ -14,13 +14,13 @@ from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_query_paths
 from remora.code.reconciler import FileReconciler
 from remora.code.subscriptions import SubscriptionManager
-from remora.core.config import (
+from remora.core.model.config import (
     BehaviorConfig,
     Config,
     InfraConfig,
     ProjectConfig,
 )
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
     AgentMessageEvent,
@@ -28,8 +28,8 @@ from remora.core.events import (
     EventStore,
     NodeChangedEvent,
 )
-from remora.core.graph import NodeStore
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.storage.workspace import CairnWorkspaceService
 
 
 @pytest_asyncio.fixture

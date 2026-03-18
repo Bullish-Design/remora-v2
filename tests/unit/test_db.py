@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from remora.core.db import open_database
+from remora.core.storage.db import open_database
 
 
 @pytest.mark.asyncio

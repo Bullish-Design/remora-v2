@@ -9,17 +9,17 @@ import pytest
 import pytest_asyncio
 from tests.factories import make_node
 
-from remora.core.actor import Actor, PromptBuilder, TriggerPolicy
-from remora.core.config import BehaviorConfig, Config, InfraConfig, RuntimeConfig
-from remora.core.db import open_database
+from remora.core.agents.actor import Actor, PromptBuilder, TriggerPolicy
+from remora.core.model.config import BehaviorConfig, Config, InfraConfig, RuntimeConfig
+from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     EventStore,
     SubscriptionPattern,
 )
-from remora.core.graph import NodeStore
-from remora.core.runner import ActorPool
-from remora.core.workspace import CairnWorkspaceService
+from remora.core.storage.graph import NodeStore
+from remora.core.agents.runner import ActorPool
+from remora.core.storage.workspace import CairnWorkspaceService
 
 _USER_TEMPLATE = (
     "# Node: {node_full_name}\n"

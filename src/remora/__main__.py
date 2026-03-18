@@ -14,9 +14,9 @@ import typer
 from remora.code.discovery import discover as discover_nodes
 from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
-from remora.core.config import load_config
-from remora.core.lifecycle import RemoraLifecycle
-from remora.core.node import Node
+from remora.core.model.config import load_config
+from remora.core.services.lifecycle import RemoraLifecycle
+from remora.core.model.node import Node
 from remora.lsp import create_lsp_server_standalone
 
 app = typer.Typer(
@@ -234,7 +234,7 @@ async def _index(
         typer.echo("Add 'search: { enabled: true }' to your config.", err=True)
         raise typer.Exit(code=1)
 
-    from remora.core.search import SearchService
+    from remora.core.services.search import SearchService
 
     service = SearchService(config.search, project_root)
     await service.initialize()
