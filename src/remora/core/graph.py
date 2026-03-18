@@ -10,6 +10,7 @@ from typing import Any
 import aiosqlite
 
 from remora.core.node import Node
+from remora.core.transaction import TransactionContext
 from remora.core.types import (
     STATUS_TRANSITIONS,
     NodeStatus,
@@ -32,27 +33,18 @@ class Edge:
 class NodeStore:
     """SQLite-backed storage for the Node graph."""
 
-    def __init__(self, db: aiosqlite.Connection, tx: Any | None = None):
+    def __init__(self, db: aiosqlite.Connection, tx: TransactionContext):
         self._db = db
         self._tx = tx
 
     @asynccontextmanager
     async def batch(self):  # noqa: ANN201
-        """Batch context — delegates to TransactionContext when available."""
-        if self._tx is not None:
-            async with self._tx.batch():
-                yield
-        else:
-            try:
-                yield
-            except BaseException:
-                await self._db.rollback()
-                raise
-            else:
-                await self._db.commit()
+        """Convenience alias for self._tx.batch()."""
+        async with self._tx.batch():
+            yield
 
     async def _maybe_commit(self) -> None:
-        if self._tx is not None and self._tx.in_batch:
+        if self._tx.in_batch:
             return
         await self._db.commit()
 

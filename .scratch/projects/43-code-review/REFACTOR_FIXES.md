@@ -121,33 +121,6 @@ Simplify `batch()`:
 
 #### 1c. `src/remora/core/events/subscriptions.py` — `SubscriptionRegistry`
 
-Same. Make `tx` required:
-
-```python
-class SubscriptionRegistry:
-    def __init__(self, db: aiosqlite.Connection, tx: TransactionContext):
-        self._db = db
-        self._tx = tx
-        self._cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] | None = None
-
-    async def _maybe_commit(self) -> None:
-        if self._tx.in_batch:
-            return
-        await self._db.commit()
-```
-
-#### 1d. `src/remora/core/services.py` — Update wiring order
-
-`SubscriptionRegistry` now requires `tx`, so create `TransactionContext` before `SubscriptionRegistry`:
-
-```python
-    self.metrics = Metrics()
-    self.event_bus = EventBus()
-    self.dispatcher_subscriptions = SubscriptionRegistry(db, tx=self.tx)  # need tx first
-
-    # But tx needs dispatcher... which needs subscriptions. Circular.
-```
-
 There's a dependency cycle: `TransactionContext` needs `EventBus` and `TriggerDispatcher`. `TriggerDispatcher` needs `SubscriptionRegistry`. `SubscriptionRegistry` now needs `TransactionContext`.
 
 **Resolution:** Pass `tx` to `SubscriptionRegistry` after construction, or break the cycle by having `TransactionContext` not depend on `TriggerDispatcher` at construction time. The simplest approach: keep `SubscriptionRegistry.__init__` accepting `tx` as a settable attribute (set it after `TransactionContext` is created), just like the current `self.subscriptions._tx = self.tx` line in `services.py`.
@@ -189,11 +162,7 @@ This replaces the current `self.subscriptions._tx = self.tx` private attribute p
 
 ### Testing & Validation
 
-This step will cause many test compilation failures. That's intentional — every test that constructs `NodeStore(db)` or `EventStore(db=db)` without a `TransactionContext` will fail loudly. Fix them in Steps 3-4 and 7-8.
-
-```bash
-devenv shell -- python -c "from remora.core.services import RuntimeServices; print('OK')"
-```
+This step will cause many test compilation failures. That's intentional — every test that constructs `NodeStore(db)` or `EventStore(db=db)` without a `TransactionContext` will fail loudly. Ignore them for this step - we'll fix them in Steps 3-4 and 7-8.
 
 ---
 
@@ -236,9 +205,8 @@ Same — remove the else-branch from `batch()`.
 
 ### Testing & Validation
 
-```bash
-devenv shell -- ruff check src/remora/core/graph.py src/remora/core/events/store.py
-```
+This step will still have many test compilation failures. Ignore them for this step - we'll fix them in Steps 3-4 and 7-8.
+
 
 ---
 
@@ -298,7 +266,7 @@ async def test_shared_db_coexistence(db, tx) -> None:
     ...
 ```
 
-That's verbose. Consider a helper or a second fixture for EventStore. But since this is the only test that needs both, inline is fine.
+That's verbose. Consider a helper or a second fixture for EventStore in the future. But since this is the only test that needs both, inline is fine.
 
 The three batch/commit tests now work correctly because `tx` provides real depth tracking:
 

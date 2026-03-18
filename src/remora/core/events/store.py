@@ -14,6 +14,7 @@ from remora.core.events.dispatcher import TriggerDispatcher
 from remora.core.events.subscriptions import SubscriptionRegistry
 from remora.core.events.types import Event
 from remora.core.metrics import Metrics
+from remora.core.transaction import TransactionContext
 
 
 class EventStore:
@@ -22,16 +23,16 @@ class EventStore:
     def __init__(
         self,
         db: aiosqlite.Connection,
-        event_bus: EventBus | None = None,
-        dispatcher: TriggerDispatcher | None = None,
+        event_bus: EventBus,
+        dispatcher: TriggerDispatcher,
+        tx: TransactionContext,
         metrics: Metrics | None = None,
-        tx: Any | None = None,
     ) -> None:
         self._db = db
-        self._event_bus = event_bus or EventBus()
-        self._dispatcher = dispatcher or TriggerDispatcher(SubscriptionRegistry(db))
-        self._metrics = metrics
+        self._event_bus = event_bus
+        self._dispatcher = dispatcher
         self._tx = tx
+        self._metrics = metrics
         self._pending_responses: dict[str, asyncio.Future[str]] = {}
 
     @property
@@ -99,7 +100,7 @@ class EventStore:
         if self._metrics is not None:
             self._metrics.events_emitted_total += 1
 
-        if self._tx is not None and self._tx.in_batch:
+        if self._tx.in_batch:
             self._tx.defer_event(event)
             return event_id
 
@@ -110,18 +111,9 @@ class EventStore:
 
     @asynccontextmanager
     async def batch(self):  # noqa: ANN201
-        """Batch context — delegates to TransactionContext when available."""
-        if self._tx is not None:
-            async with self._tx.batch():
-                yield
-        else:
-            try:
-                yield
-            except BaseException:
-                await self._db.rollback()
-                raise
-            else:
-                await self._db.commit()
+        """Convenience alias for self._tx.batch()."""
+        async with self._tx.batch():
+            yield
 
     def create_response_future(self, request_id: str) -> asyncio.Future[str]:
         """Create and register a pending human-input response future."""

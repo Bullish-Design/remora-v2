@@ -22,6 +22,7 @@ from remora.core.events import (
 from remora.core.events.store import EventStore
 from remora.core.graph import NodeStore
 from remora.core.node import Node
+from remora.core.transaction import TransactionContext
 from remora.core.types import ChangeType, serialize_enum
 
 _STATUS_ICONS = {
@@ -133,9 +134,7 @@ def create_lsp_server(
         callees = sorted({edge.to_id for edge in edges if edge.from_id == node.node_id})
         recent_rows = await current_event_store.get_events_for_agent(node.node_id, limit=5)
         recent_events = [
-            str(row.get("event_type", ""))
-            for row in recent_rows
-            if row.get("event_type")
+            str(row.get("event_type", "")) for row in recent_rows if row.get("event_type")
         ]
         return _node_to_hover(node, callers=callers, callees=callees, recent_events=recent_events)
 
@@ -221,11 +220,17 @@ def create_lsp_server(
 async def _open_standalone_stores(db_path: Path) -> tuple[NodeStore, EventStore]:
     """Open stores backed by a shared Remora database path."""
     db = await open_database(db_path)
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     event_store = EventStore(
         db=db,
-        event_bus=EventBus(),
-        dispatcher=TriggerDispatcher(SubscriptionRegistry(db)),
+        event_bus=event_bus,
+        dispatcher=dispatcher,
+        tx=tx,
     )
     return node_store, event_store
 
@@ -267,9 +272,7 @@ def _node_to_hover(
     callee_ids = callees or []
     event_names = recent_events or []
     recent_events_block = (
-        "\n".join(f"- `{event_name}`" for event_name in event_names)
-        if event_names
-        else "- _none_"
+        "\n".join(f"- `{event_name}`" for event_name in event_names) if event_names else "- _none_"
     )
     value = (
         f"### {node.full_name}\n"
