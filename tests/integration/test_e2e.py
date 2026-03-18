@@ -11,7 +11,7 @@ from tests.factories import write_file
 
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Outbox, Trigger
-from remora.core.config import Config
+from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
 from remora.core.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
@@ -81,8 +81,7 @@ async def _setup_runtime(tmp_path: Path):
     source_path = tmp_path / "src" / "app.py"
     write_file(
         source_path,
-        "def alpha():\n    return 1\n\n"
-        "def beta():\n    return 2\n",
+        "def alpha():\n    return 1\n\ndef beta():\n    return 2\n",
     )
 
     bundles_root = tmp_path / "bundles"
@@ -96,14 +95,22 @@ async def _setup_runtime(tmp_path: Path):
     await event_store.create_tables()
 
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        workspace_root=".remora-e2e",
-        bundle_search_paths=(str(bundles_root),),
-        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
-        prompt_templates={"user": _E2E_USER_TEMPLATE},
-        model_default="mock",
-        max_turns=2,
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            bundle_search_paths=(str(bundles_root),),
+            bundle_overlays={
+                "function": "code-agent",
+                "class": "code-agent",
+                "method": "code-agent",
+            },
+            prompt_templates={"user": _E2E_USER_TEMPLATE},
+            model_default="mock",
+            max_turns=2,
+        ),
+        infra=InfraConfig(workspace_root=".remora-e2e"),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -172,6 +179,7 @@ async def test_e2e_human_chat_to_rewrite(tmp_path: Path, monkeypatch) -> None:
         "remora.core.turn_executor.create_kernel",
         lambda **kwargs: MockKernel(kwargs.get("tools", [])),
     )
+
     class FakeRewriteTool:
         def __init__(self, capabilities):
             self._capabilities = capabilities
@@ -315,9 +323,7 @@ async def test_e2e_two_agents_interact_via_send_message_tool(tmp_path: Path, mon
         deadline = asyncio.get_running_loop().time() + timeout_s
         while asyncio.get_running_loop().time() < deadline:
             events = await runtime["event_store"].get_events(limit=100)
-            message_events = [
-                event for event in events if event["event_type"] == "agent_message"
-            ]
+            message_events = [event for event in events if event["event_type"] == "agent_message"]
             complete_agents = {
                 event["payload"].get("agent_id")
                 for event in events

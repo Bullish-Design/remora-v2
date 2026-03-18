@@ -8,7 +8,7 @@ import httpx
 import pytest
 from tests.factories import write_file
 
-from remora.core.config import Config
+from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
 from remora.core.lifecycle import RemoraLifecycle
 
 
@@ -23,11 +23,15 @@ async def test_lifecycle_discovers_nodes_serves_health_and_shuts_down(tmp_path: 
     write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
     port = _free_port()
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        language_map={".py": "python"},
-        query_search_paths=("@default",),
-        workspace_root=".remora-lifecycle-test",
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            language_map={".py": "python"},
+            query_search_paths=("@default",),
+        ),
+        infra=InfraConfig(workspace_root=".remora-lifecycle-test"),
     )
     lifecycle = RemoraLifecycle(
         config=config,

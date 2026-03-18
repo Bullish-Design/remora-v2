@@ -10,7 +10,7 @@ from tests.factories import write_file
 
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Actor, Outbox, Trigger
-from remora.core.config import Config
+from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore, NodeChangedEvent
 from remora.core.graph import NodeStore
@@ -117,7 +117,7 @@ def _write_kv_roundtrip_bundles(root: Path, model_name: str) -> None:
             "@external\n"
             "async def kv_set(key: str, value: str) -> bool: ...\n\n"
             "ok = await kv_set(key, value)\n"
-            "message = f\"Stored value for {key}\" if ok else f\"Failed to store value for {key}\"\n"
+            'message = f"Stored value for {key}" if ok else f"Failed to store value for {key}"\n'
             "message\n"
         ),
     )
@@ -129,7 +129,7 @@ def _write_kv_roundtrip_bundles(root: Path, model_name: str) -> None:
             "@external\n"
             "async def kv_get(key: str) -> str | None: ...\n\n"
             "value = await kv_get(key)\n"
-            "result = \"\" if value is None else str(value)\n"
+            'result = "" if value is None else str(value)\n'
             "result\n"
         ),
     )
@@ -190,12 +190,7 @@ def _write_virtual_agent_bundles(root: Path, model_name: str) -> None:
 
     write_file(
         system / "bundle.yaml",
-        (
-            "name: system\n"
-            "system_prompt: Base system\n"
-            f"model: {model_name}\n"
-            "max_turns: 8\n"
-        ),
+        (f"name: system\nsystem_prompt: Base system\nmodel: {model_name}\nmax_turns: 8\n"),
     )
     write_file(code / "bundle.yaml", "name: code-agent\nmax_turns: 8\n")
     write_file(
@@ -249,17 +244,27 @@ async def _setup_llm_runtime(
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        bundle_search_paths=(str(bundles_root),),
-        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
-        prompt_templates={"user": _LLM_USER_TEMPLATE},
-        workspace_root=".remora-llm-int",
-        model_base_url=model_url,
-        model_default=model_name,
-        model_api_key=model_api_key,
-        timeout_s=timeout_s,
-        max_turns=8,
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            bundle_search_paths=(str(bundles_root),),
+            bundle_overlays={
+                "function": "code-agent",
+                "class": "code-agent",
+                "method": "code-agent",
+            },
+            prompt_templates={"user": _LLM_USER_TEMPLATE},
+            model_default=model_name,
+            max_turns=8,
+        ),
+        infra=InfraConfig(
+            workspace_root=".remora-llm-int",
+            model_base_url=model_url,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
+        ),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -304,17 +309,27 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        bundle_search_paths=(str(bundles_root),),
-        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
-        prompt_templates={"user": _LLM_USER_TEMPLATE},
-        workspace_root=".remora-llm-int",
-        model_base_url=model_url,
-        model_default=model_name,
-        model_api_key=model_api_key,
-        timeout_s=timeout_s,
-        max_turns=6,
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            bundle_search_paths=(str(bundles_root),),
+            bundle_overlays={
+                "function": "code-agent",
+                "class": "code-agent",
+                "method": "code-agent",
+            },
+            prompt_templates={"user": _LLM_USER_TEMPLATE},
+            model_default=model_name,
+            max_turns=6,
+        ),
+        infra=InfraConfig(
+            workspace_root=".remora-llm-int",
+            model_base_url=model_url,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
+        ),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -348,7 +363,9 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
             ),
             correlation_id=correlation_id,
         )
-        outbox = Outbox(actor_id=node.node_id, event_store=event_store, correlation_id=correlation_id)
+        outbox = Outbox(
+            actor_id=node.node_id, event_store=event_store, correlation_id=correlation_id
+        )
         trigger = Trigger(node_id=node.node_id, correlation_id=correlation_id, event=event)
         await actor._execute_turn(trigger, outbox)
 
@@ -389,7 +406,9 @@ async def test_real_llm_turn_kv_roundtrip_and_message(tmp_path: Path) -> None:
             bundle_writer=_write_kv_roundtrip_bundles,
         )
         correlation_id = "corr-llm-kv"
-        outbox = Outbox(actor_id=node.node_id, event_store=event_store, correlation_id=correlation_id)
+        outbox = Outbox(
+            actor_id=node.node_id, event_store=event_store, correlation_id=correlation_id
+        )
         trigger = Trigger(
             node_id=node.node_id,
             correlation_id=correlation_id,
@@ -516,28 +535,38 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
     event_store = EventStore(db=db)
     await event_store.create_tables()
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        bundle_search_paths=(str(bundles_root),),
-        bundle_overlays={"function": "code-agent", "class": "code-agent", "method": "code-agent"},
-        prompt_templates={"user": _LLM_USER_TEMPLATE},
-        workspace_root=".remora-llm-int",
-        model_base_url=model_url,
-        model_default=model_name,
-        model_api_key=model_api_key,
-        timeout_s=timeout_s,
-        max_turns=8,
-        virtual_agents=(
-            {
-                "id": "test-agent",
-                "role": "test-agent",
-                "subscriptions": (
-                    {
-                        "event_types": ["node_changed"],
-                        "path_glob": "src/**",
-                    },
-                ),
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            bundle_search_paths=(str(bundles_root),),
+            bundle_overlays={
+                "function": "code-agent",
+                "class": "code-agent",
+                "method": "code-agent",
             },
+            prompt_templates={"user": _LLM_USER_TEMPLATE},
+            model_default=model_name,
+            max_turns=8,
+            virtual_agents=(
+                {
+                    "id": "test-agent",
+                    "role": "test-agent",
+                    "subscriptions": (
+                        {
+                            "event_types": ["node_changed"],
+                            "path_glob": "src/**",
+                        },
+                    ),
+                },
+            ),
+        ),
+        infra=InfraConfig(
+            workspace_root=".remora-llm-int",
+            model_base_url=model_url,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
         ),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
@@ -618,7 +647,9 @@ async def test_real_llm_reactive_trigger_uses_reactive_mode_prompt(tmp_path: Pat
             bundle_writer=_write_reactive_mode_bundles,
         )
         correlation_id = "corr-reactive-mode"
-        outbox = Outbox(actor_id=node.node_id, event_store=event_store, correlation_id=correlation_id)
+        outbox = Outbox(
+            actor_id=node.node_id, event_store=event_store, correlation_id=correlation_id
+        )
         trigger = Trigger(
             node_id=node.node_id,
             correlation_id=correlation_id,

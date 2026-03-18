@@ -5,17 +5,21 @@ from pathlib import Path
 from tests.factories import write_file
 
 from remora.code.watcher import FileWatcher
-from remora.core.config import Config
+from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
 
 
 def _config() -> Config:
     return Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        language_map={".py": "python"},
-        query_search_paths=("@default",),
-        workspace_root=".remora-reconcile",
-        bundle_search_paths=("bundles",),
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            language_map={".py": "python"},
+            query_search_paths=("@default",),
+            bundle_search_paths=("bundles",),
+        ),
+        infra=InfraConfig(workspace_root=".remora-reconcile"),
     )
 
 

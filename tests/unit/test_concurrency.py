@@ -8,7 +8,7 @@ from tests.factories import make_node, write_bundle_templates, write_file
 
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Actor, TriggerPolicy
-from remora.core.config import Config
+from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig, RuntimeConfig
 from remora.core.db import open_database
 from remora.core.events import AgentMessageEvent, EventStore, SubscriptionPattern
 from remora.core.graph import NodeStore
@@ -28,9 +28,8 @@ async def test_concurrent_dispatch_serializes_for_single_actor(
     await event_store.create_tables()
 
     config = Config(
-        workspace_root=".remora-concurrency",
-        trigger_cooldown_ms=0,
-        max_trigger_depth=10,
+        infra=InfraConfig(workspace_root=".remora-concurrency"),
+        runtime=RuntimeConfig(trigger_cooldown_ms=0, max_trigger_depth=10),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
@@ -143,12 +142,16 @@ async def test_overlapping_reconcile_cycles_are_idempotent(tmp_path: Path) -> No
     write_file(tmp_path / "src" / "app.py", "def a():\n    return 1\n")
 
     config = Config(
-        discovery_paths=("src",),
-        discovery_languages=("python",),
-        language_map={".py": "python"},
-        query_search_paths=("@default",),
-        workspace_root=".remora-reconcile-concurrency",
-        bundle_search_paths=(str(bundles_root),),
+        project=ProjectConfig(
+            discovery_paths=("src",),
+            discovery_languages=("python",),
+        ),
+        behavior=BehaviorConfig(
+            language_map={".py": "python"},
+            query_search_paths=("@default",),
+            bundle_search_paths=(str(bundles_root),),
+        ),
+        infra=InfraConfig(workspace_root=".remora-reconcile-concurrency"),
     )
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
