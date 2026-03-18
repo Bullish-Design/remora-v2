@@ -8,12 +8,28 @@ import aiosqlite
 import pytest
 from tests.factories import write_file
 
+from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
 from remora.core.actor import Actor, Outbox, Trigger
-from remora.core.config import BehaviorConfig, Config, InfraConfig, ProjectConfig
+from remora.core.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    ProjectConfig,
+    resolve_query_search_paths,
+)
 from remora.core.db import open_database
-from remora.core.events import AgentMessageEvent, ContentChangedEvent, EventStore, NodeChangedEvent
+from remora.core.events import (
+    AgentMessageEvent,
+    ContentChangedEvent,
+    EventBus,
+    EventStore,
+    NodeChangedEvent,
+    SubscriptionRegistry,
+    TriggerDispatcher,
+)
 from remora.core.graph import NodeStore
+from remora.core.transaction import TransactionContext
 from remora.core.workspace import CairnWorkspaceService
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
@@ -239,9 +255,14 @@ async def _setup_llm_runtime(
     bundle_writer(bundles_root, model_name)
 
     db = await open_database(tmp_path / "llm-turn.db")
-    node_store = NodeStore(db)
+    event_bus = EventBus()
+    subscriptions = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subscriptions)
+    tx = TransactionContext(db, event_bus, dispatcher)
+    subscriptions.set_tx(tx)
+    node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
-    event_store = EventStore(db=db)
+    event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     config = Config(
         project=ProjectConfig(
@@ -269,12 +290,20 @@ async def _setup_llm_runtime(
     workspace_service = CairnWorkspaceService(config, tmp_path)
     await workspace_service.initialize()
 
+    language_registry = LanguageRegistry.from_config(
+        language_defs=config.behavior.languages,
+        query_search_paths=resolve_query_search_paths(config, tmp_path),
+    )
+    subscription_manager = SubscriptionManager(event_store, workspace_service)
     reconciler = FileReconciler(
         config,
         node_store,
         event_store,
         workspace_service,
         project_root=tmp_path,
+        language_registry=language_registry,
+        subscription_manager=subscription_manager,
+        tx=tx,
     )
     nodes = await reconciler.full_scan()
     node = next(candidate for candidate in nodes if candidate.node_type != "directory")
