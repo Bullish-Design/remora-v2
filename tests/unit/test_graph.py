@@ -3,16 +3,35 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+import pytest_asyncio
 from tests.factories import make_node
 
-from remora.core.events import AgentStartEvent, EventStore
+from remora.core.events import (
+    AgentStartEvent,
+    EventBus,
+    EventStore,
+    SubscriptionRegistry,
+    TriggerDispatcher,
+)
 from remora.core.graph import NodeStore
+from remora.core.transaction import TransactionContext
 from remora.core.types import NodeStatus, NodeType
 
 
+@pytest_asyncio.fixture
+async def tx(db):
+    """Minimal TransactionContext for testing."""
+    bus = EventBus()
+    subs = SubscriptionRegistry(db)
+    dispatcher = TriggerDispatcher(subs)
+    context = TransactionContext(db, bus, dispatcher)
+    subs.set_tx(context)
+    return context
+
+
 @pytest.mark.asyncio
-async def test_nodestore_upsert_and_get(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_upsert_and_get(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     node = make_node("src/app.py::a")
     await store.upsert_node(node)
@@ -22,8 +41,8 @@ async def test_nodestore_upsert_and_get(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_list_with_filters(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_list_with_filters(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", node_type="function", status="idle"))
     await store.upsert_node(make_node("src/app.py::B", node_type="class", status="running"))
@@ -46,8 +65,8 @@ async def test_nodestore_list_with_filters(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_get_nodes_by_ids(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_get_nodes_by_ids(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a"))
     await store.upsert_node(make_node("src/app.py::b"))
@@ -57,8 +76,8 @@ async def test_nodestore_get_nodes_by_ids(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_count_nodes(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_count_nodes(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a"))
     await store.upsert_node(make_node("src/app.py::b"))
@@ -66,8 +85,8 @@ async def test_nodestore_count_nodes(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_delete(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_delete(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a"))
     await store.upsert_node(make_node("src/app.py::b"))
@@ -79,8 +98,8 @@ async def test_nodestore_delete(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_updates_node(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_transition_status_updates_node(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     node = make_node("src/app.py::a", status="idle")
     await store.upsert_node(node)
@@ -93,8 +112,8 @@ async def test_nodestore_transition_status_updates_node(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_add_edge(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_add_edge(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a"))
     await store.upsert_node(make_node("src/app.py::b"))
@@ -108,8 +127,8 @@ async def test_nodestore_add_edge(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_edge_directions(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_edge_directions(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a"))
     await store.upsert_node(make_node("src/app.py::b"))
@@ -129,8 +148,8 @@ async def test_nodestore_edge_directions(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_edge_uniqueness(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_edge_uniqueness(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a"))
     await store.upsert_node(make_node("src/app.py::b"))
@@ -142,9 +161,11 @@ async def test_nodestore_edge_uniqueness(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_shared_db_coexistence(db) -> None:
-    node_store = NodeStore(db)
-    event_store = EventStore(db=db)
+async def test_shared_db_coexistence(db, tx) -> None:
+    node_store = NodeStore(db, tx=tx)
+    event_store = EventStore(
+        db=db, event_bus=EventBus(), dispatcher=TriggerDispatcher(SubscriptionRegistry(db)), tx=tx
+    )
     await node_store.create_tables()
     await event_store.create_tables()
     await node_store.upsert_node(make_node("src/app.py::a"))
@@ -156,8 +177,8 @@ async def test_shared_db_coexistence(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_valid(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_transition_status_valid(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", status="idle"))
 
@@ -168,8 +189,8 @@ async def test_nodestore_transition_status_valid(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_invalid(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_transition_status_invalid(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", status="idle"))
 
@@ -180,8 +201,8 @@ async def test_nodestore_transition_status_invalid(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_awaiting_input(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_transition_status_awaiting_input(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", status="running"))
 
@@ -197,8 +218,8 @@ async def test_nodestore_transition_status_awaiting_input(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_awaiting_review(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_transition_status_awaiting_review(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", status="running"))
 
@@ -214,8 +235,8 @@ async def test_nodestore_transition_status_awaiting_review(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_transition_status_competing_updates_only_one_wins(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_transition_status_competing_updates_only_one_wins(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(make_node("src/app.py::a", status="running"))
 
@@ -231,8 +252,8 @@ async def test_nodestore_transition_status_competing_updates_only_one_wins(db) -
 
 
 @pytest.mark.asyncio
-async def test_nodestore_get_children(db) -> None:
-    store = NodeStore(db)
+async def test_nodestore_get_children(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     await store.upsert_node(
         make_node(
@@ -254,8 +275,8 @@ async def test_nodestore_get_children(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nodestore_batch_commits_once_for_grouped_writes(db, monkeypatch) -> None:
-    store = NodeStore(db)
+async def test_nodestore_batch_commits_once_for_grouped_writes(db, tx, monkeypatch) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
 
     commit_calls = 0
@@ -277,8 +298,8 @@ async def test_nodestore_batch_commits_once_for_grouped_writes(db, monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_batch_rolls_back_on_exception(db) -> None:
-    store = NodeStore(db)
+async def test_batch_rolls_back_on_exception(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
     await store.create_tables()
     sample_node = make_node("src/app.py::rollback")
 
