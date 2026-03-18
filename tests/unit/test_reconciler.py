@@ -40,10 +40,10 @@ async def reconcile_env(tmp_path: Path):
     from remora.core.storage.transaction import TransactionContext
 
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
@@ -729,10 +729,10 @@ async def test_virtual_agents_bootstrapped_with_subscriptions(tmp_path: Path) ->
 
     db = await open_database(tmp_path / "virtual.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
@@ -819,10 +819,10 @@ async def test_reconciler_handles_external_paths(tmp_path: Path) -> None:
     from remora.core.storage.transaction import TransactionContext
 
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)

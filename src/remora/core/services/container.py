@@ -30,10 +30,10 @@ class RuntimeServices:
 
         self.metrics = Metrics()
         self.event_bus = EventBus()
-        self.subscriptions = SubscriptionRegistry(db)
-        self.dispatcher = TriggerDispatcher(self.subscriptions)
+        self.dispatcher = TriggerDispatcher()
         self.tx = TransactionContext(db, self.event_bus, self.dispatcher)
-        self.subscriptions.set_tx(self.tx)
+        self.subscriptions = SubscriptionRegistry(db, tx=self.tx)
+        self.dispatcher.subscriptions = self.subscriptions
         self.node_store = NodeStore(db, tx=self.tx)
         self.event_store = EventStore(
             db=db,

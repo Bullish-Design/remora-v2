@@ -61,14 +61,10 @@ class SubscriptionPattern(BaseModel):
 class SubscriptionRegistry:
     """SQLite-backed subscription store with event_type-indexed in-memory cache."""
 
-    def __init__(self, db: aiosqlite.Connection):
+    def __init__(self, db: aiosqlite.Connection, tx: TransactionContext | None = None):
         self._db = db
-        self._tx: TransactionContext | None = None
-        self._cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] | None = None
-
-    def set_tx(self, tx: TransactionContext) -> None:
-        """Wire the TransactionContext after construction (breaks init cycle)."""
         self._tx = tx
+        self._cache: dict[str, list[tuple[int, str, SubscriptionPattern]]] | None = None
 
     async def _maybe_commit(self) -> None:
         if self._tx is not None and self._tx.in_batch:

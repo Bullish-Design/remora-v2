@@ -24,10 +24,10 @@ async def event_env(tmp_path):
     """Standard EventStore wiring for tests."""
     db = await open_database(tmp_path / "events.db")
     bus = EventBus()
-    subs = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subs)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, bus, dispatcher)
-    subs.set_tx(tx)
+    subs = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subs
     store = EventStore(db=db, event_bus=bus, dispatcher=dispatcher, tx=tx)
     await store.create_tables()
     yield store, bus, db
@@ -113,10 +113,10 @@ async def test_eventstore_forwards_to_bus(tmp_path: Path) -> None:
 
     bus.subscribe_all(handler)
     db = await open_database(tmp_path / "events.db")
-    subs = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subs)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, bus, dispatcher)
-    subs.set_tx(tx)
+    subs = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subs
     store = EventStore(db=db, event_bus=bus, dispatcher=dispatcher, tx=tx)
     await store.create_tables()
     await store.append(AgentStartEvent(agent_id="a"))

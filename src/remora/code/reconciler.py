@@ -20,7 +20,6 @@ from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
 from remora.core.events import (
     ContentChangedEvent,
-    Event,
     EventBus,
     EventStore,
     NodeChangedEvent,
@@ -30,7 +29,7 @@ from remora.core.events import (
 from remora.core.model.config import Config, resolve_bundle_dirs, resolve_bundle_search_paths
 from remora.core.model.errors import RemoraError, WorkspaceError
 from remora.core.model.node import Node
-from remora.core.model.types import NodeStatus
+from remora.core.model.types import EventType, NodeStatus
 from remora.core.services.search import SearchServiceProtocol
 from remora.core.storage.graph import NodeStore
 from remora.core.storage.workspace import CairnWorkspaceService
@@ -147,7 +146,7 @@ class FileReconciler:
 
     async def start(self, event_bus: EventBus) -> None:
         """Subscribe to content change events for immediate reconciliation."""
-        event_bus.subscribe(ContentChangedEvent, self._on_content_changed)
+        event_bus.subscribe(EventType.CONTENT_CHANGED, self._on_content_changed)
 
     async def _handle_watch_changes(self, changed_files: set[str]) -> None:
         """Process one watchfiles batch with isolated error handling."""
@@ -397,10 +396,8 @@ class FileReconciler:
         except (OSError, WorkspaceError, yaml.YAMLError):
             logger.debug("Failed to sync self_reflect config for %s", node_id, exc_info=True)
 
-    async def _on_content_changed(self, event: Event) -> None:
+    async def _on_content_changed(self, event: ContentChangedEvent) -> None:
         """Immediately reconcile a file reported changed by upstream systems."""
-        if not isinstance(event, ContentChangedEvent):
-            return
         file_path = event.path
         path = Path(file_path)
         if path.exists() and path.is_file():

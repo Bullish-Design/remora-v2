@@ -69,10 +69,10 @@ async def test_perf_discovery_100_nodes(tmp_path: Path) -> None:
 async def test_perf_nodestore_100_upserts(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "perf-nodes.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
 
@@ -127,10 +127,10 @@ async def test_perf_reconciler_load_1000_files_10_nodes_each(
 
     db = await open_database(tmp_path / "perf-reconciler.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)

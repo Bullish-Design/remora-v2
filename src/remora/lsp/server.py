@@ -221,10 +221,10 @@ async def _open_standalone_stores(db_path: Path) -> tuple[NodeStore, EventStore]
     """Open stores backed by a shared Remora database path."""
     db = await open_database(db_path)
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     event_store = EventStore(
         db=db,

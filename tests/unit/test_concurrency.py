@@ -40,10 +40,10 @@ async def test_concurrent_dispatch_serializes_for_single_actor(
 ) -> None:
     db = await open_database(tmp_path / "dispatch.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
@@ -118,10 +118,10 @@ async def test_concurrent_dispatch_serializes_for_single_actor(
 async def test_subscription_modification_during_dispatch_does_not_crash(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "subscriptions.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     await event_store.subscriptions.register("agent-stable", SubscriptionPattern(to_agent="target"))
@@ -160,10 +160,10 @@ async def test_subscription_modification_during_dispatch_does_not_crash(tmp_path
 async def test_overlapping_reconcile_cycles_are_idempotent(tmp_path: Path) -> None:
     db = await open_database(tmp_path / "reconcile-concurrency.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)

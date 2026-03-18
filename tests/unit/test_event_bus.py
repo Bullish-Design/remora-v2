@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from remora.core.events import AgentMessageEvent, AgentStartEvent, Event, EventBus
+from remora.core.model.types import EventType
 
 
 @pytest.mark.asyncio
@@ -15,46 +16,36 @@ async def test_bus_emit_subscribe() -> None:
     def handler(event: AgentStartEvent) -> None:
         seen.append(event.agent_id)
 
-    bus.subscribe(AgentStartEvent, handler)
+    bus.subscribe(EventType.AGENT_START, handler)
     await bus.emit(AgentStartEvent(agent_id="node-1"))
     assert seen == ["node-1"]
 
 
 @pytest.mark.asyncio
-async def test_bus_mro_dispatch() -> None:
+async def test_bus_string_dispatch() -> None:
     bus = EventBus()
     seen: list[str] = []
 
-    def handler(event: Event) -> None:
-        seen.append(event.event_type)
+    def handler(event: AgentMessageEvent) -> None:
+        seen.append(event.content)
 
-    bus.subscribe(Event, handler)
+    bus.subscribe(EventType.AGENT_MESSAGE, handler)
     await bus.emit(AgentMessageEvent(from_agent="a", to_agent="b", content="hello"))
-    assert seen == ["agent_message"]
+    assert seen == ["hello"]
 
 
 @pytest.mark.asyncio
-async def test_bus_does_not_dispatch_to_intermediate_base_classes() -> None:
+async def test_bus_does_not_dispatch_to_other_event_types() -> None:
     bus = EventBus()
     seen: list[str] = []
 
-    class IntermediateEvent(Event):
-        value: str
+    def start_handler(_event: AgentStartEvent) -> None:
+        seen.append("start")
 
-    class DerivedEvent(IntermediateEvent):
-        pass
+    bus.subscribe(EventType.AGENT_START, start_handler)
+    await bus.emit(AgentMessageEvent(from_agent="a", to_agent="b", content="skip"))
 
-    def intermediate_handler(_event: IntermediateEvent) -> None:
-        seen.append("intermediate")
-
-    def base_handler(_event: Event) -> None:
-        seen.append("base")
-
-    bus.subscribe(IntermediateEvent, intermediate_handler)
-    bus.subscribe(Event, base_handler)
-    await bus.emit(DerivedEvent(value="x"))
-
-    assert seen == ["base"]
+    assert seen == []
 
 
 @pytest.mark.asyncio
@@ -93,9 +84,9 @@ async def test_bus_unsubscribe_clears_all_registrations_for_handler() -> None:
     def handler(event: Event) -> None:
         seen.append(event.event_type)
 
-    bus.subscribe(AgentStartEvent, handler)
-    bus.subscribe(AgentStartEvent, handler)
-    bus.subscribe(AgentMessageEvent, handler)
+    bus.subscribe(EventType.AGENT_START, handler)
+    bus.subscribe(EventType.AGENT_START, handler)
+    bus.subscribe(EventType.AGENT_MESSAGE, handler)
     bus.subscribe_all(handler)
     bus.subscribe_all(handler)
 
@@ -104,8 +95,8 @@ async def test_bus_unsubscribe_clears_all_registrations_for_handler() -> None:
     await bus.emit(AgentStartEvent(agent_id="a"))
     await bus.emit(AgentMessageEvent(from_agent="user", to_agent="a", content="hi"))
     assert seen == []
-    assert AgentStartEvent not in bus._handlers
-    assert AgentMessageEvent not in bus._handlers
+    assert EventType.AGENT_START not in bus._handlers
+    assert EventType.AGENT_MESSAGE not in bus._handlers
     assert bus._all_handlers == []
 
 
@@ -122,7 +113,7 @@ async def test_bus_stream() -> None:
 @pytest.mark.asyncio
 async def test_bus_stream_filtered() -> None:
     bus = EventBus()
-    async with bus.stream(AgentStartEvent) as events:
+    async with bus.stream(EventType.AGENT_START) as events:
         await bus.emit(AgentMessageEvent(from_agent="user", to_agent="x", content="skip"))
         await bus.emit(AgentStartEvent(agent_id="allowed"))
         received = await asyncio.wait_for(anext(events), timeout=1.0)

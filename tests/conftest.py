@@ -45,10 +45,10 @@ async def db_with_deps(tmp_path):
 
     database = await open_database(tmp_path / "test.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(database)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(database, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(database, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(database, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(database, event_bus=event_bus, dispatcher=dispatcher, tx=tx)

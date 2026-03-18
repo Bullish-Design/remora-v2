@@ -22,10 +22,10 @@ from remora.core.model.types import NodeStatus, NodeType
 async def tx(db):
     """Minimal TransactionContext for testing."""
     bus = EventBus()
-    subs = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subs)
+    dispatcher = TriggerDispatcher()
     context = TransactionContext(db, bus, dispatcher)
-    subs.set_tx(context)
+    subs = SubscriptionRegistry(db, tx=context)
+    dispatcher.subscriptions = subs
     return context
 
 
@@ -163,8 +163,14 @@ async def test_nodestore_edge_uniqueness(db, tx) -> None:
 @pytest.mark.asyncio
 async def test_shared_db_coexistence(db, tx) -> None:
     node_store = NodeStore(db, tx=tx)
+    dispatcher = TriggerDispatcher()
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     event_store = EventStore(
-        db=db, event_bus=EventBus(), dispatcher=TriggerDispatcher(SubscriptionRegistry(db)), tx=tx
+        db=db,
+        event_bus=EventBus(),
+        dispatcher=dispatcher,
+        tx=tx,
     )
     await node_store.create_tables()
     await event_store.create_tables()

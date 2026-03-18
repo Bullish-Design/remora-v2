@@ -68,10 +68,10 @@ async def _empty_tools(*_args, **_kwargs):  # noqa: ANN001
 async def outbox_env(tmp_path: Path):
     db = await open_database(tmp_path / "outbox.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
     await event_store.create_tables()
     outbox = Outbox(actor_id="agent-a", event_store=event_store, correlation_id="corr-1")
@@ -151,10 +151,10 @@ async def test_recording_outbox_no_persistence() -> None:
 async def actor_env(tmp_path: Path):
     db = await open_database(tmp_path / "actor.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)

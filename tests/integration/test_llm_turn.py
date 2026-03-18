@@ -256,10 +256,10 @@ async def _setup_llm_runtime(
 
     db = await open_database(tmp_path / "llm-turn.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
@@ -332,10 +332,10 @@ async def test_real_llm_turn_invokes_tool_and_completes(tmp_path: Path) -> None:
 
     db = await open_database(tmp_path / "llm-turn.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)
@@ -569,10 +569,10 @@ async def test_real_llm_virtual_agent_reacts_to_node_changed(tmp_path: Path) -> 
 
     db = await open_database(tmp_path / "llm-turn-virtual.db")
     event_bus = EventBus()
-    subscriptions = SubscriptionRegistry(db)
-    dispatcher = TriggerDispatcher(subscriptions)
+    dispatcher = TriggerDispatcher()
     tx = TransactionContext(db, event_bus, dispatcher)
-    subscriptions.set_tx(tx)
+    subscriptions = SubscriptionRegistry(db, tx=tx)
+    dispatcher.subscriptions = subscriptions
     node_store = NodeStore(db, tx=tx)
     await node_store.create_tables()
     event_store = EventStore(db=db, event_bus=event_bus, dispatcher=dispatcher, tx=tx)

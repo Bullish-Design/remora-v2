@@ -15,19 +15,21 @@ logger = logging.getLogger(__name__)
 
 
 class EventBus:
-    """In-memory event dispatch with exact-type subscriptions."""
+    """In-memory event dispatch with string-keyed subscriptions."""
 
     def __init__(self, max_concurrent_handlers: int = 100) -> None:
-        self._handlers: dict[type[Event], list[EventHandler]] = {}
+        self._handlers: dict[str, list[EventHandler]] = {}
         self._all_handlers: list[EventHandler] = []
         self._semaphore = asyncio.Semaphore(max_concurrent_handlers)
 
     async def emit(self, event: Event) -> None:
-        """Emit an event to exact-type, base Event, and global handlers."""
-        event_type = type(event)
-        await self._dispatch_handlers(self._handlers.get(event_type, []), event, self._semaphore)
-        if event_type is not Event:
-            await self._dispatch_handlers(self._handlers.get(Event, []), event, self._semaphore)
+        """Emit an event to matching string-keyed and global handlers."""
+        event_type_key = event.event_type
+        await self._dispatch_handlers(
+            self._handlers.get(event_type_key, []),
+            event,
+            self._semaphore,
+        )
         await self._dispatch_handlers(self._all_handlers, event, self._semaphore)
 
     @staticmethod
@@ -75,8 +77,8 @@ class EventBus:
         async with semaphore:
             await handler(event)
 
-    def subscribe(self, event_type: type[Event], handler: EventHandler) -> None:
-        """Register a handler for a specific event type."""
+    def subscribe(self, event_type: str, handler: EventHandler) -> None:
+        """Register a handler for a specific event type string."""
         self._handlers.setdefault(event_type, []).append(handler)
 
     def subscribe_all(self, handler: EventHandler) -> None:
@@ -85,7 +87,7 @@ class EventBus:
 
     def unsubscribe(self, handler: EventHandler) -> None:
         """Remove a handler from all subscriptions."""
-        empty_event_types: list[type[Event]] = []
+        empty_event_types: list[str] = []
         for event_type, handlers in self._handlers.items():
             remaining = [registered for registered in handlers if registered is not handler]
             if remaining:
@@ -99,16 +101,13 @@ class EventBus:
         ]
 
     @asynccontextmanager
-    async def stream(self, *event_types: type[Event]) -> AsyncIterator[AsyncIterator[Event]]:
+    async def stream(self, *event_types: str) -> AsyncIterator[AsyncIterator[Event]]:
         """Yield an async iterator of events for optional filtered types."""
         queue: asyncio.Queue[Event] = asyncio.Queue()
         filter_set = set(event_types) if event_types else None
 
         def enqueue(event: Event) -> None:
-            matches_filter = filter_set is None or any(
-                isinstance(event, event_type) for event_type in filter_set
-            )
-            if matches_filter:
+            if filter_set is None or event.event_type in filter_set:
                 queue.put_nowait(event)
 
         self.subscribe_all(enqueue)

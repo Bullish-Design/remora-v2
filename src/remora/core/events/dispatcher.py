@@ -20,7 +20,7 @@ class TriggerDispatcher:
 
     def __init__(
         self,
-        subscriptions: SubscriptionRegistry,
+        subscriptions: SubscriptionRegistry | None = None,
         router: Callable[[str, Event], None] | None = None,
     ):
         self._subscriptions = subscriptions
@@ -36,7 +36,7 @@ class TriggerDispatcher:
 
     async def dispatch(self, event: Event) -> None:
         """Match event against subscriptions and route to agent inboxes."""
-        if self._router is None:
+        if self._router is None or self._subscriptions is None:
             return
         matching_agents = await self._subscriptions.get_matching_agents(event)
         if logger.isEnabledFor(logging.DEBUG):
@@ -51,7 +51,13 @@ class TriggerDispatcher:
 
     @property
     def subscriptions(self) -> SubscriptionRegistry:
+        if self._subscriptions is None:
+            raise RuntimeError("TriggerDispatcher.subscriptions not yet wired")
         return self._subscriptions
+
+    @subscriptions.setter
+    def subscriptions(self, value: SubscriptionRegistry) -> None:
+        self._subscriptions = value
 
 
 __all__ = ["TriggerDispatcher"]
