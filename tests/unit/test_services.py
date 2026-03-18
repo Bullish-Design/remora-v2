@@ -27,6 +27,9 @@ class _DummySearchService:
 
 class _DummyReconciler:
     last_search_service = None
+    last_language_registry = None
+    last_subscription_manager = None
+    last_tx = None
 
     def __init__(
         self,
@@ -35,13 +38,19 @@ class _DummyReconciler:
         event_store,
         workspace_service,
         project_root,
+        language_registry,
+        subscription_manager,
         *,
         search_service=None,
+        tx=None,
     ) -> None:
         del config, node_store, event_store, workspace_service, project_root
         self._running = False
         self.stop_task = None
         type(self).last_search_service = search_service
+        type(self).last_language_registry = language_registry
+        type(self).last_subscription_manager = subscription_manager
+        type(self).last_tx = tx
 
     async def start(self, event_bus) -> None:  # noqa: ANN001
         del event_bus
@@ -86,6 +95,9 @@ async def test_runtime_services_search_disabled(tmp_path: Path, monkeypatch) -> 
     assert services.search_service is None
     assert _DummyReconciler.last_search_service is None
     assert _DummyActorPool.last_search_service is None
+    assert _DummyReconciler.last_language_registry is not None
+    assert _DummyReconciler.last_subscription_manager is not None
+    assert _DummyReconciler.last_tx is services.tx
 
     await services.close()
 
