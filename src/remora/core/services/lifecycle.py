@@ -22,7 +22,44 @@ logger = logging.getLogger(__name__)
 
 
 class RemoraLifecycle:
-    """Own startup, run loop, and ordered shutdown for runtime services."""
+    """Own startup, run loop, and ordered shutdown for runtime services.
+
+    Note on Task Management Strategy:
+
+    This class uses manual asyncio.Task management (self._tasks list) rather
+    than asyncio.TaskGroup for several critical reasons:
+
+    1. **Graceful Shutdown Required**: Each service type needs specific shutdown
+       logic that cannot be handled by simple task cancellation:
+       - ActorPool: Must call stop_and_wait() with timeout to drain in-flight work
+       - FileReconciler: Has a separate stop_task that must complete
+       - Uvicorn server: Requires should_exit flag to be set, then task must finish
+       - LSP server: Must follow LSP protocol (shutdown() then exit() sequence)
+
+    2. **Ordered Shutdown**: Services must shut down in a specific order:
+       - First: Stop accepting new work (reconciler.stop(), runner.stop())
+       - Second: Signal web server to exit
+       - Third: Close services (database connections, etc.)
+       - Fourth: LSP shutdown (if applicable)
+       - Finally: Wait for tasks to complete, then force-cancel stragglers
+
+    3. **Timeout Handling**: The shutdown sequence has a 10-second timeout for
+       graceful shutdown, after which tasks are forcibly cancelled. This prevents
+       hung services from blocking runtime shutdown indefinitely.
+
+    4. **Resource Cleanup**: File log handlers must be released to avoid FD leaks
+       across restarts. This requires explicit tracking and cleanup in finally block.
+
+    5. **LSP Protocol Compliance**: The LSP server requires a specific shutdown
+       sequence (shutdown() followed by exit()) that cannot be expressed with
+       TaskGroup's simple cancellation model.
+
+    Using TaskGroup would require wrapping all this logic anyway, defeating the
+    purpose. Manual task management, while more verbose, provides the explicit
+    control needed for production-grade graceful shutdown.
+
+    See: .scratch/projects/44-code-review-4/PHASE_4_5_IMPLEMENTATION_REVIEW.md
+    """
 
     def __init__(
         self,
@@ -54,7 +91,21 @@ class RemoraLifecycle:
         self._log_path: Path | None = None
 
     async def start(self) -> None:
-        """Initialize services and launch background runtime tasks."""
+        """Initialize services and launch background runtime tasks.
+
+        This method performs a full initialization sequence:
+        1. Configure logging to file
+        2. Open database connection
+        3. Initialize RuntimeServices (container for all services)
+        4. Perform initial discovery scan (full file system scan)
+        5. Launch background tasks (runner, reconciler, web server, LSP)
+
+        After this method completes, the runtime is fully operational and
+        ready to handle requests.
+
+        Raises:
+            RuntimeError: If RuntimeServices fails to initialize reconciler or runner.
+        """
         from remora.core.services.container import RuntimeServices
 
         db_path = self._project_root / self._config.infra.workspace_root / "remora.db"
@@ -153,7 +204,17 @@ class RemoraLifecycle:
         self._started = True
 
     async def run(self, *, run_seconds: float = 0.0) -> None:
-        """Run the lifecycle until timeout or until one task exits unexpectedly."""
+        """Run the lifecycle until timeout or until one task exits unexpectedly.
+
+        Args:
+            run_seconds: If > 0, run for this many seconds then shut down.
+                        If 0, run indefinitely until all tasks complete.
+
+        Note:
+            This method does NOT use asyncio.TaskGroup because the lifecycle
+            requires explicit control over task lifecycle for graceful shutdown.
+            See the class docstring for detailed rationale.
+        """
         if not self._started:
             raise RuntimeError("RemoraLifecycle.start() must be called before run()")
 
@@ -163,7 +224,32 @@ class RemoraLifecycle:
             await asyncio.gather(*self._tasks)
 
     async def shutdown(self) -> None:
-        """Stop tasks and close services in a deterministic order."""
+        """Stop tasks and close services in a deterministic order.
+
+        This method implements a carefully ordered shutdown sequence to ensure
+        graceful termination of all services. The order is critical:
+
+        1. Stop accepting new work (reconciler, runner)
+        2. Wait for in-flight work to complete (with timeout)
+        3. Signal web server to exit (should_exit flag)
+        4. Close services (database connections, workspace locks)
+        5. LSP shutdown (if applicable, follows LSP protocol)
+        6. Wait for tasks to complete gracefully (10s timeout)
+        7. Force-cancel any remaining tasks
+        8. Release file log handlers (prevents FD leaks)
+
+        Args:
+            None
+
+        Raises:
+            None: All exceptions are caught and logged to avoid crashing shutdown.
+
+        Note:
+            The 10-second timeout for graceful shutdown is intentional. If a service
+            cannot shut down within this time, it is forcibly cancelled to prevent
+            the runtime from hanging indefinitely. This is a safety measure, not a
+            bug — services should be designed to shut down quickly.
+        """
         services = self._services
 
         try:
