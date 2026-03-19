@@ -72,6 +72,10 @@ class FileReconciler:
         self._bundles_bootstrapped = False
 
         self._watcher = FileWatcher(config, project_root)
+
+        # Subscription lifecycle state tracking
+        self._event_bus: EventBus | None = None
+        self._content_subscription_active: bool = False
         self._directory_manager = DirectoryManager(
             config,
             node_store,
@@ -138,6 +142,11 @@ class FileReconciler:
 
     def stop(self) -> None:
         self._watcher.stop()
+        # Unsubscribe from content change events if currently subscribed
+        if self._event_bus is not None and self._content_subscription_active:
+            self._event_bus.unsubscribe(self._on_content_changed)
+            self._content_subscription_active = False
+            self._event_bus = None
 
     @property
     def stop_task(self) -> asyncio.Task | None:
@@ -145,8 +154,22 @@ class FileReconciler:
         return self._watcher.stop_task
 
     async def start(self, event_bus: EventBus) -> None:
-        """Subscribe to content change events for immediate reconciliation."""
+        """Subscribe to content change events for immediate reconciliation.
+
+        This method is idempotent - calling it multiple times with the same
+        event bus will not create duplicate subscriptions.
+        """
+        # If already subscribed to this bus, return early
+        if self._content_subscription_active and self._event_bus is event_bus:
+            return
+
+        # If subscribed to a different bus, unsubscribe first
+        if self._event_bus is not None and self._content_subscription_active:
+            self._event_bus.unsubscribe(self._on_content_changed)
+
+        self._event_bus = event_bus
         event_bus.subscribe(EventType.CONTENT_CHANGED, self._on_content_changed)
+        self._content_subscription_active = True
 
     async def _handle_watch_changes(self, changed_files: set[str]) -> None:
         """Process one watchfiles batch with isolated error handling."""
