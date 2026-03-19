@@ -171,7 +171,7 @@ def test_all_event_types_instantiate() -> None:
             turn=1,
         ),
         TurnCompleteEvent(agent_id="a", turn=1, tool_calls_count=1, errors_count=0),
-        TurnDigestedEvent(agent_id="a", summary="digest"),
+        TurnDigestedEvent(agent_id="a", digest_summary="digest"),
         ToolResultEvent(agent_id="a", tool_name="rewrite_self", result_summary="done"),
         CursorFocusEvent(file_path="src/app.py", line=3, character=0, node_id="src/app.py::a"),
     ]
@@ -216,7 +216,7 @@ def test_agent_complete_event_user_message_in_envelope() -> None:
 def test_turn_digested_event_defaults() -> None:
     event = TurnDigestedEvent(agent_id="agent-a")
     assert event.event_type == "turn_digested"
-    assert event.summary == ""
+    assert event.digest_summary == ""
     assert event.tags == ()
     assert event.has_reflection is False
     assert event.has_links is False
@@ -225,19 +225,26 @@ def test_turn_digested_event_defaults() -> None:
 def test_turn_digested_event_full() -> None:
     event = TurnDigestedEvent(
         agent_id="agent-a",
-        summary="Discussed validation",
+        digest_summary="Discussed validation",
         tags=("bug", "edge_case"),
         has_reflection=True,
         has_links=True,
     )
     assert event.agent_id == "agent-a"
-    assert event.summary == "Discussed validation"
+    assert event.digest_summary == "Discussed validation"
     assert event.tags == ("bug", "edge_case")
 
 
 def test_turn_digested_event_envelope() -> None:
-    event = TurnDigestedEvent(agent_id="agent-a", summary="test")
+    event = TurnDigestedEvent(agent_id="agent-a", digest_summary="test")
     envelope = event.to_envelope()
     assert envelope["event_type"] == "turn_digested"
     assert envelope["payload"]["agent_id"] == "agent-a"
-    assert envelope["payload"]["summary"] == "test"
+    assert envelope["payload"]["digest_summary"] == "test"
+
+
+def test_turn_digested_event_summary_method() -> None:
+    """Verify summary() method returns digest_summary value."""
+    event = TurnDigestedEvent(agent_id="agent-a", digest_summary="reflection completed")
+    assert event.summary() == "reflection completed"
+    assert event.summary() == event.digest_summary

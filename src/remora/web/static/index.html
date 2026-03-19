@@ -461,10 +461,10 @@
       return out.join("\n");
     }
 
-    function addTimelineEvent(eventType, payload) {
-      const timestamp = Number(payload?.timestamp) || (Date.now() / 1000);
-      const agent = payload?.agent_id || payload?.from_agent || payload?.to_agent || "?";
-      const summary = payload?.summary || payload?.content || payload?.node_id || "";
+function addTimelineEvent(eventType, payload) {
+    const timestamp = Number(payload?.timestamp) || (Date.now() / 1000);
+    const agent = payload?.agent_id || payload?.from_agent || payload?.to_agent || "?";
+    const summary = payload?.digest_summary || payload?.summary || payload?.content || payload?.node_id || "";
       timelineEvents.push({
         eventType: eventType || "Event",
         timestamp,

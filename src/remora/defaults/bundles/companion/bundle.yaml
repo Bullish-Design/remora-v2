@@ -18,7 +18,7 @@ system_prompt: |
 prompts:
   reactive: |
     A turn_digested event arrived. An agent just finished self-reflection.
-    Review the event data (agent_id, summary, tags).
+    Review the event data (agent_id, digest_summary, tags).
     Use aggregate_digest to update your project-level tracking.
 model: "Qwen/Qwen3-1.7B"
 max_turns: 3

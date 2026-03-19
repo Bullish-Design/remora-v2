@@ -209,9 +209,12 @@ class TurnDigestedEvent(Event):
 
     event_type: str = EventType.TURN_DIGESTED
     agent_id: str
-    summary: str = ""
+    digest_summary: str = ""
     has_reflection: bool = False
     has_links: bool = False
+
+    def summary(self) -> str:
+        return self.digest_summary
 
 
 class CustomEvent(Event):
