@@ -17,6 +17,10 @@ class Metrics:
     events_emitted_total: int = 0
     workspace_provisions_total: int = 0
     workspace_cache_hits: int = 0
+    actor_inbox_overflow_total: int = 0
+    actor_inbox_dropped_oldest_total: int = 0
+    actor_inbox_dropped_new_total: int = 0
+    actor_inbox_rejected_total: int = 0
 
     # Gauges (current values)
     active_actors: int = 0
@@ -45,6 +49,9 @@ class Metrics:
             "workspace_cache_hit_rate": round(self.cache_hit_rate, 3),
             "active_actors": self.active_actors,
             "pending_inbox_items": self.pending_inbox_items,
+            "actor_inbox_overflow_total": self.actor_inbox_overflow_total,
+            "actor_inbox_dropped_oldest_total": self.actor_inbox_dropped_oldest_total,
+            "actor_inbox_dropped_new_total": self.actor_inbox_dropped_new_total,
+            "actor_inbox_rejected_total": self.actor_inbox_rejected_total,
             "uptime_seconds": round(self.uptime_seconds, 1),
         }
-

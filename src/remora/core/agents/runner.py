@@ -9,7 +9,7 @@ import time
 from remora.core.agents.actor import Actor
 from remora.core.events import EventStore, TriggerDispatcher
 from remora.core.events.types import Event
-from remora.core.model.config import Config
+from remora.core.model.config import Config, OverflowPolicy
 from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
 from remora.core.services.search import SearchServiceProtocol
@@ -55,11 +55,62 @@ class ActorPool:
             self._dispatcher.router = self._route_to_actor
 
     def _route_to_actor(self, agent_id: str, event: Event) -> None:
-        """Route an event to the target agent's inbox, creating the actor if needed."""
+        """Route an event to the target agent's inbox, creating the actor if needed.
+
+        Handles queue overflow according to configured policy.
+        """
         if not self._accepting_events:
             return
         actor = self.get_or_create_actor(agent_id)
-        actor.inbox.put_nowait(event)
+
+        try:
+            actor.inbox.put_nowait(event)
+            self._refresh_pending_inbox_items()
+        except asyncio.QueueFull:
+            self._handle_inbox_overflow(actor, event, agent_id)
+
+    def _handle_inbox_overflow(self, actor: Actor, event: Event, agent_id: str) -> None:
+        """Handle queue full condition according to overflow policy."""
+        policy = self._config.runtime.actor_inbox_overflow_policy
+        max_size = self._config.runtime.actor_inbox_max_items
+
+        if self._metrics:
+            self._metrics.actor_inbox_overflow_total += 1
+
+        logger.warning(
+            "Actor inbox overflow: agent_id=%s policy=%s queue_size=%d",
+            agent_id,
+            policy,
+            max_size,
+        )
+
+        if policy == OverflowPolicy.DROP_OLDEST:
+            try:
+                dropped = actor.inbox.get_nowait()
+                if dropped is not None:
+                    actor.inbox.put_nowait(event)
+                    if self._metrics:
+                        self._metrics.actor_inbox_dropped_oldest_total += 1
+                    logger.warning("Dropped oldest event from inbox: agent_id=%s", agent_id)
+                else:
+                    logger.warning(
+                        "Inbox was unexpectedly empty during drop_oldest: agent_id=%s",
+                        agent_id,
+                    )
+            except asyncio.QueueEmpty:
+                logger.warning(
+                    "Inbox was unexpectedly empty during drop_oldest: agent_id=%s",
+                    agent_id,
+                )
+        elif policy == OverflowPolicy.DROP_NEW:
+            if self._metrics:
+                self._metrics.actor_inbox_dropped_new_total += 1
+            logger.warning("Dropped new event due to inbox overflow: agent_id=%s", agent_id)
+        elif policy == OverflowPolicy.REJECT:
+            if self._metrics:
+                self._metrics.actor_inbox_rejected_total += 1
+            logger.warning("Rejected event due to inbox overflow: agent_id=%s", agent_id)
+
         self._refresh_pending_inbox_items()
 
     def get_or_create_actor(self, node_id: str) -> Actor:

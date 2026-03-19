@@ -39,7 +39,9 @@ class Actor:
         broker: HumanInputBroker | None = None,
     ) -> None:
         self.node_id = node_id
-        self.inbox: asyncio.Queue[Event | None] = asyncio.Queue()
+        self.inbox: asyncio.Queue[Event | None] = asyncio.Queue(
+            maxsize=config.runtime.actor_inbox_max_items
+        )
         self._event_store = event_store
         self._task: asyncio.Task | None = None
         self._last_active: float = time.time()

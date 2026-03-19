@@ -10,7 +10,13 @@ import pytest_asyncio
 from tests.factories import make_node
 
 from remora.core.agents.actor import Actor, PromptBuilder, TriggerPolicy
-from remora.core.model.config import BehaviorConfig, Config, InfraConfig, RuntimeConfig
+from remora.core.model.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    OverflowPolicy,
+    RuntimeConfig,
+)
 from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
@@ -298,3 +304,227 @@ async def test_runner_evict_idle_uses_config_timeout(tmp_path: Path) -> None:
         await runner.stop_and_wait()
         await workspace_service.close()
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_drop_new_policy_caps_queue_and_drops_newest(tmp_path: Path) -> None:
+    """drop_new policy should keep queue length capped and drop newest event."""
+    db = await open_database(tmp_path / "runner-drop-new.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    config = Config(
+        infra=InfraConfig(workspace_root=".remora-runner-drop-new"),
+        runtime=RuntimeConfig(
+            actor_inbox_max_items=3,
+            actor_inbox_overflow_policy=OverflowPolicy.DROP_NEW,
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+    runner = ActorPool(event_store, node_store, workspace_service, config)
+
+    try:
+        actor = runner.get_or_create_actor("drop-new-agent")
+        events = [
+            AgentMessageEvent(from_agent="a", to_agent="drop-new-agent", content=f"msg-{i}")
+            for i in range(5)
+        ]
+
+        for event in events:
+            runner._route_to_actor("drop-new-agent", event)
+
+        # Queue should be capped at max_items
+        assert actor.inbox.qsize() <= config.runtime.actor_inbox_max_items
+
+        # Should have first 3 events (oldest), dropped 2 newest
+        assert actor.inbox.qsize() == 3
+    finally:
+        await runner.stop_and_wait()
+        await workspace_service.close()
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_drop_oldest_policy_caps_queue_and_evicts_earliest(tmp_path: Path) -> None:
+    """drop_oldest policy should keep queue length capped and evict earliest event."""
+    db = await open_database(tmp_path / "runner-drop-oldest.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    config = Config(
+        infra=InfraConfig(workspace_root=".remora-runner-drop-oldest"),
+        runtime=RuntimeConfig(
+            actor_inbox_max_items=3,
+            actor_inbox_overflow_policy=OverflowPolicy.DROP_OLDEST,
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+    runner = ActorPool(event_store, node_store, workspace_service, config)
+
+    try:
+        actor = runner.get_or_create_actor("drop-oldest-agent")
+        events = [
+            AgentMessageEvent(from_agent="a", to_agent="drop-oldest-agent", content=f"msg-{i}")
+            for i in range(5)
+        ]
+
+        for event in events:
+            runner._route_to_actor("drop-oldest-agent", event)
+
+        # Queue should be capped at max_items
+        assert actor.inbox.qsize() <= config.runtime.actor_inbox_max_items
+
+        # Should have last 3 events (newest), dropped 2 oldest
+        assert actor.inbox.qsize() == 3
+    finally:
+        await runner.stop_and_wait()
+        await workspace_service.close()
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_reject_policy_caps_queue_and_increments_metrics(tmp_path: Path) -> None:
+    """reject policy should keep queue length capped and increment reject metrics."""
+    from remora.core.services.metrics import Metrics
+
+    db = await open_database(tmp_path / "runner-reject.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    metrics = Metrics()
+    config = Config(
+        infra=InfraConfig(workspace_root=".remora-runner-reject"),
+        runtime=RuntimeConfig(
+            actor_inbox_max_items=3,
+            actor_inbox_overflow_policy=OverflowPolicy.REJECT,
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+    runner = ActorPool(event_store, node_store, workspace_service, config, metrics=metrics)
+
+    try:
+        actor = runner.get_or_create_actor("reject-agent")
+        events = [
+            AgentMessageEvent(from_agent="a", to_agent="reject-agent", content=f"msg-{i}")
+            for i in range(5)
+        ]
+
+        for event in events:
+            runner._route_to_actor("reject-agent", event)
+
+        # Queue should be capped at max_items
+        assert actor.inbox.qsize() <= config.runtime.actor_inbox_max_items
+
+        # Should have first 3 events, rejected 2
+        assert actor.inbox.qsize() == 3
+        assert metrics.actor_inbox_overflow_total == 2
+        assert metrics.actor_inbox_rejected_total == 2
+        assert metrics.actor_inbox_dropped_new_total == 0
+        assert metrics.actor_inbox_dropped_oldest_total == 0
+    finally:
+        await runner.stop_and_wait()
+        await workspace_service.close()
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_overflow_metrics_all_policies(tmp_path: Path) -> None:
+    """Verify overflow counters are incremented correctly for all policies."""
+    from remora.core.services.metrics import Metrics
+
+    for policy in OverflowPolicy:
+        db = await open_database(tmp_path / f"runner-{policy.value}.db")
+        node_store = NodeStore(db)
+        await node_store.create_tables()
+        event_store = EventStore(db=db)
+        await event_store.create_tables()
+        metrics = Metrics()
+        config = Config(
+            infra=InfraConfig(workspace_root=f".remora-runner-{policy.value}"),
+            runtime=RuntimeConfig(
+                actor_inbox_max_items=2,
+                actor_inbox_overflow_policy=policy,
+            ),
+        )
+        workspace_service = CairnWorkspaceService(config, tmp_path)
+        await workspace_service.initialize()
+        runner = ActorPool(event_store, node_store, workspace_service, config, metrics=metrics)
+
+        try:
+            actor = runner.get_or_create_actor(f"{policy.value}-agent")
+            events = [
+                AgentMessageEvent(
+                    from_agent="a", to_agent=f"{policy.value}-agent", content=f"msg-{i}"
+                )
+                for i in range(5)
+            ]
+
+            for event in events:
+                runner._route_to_actor(f"{policy.value}-agent", event)
+
+            # Verify queue never exceeds max
+            assert actor.inbox.qsize() <= config.runtime.actor_inbox_max_items
+
+            # Verify overflow counter was incremented
+            assert metrics.actor_inbox_overflow_total == 3  # 5 events - 2 max = 3 overflow
+
+            if policy == OverflowPolicy.DROP_NEW:
+                assert metrics.actor_inbox_dropped_new_total == 3
+            elif policy == OverflowPolicy.DROP_OLDEST:
+                assert metrics.actor_inbox_dropped_oldest_total == 3
+            elif policy == OverflowPolicy.REJECT:
+                assert metrics.actor_inbox_rejected_total == 3
+
+        finally:
+            await runner.stop_and_wait()
+            await workspace_service.close()
+            await db.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_synthetic_overload_never_exceeds_max(tmp_path: Path) -> None:
+    """Synthetic overload test: queue never exceeds max during high-volume routing."""
+    from remora.core.services.metrics import Metrics
+
+    db = await open_database(tmp_path / "runner-overload.db")
+    node_store = NodeStore(db)
+    await node_store.create_tables()
+    event_store = EventStore(db=db)
+    await event_store.create_tables()
+    metrics = Metrics()
+    max_items = 5
+    config = Config(
+        infra=InfraConfig(workspace_root=".remora-runner-overload"),
+        runtime=RuntimeConfig(
+            actor_inbox_max_items=max_items,
+            actor_inbox_overflow_policy=OverflowPolicy.DROP_NEW,
+        ),
+    )
+    workspace_service = CairnWorkspaceService(config, tmp_path)
+    await workspace_service.initialize()
+    runner = ActorPool(event_store, node_store, workspace_service, config, metrics=metrics)
+
+    try:
+        actor = runner.get_or_create_actor("overload-agent")
+
+        # Rapidly queue 100 events
+        for i in range(100):
+            event = AgentMessageEvent(from_agent="a", to_agent="overload-agent", content=f"msg-{i}")
+            runner._route_to_actor("overload-agent", event)
+            # Check after each event that we never exceeded max
+            assert actor.inbox.qsize() <= max_items, f"Queue exceeded max at event {i}"
+
+        # Final verification
+        assert actor.inbox.qsize() <= max_items
+        assert metrics.actor_inbox_overflow_total == 95  # 100 - 5 = 95 overflow
+    finally:
+        await runner.stop_and_wait()
+        await workspace_service.close()
+        await db.close()
+

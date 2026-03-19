@@ -116,6 +116,14 @@ class ProjectConfig(BaseModel):
         return cleaned
 
 
+class OverflowPolicy(StrEnum):
+    """Overflow policy for actor inbox when queue is full."""
+
+    DROP_OLDEST = "drop_oldest"
+    DROP_NEW = "drop_new"
+    REJECT = "reject"
+
+
 class RuntimeConfig(BaseModel):
     """Execution engine settings."""
 
@@ -128,6 +136,15 @@ class RuntimeConfig(BaseModel):
     send_message_rate_window_s: float = 1.0
     search_content_max_matches: int = 1000
     broadcast_max_targets: int = 50
+    actor_inbox_max_items: int = 1000
+    actor_inbox_overflow_policy: OverflowPolicy = OverflowPolicy.DROP_NEW
+
+    @field_validator("actor_inbox_max_items")
+    @classmethod
+    def _validate_inbox_size(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("actor_inbox_max_items must be greater than 0")
+        return value
 
 
 class InfraConfig(BaseModel):
@@ -404,6 +421,7 @@ def _resolve_search_paths(
 __all__ = [
     "BundleConfig",
     "BundleOverlayRule",
+    "OverflowPolicy",
     "ProjectConfig",
     "RuntimeConfig",
     "InfraConfig",

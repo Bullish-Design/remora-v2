@@ -229,3 +229,32 @@ def test_load_config_deep_merges_language_map(tmp_path: Path) -> None:
     config = load_config(user_config)
     assert config.behavior.language_map[".rs"] == "rust"
     assert config.behavior.language_map[".py"] == "python"
+
+
+def test_runtime_config_actor_inbox_defaults() -> None:
+    """Default values for actor inbox configuration."""
+    from remora.core.model.config import OverflowPolicy, RuntimeConfig
+
+    config = RuntimeConfig()
+    assert config.actor_inbox_max_items == 1000
+    assert config.actor_inbox_overflow_policy == OverflowPolicy.DROP_NEW
+
+
+def test_runtime_config_invalid_overflow_policy_rejected() -> None:
+    """Invalid overflow policy values should be rejected."""
+    from remora.core.model.config import RuntimeConfig
+
+    # Pydantic v2 validates enum by string value - invalid value raises ValidationError
+    with pytest.raises(ValidationError):
+        RuntimeConfig(actor_inbox_overflow_policy="invalid_policy")  # type: ignore[arg-type]
+
+
+def test_runtime_config_invalid_inbox_size_rejected() -> None:
+    """Invalid inbox sizes should be rejected."""
+    from remora.core.model.config import RuntimeConfig
+
+    with pytest.raises(ValidationError):
+        RuntimeConfig(actor_inbox_max_items=0)
+
+    with pytest.raises(ValidationError):
+        RuntimeConfig(actor_inbox_max_items=-1)

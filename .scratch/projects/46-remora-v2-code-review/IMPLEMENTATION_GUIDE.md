@@ -75,14 +75,14 @@ High-level ownership map:
 
 Follow this process exactly to avoid environment and regression issues.
 
-1. Run dependency sync before the first test command in this session.
+1. Run dependency sync before the first test command in this session. 
 
 ```bash
 devenv shell -- uv sync --extra dev
 ```
 
 2. Use `devenv shell --` for all tests and runtime commands.
-3. Keep changes in small, reviewable commits aligned to steps in this guide.
+3. Keep changes in small, reviewable commits aligned to steps in this guide. Commit after each step. 
 4. Update tests in the same commit as the behavior change.
 5. Do not start a new step until the previous step's test checklist is green.
 6. Use failing-test-first workflow for each behavior change.
