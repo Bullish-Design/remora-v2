@@ -43,9 +43,8 @@ class FileCapabilities:
     async def read_file(self, path: str) -> str:
         return await self._workspace.read(path)
 
-    async def write_file(self, path: str, content: str) -> bool:
+    async def write_file(self, path: str, content: str) -> None:
         await self._workspace.write(path, content)
-        return True
 
     async def list_dir(self, path: str = ".") -> list[str]:
         return await self._workspace.list_dir(path)
@@ -95,13 +94,11 @@ class KVCapabilities:
     async def kv_get(self, key: str) -> Any | None:
         return await self._workspace.kv_get(key)
 
-    async def kv_set(self, key: str, value: Any) -> bool:
+    async def kv_set(self, key: str, value: Any) -> None:
         await self._workspace.kv_set(key, value)
-        return True
 
-    async def kv_delete(self, key: str) -> bool:
+    async def kv_delete(self, key: str) -> None:
         await self._workspace.kv_delete(key)
-        return True
 
     async def kv_list(self, prefix: str = "") -> list[str]:
         return await self._workspace.kv_list(prefix)
@@ -203,7 +200,7 @@ class EventCapabilities:
         event_type: str,
         payload: dict[str, Any],
         tags: list[str] | None = None,
-    ) -> bool:
+    ) -> None:
         event = CustomEvent(
             event_type=event_type,
             payload=payload,
@@ -211,7 +208,6 @@ class EventCapabilities:
             tags=tuple(tags or ()),
         )
         await self._emit(event)
-        return True
 
     async def event_subscribe(
         self,
@@ -271,9 +267,9 @@ class CommunicationCapabilities:
         self._broadcast_max_targets = max(1, int(broadcast_max_targets))
         self._send_message_limiter = send_message_limiter
 
-    async def send_message(self, to_node_id: str, content: str) -> bool:
+    async def send_message(self, to_node_id: str, content: str) -> dict[str, str | bool]:
         if not self._allow_send_message():
-            return False
+            return {"sent": False, "reason": "rate_limited"}
         await self._emit(
             AgentMessageEvent(
                 from_agent=self._node_id,
@@ -282,7 +278,7 @@ class CommunicationCapabilities:
                 correlation_id=self._correlation_id,
             )
         )
-        return True
+        return {"sent": True, "reason": "sent"}
 
     async def broadcast(self, pattern: str, content: str) -> str:
         nodes = await self._node_store.list_nodes()

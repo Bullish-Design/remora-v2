@@ -76,6 +76,9 @@ def create_app(
     actor_pool: ActorPool | None = None,
     workspace_service: CairnWorkspaceService | None = None,
     search_service: SearchServiceProtocol | None = None,
+    chat_message_max_chars: int = 4000,
+    conversation_history_max_entries: int = 200,
+    conversation_message_max_chars: int = 2000,
 ) -> Starlette:
     """Create Starlette app exposing graph APIs, events, and chat."""
     deps = WebDeps(
@@ -89,6 +92,9 @@ def create_app(
         search_service=search_service,
         shutdown_event=asyncio.Event(),
         chat_limiters={},
+        chat_message_max_chars=chat_message_max_chars,
+        conversation_history_max_entries=conversation_history_max_entries,
+        conversation_message_max_chars=conversation_message_max_chars,
     )
     app = Starlette(routes=_build_routes(), lifespan=_build_lifespan(deps.shutdown_event))
     app.state.deps = deps

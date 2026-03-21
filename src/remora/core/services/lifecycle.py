@@ -171,6 +171,9 @@ class RemoraLifecycle:
                 actor_pool=services.runner,
                 workspace_service=services.workspace_service,
                 search_service=services.search_service,
+                chat_message_max_chars=self._config.runtime.chat_message_max_chars,
+                conversation_history_max_entries=self._config.runtime.conversation_history_max_entries,
+                conversation_message_max_chars=self._config.runtime.conversation_message_max_chars,
             )
             logger.info("Starting web server on %s:%d", self._bind, self._port)
             web_config = uvicorn.Config(

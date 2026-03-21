@@ -120,7 +120,7 @@ async def test_externals_workspace_ops(context_env) -> None:
     context = await _context(node.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    assert await externals["write_file"]("notes/a.txt", "hello")
+    await externals["write_file"]("notes/a.txt", "hello")
     assert await externals["read_file"]("notes/a.txt") == "hello"
     assert await externals["file_exists"]("notes/a.txt") is True
     assert "a.txt" in await externals["list_dir"]("notes")
@@ -159,11 +159,11 @@ async def test_externals_kv_ops(context_env) -> None:
     context = await _context(node.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    assert await externals["kv_set"]("state/name", "alpha")
+    await externals["kv_set"]("state/name", "alpha")
     assert await externals["kv_get"]("state/name") == "alpha"
     assert await externals["kv_get"]("state/missing") is None
     assert await externals["kv_list"]("state/") == ["state/name"]
-    assert await externals["kv_delete"]("state/name")
+    await externals["kv_delete"]("state/name")
     assert await externals["kv_get"]("state/name") is None
 
 
@@ -244,7 +244,7 @@ async def test_externals_event_ops(context_env) -> None:
 
     sub_id = await externals["event_subscribe"](["agent_message"], None, None)
     assert isinstance(sub_id, int)
-    assert await externals["event_emit"]("custom", {"value": "x"}, tags=["scaffold"])
+    await externals["event_emit"]("custom", {"value": "x"}, tags=["scaffold"])
     stored = await event_store.get_events(limit=10)
     custom = next(event for event in stored if event["event_type"] == "custom")
     assert custom["payload"]["value"] == "x"
@@ -368,7 +368,8 @@ async def test_externals_communication(context_env) -> None:
     context = await _context(sender.node_id, ws, node_store, event_store)
     externals = context.to_capabilities_dict()
 
-    assert await externals["send_message"](target_a.node_id, "direct")
+    send_result = await externals["send_message"](target_a.node_id, "direct")
+    assert send_result == {"sent": True, "reason": "sent"}
     summary = await externals["broadcast"]("*", "all")
     assert "Broadcast sent to" in summary
     events = await event_store.get_events(limit=10)
@@ -563,9 +564,12 @@ async def test_externals_send_message_rate_limit(context_env) -> None:
     )
     externals = context.to_capabilities_dict()
 
-    assert await externals["send_message"](target.node_id, "one")
-    assert await externals["send_message"](target.node_id, "two")
-    assert not await externals["send_message"](target.node_id, "three")
+    first = await externals["send_message"](target.node_id, "one")
+    second = await externals["send_message"](target.node_id, "two")
+    third = await externals["send_message"](target.node_id, "three")
+    assert first == {"sent": True, "reason": "sent"}
+    assert second == {"sent": True, "reason": "sent"}
+    assert third == {"sent": False, "reason": "rate_limited"}
 
 
 @pytest.mark.asyncio
@@ -602,8 +606,10 @@ async def test_externals_send_message_rate_limit_persists_across_turns(
     first_externals = first.to_capabilities_dict()
     second_externals = second.to_capabilities_dict()
 
-    assert await first_externals["send_message"](target.node_id, "one")
-    assert not await second_externals["send_message"](target.node_id, "blocked-in-next-turn")
+    first_result = await first_externals["send_message"](target.node_id, "one")
+    second_result = await second_externals["send_message"](target.node_id, "blocked-in-next-turn")
+    assert first_result == {"sent": True, "reason": "sent"}
+    assert second_result == {"sent": False, "reason": "rate_limited"}
 
 
 @pytest.mark.asyncio

@@ -87,7 +87,7 @@ async def test_reconciler_start_is_idempotent(tmp_path: Path) -> None:
         assert len(reconcile_calls) == 1
 
     finally:
-        await reconciler.stop()
+        reconciler.stop()
         await workspace_service.close()
         await db.close()
 
@@ -237,6 +237,6 @@ async def test_reconciler_start_after_stop_re_subscribes(tmp_path: Path) -> None
         assert len(reconcile_calls) == 1
 
     finally:
-        await reconciler.stop()
+        reconciler.stop()
         await workspace_service.close()
         await db.close()

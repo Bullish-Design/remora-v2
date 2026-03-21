@@ -45,9 +45,9 @@ def _load_bundle_tools(tool_paths: list[Path]) -> dict[str, str]:
 async def test_fixture_tools_execute_via_grail_runtime() -> None:
     sent_payloads: list[tuple[str, str]] = []
 
-    async def send_message(to_node_id: str, content: str) -> bool:
+    async def send_message(to_node_id: str, content: str) -> dict[str, object]:
         sent_payloads.append((to_node_id, content))
-        return True
+        return {"sent": True, "reason": "sent"}
 
     async def graph_get_children(parent_id: str | None = None) -> list[dict]:
         del parent_id
@@ -88,8 +88,10 @@ async def test_fixture_tools_execute_via_grail_runtime() -> None:
 
 @pytest.mark.asyncio
 async def test_bundle_tools_execute_via_grail_runtime() -> None:
-    async def send_message(to_node_id: str, content: str) -> bool:
-        return bool(to_node_id and content)
+    async def send_message(to_node_id: str, content: str) -> dict[str, object]:
+        if to_node_id and content:
+            return {"sent": True, "reason": "sent"}
+        return {"sent": False, "reason": "rate_limited"}
 
     async def graph_get_children(parent_id: str | None = None) -> list[dict]:
         del parent_id

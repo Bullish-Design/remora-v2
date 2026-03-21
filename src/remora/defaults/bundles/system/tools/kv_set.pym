@@ -6,9 +6,9 @@ value: str = Input("value")
 
 
 @external
-async def kv_set(key: str, value: str) -> bool: ...
+async def kv_set(key: str, value: str) -> None: ...
 
 
-ok = await kv_set(key, value)
-message = f"Stored value for {key}" if ok else f"Failed to store value for {key}"
+await kv_set(key, value)
+message = f"Stored value for {key}"
 message

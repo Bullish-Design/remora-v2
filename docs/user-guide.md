@@ -106,6 +106,11 @@ Agent runtime:
 - `max_concurrency`
 - `max_trigger_depth`
 - `trigger_cooldown_ms`
+- `actor_inbox_max_items`
+- `actor_inbox_overflow_policy` (`drop_new`, `drop_oldest`, `reject`)
+- `chat_message_max_chars`
+- `conversation_history_max_entries`
+- `conversation_message_max_chars`
 
 Workspace behavior:
 
@@ -245,6 +250,13 @@ Endpoints used by the UI include:
 - `GET /api/nodes/{node_id}/conversation`
 - `GET /sse`
 
+Runtime limits:
+
+- `POST /api/chat` returns `413` when `message` exceeds `chat_message_max_chars`.
+- `GET /api/nodes/{node_id}/conversation` clips history to the most recent
+  `conversation_history_max_entries` items and truncates each message content to
+  `conversation_message_max_chars`.
+
 ## 7. LSP Integration
 
 ### Embedded Mode
@@ -303,4 +315,3 @@ Use SQLite tooling against `.remora/remora.db` to inspect:
 - `edges`
 - `events`
 - `subscriptions`
-

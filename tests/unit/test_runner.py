@@ -132,6 +132,9 @@ async def test_runner_stop_and_wait(runner_env) -> None:
     runner.get_or_create_actor("b")
     assert len(runner.actors) == 2
     await runner.stop_and_wait()
+    await runner.stop_and_wait()
+    runner.stop()
+    runner.stop()
     assert len(runner.actors) == 0
 
 
@@ -340,6 +343,8 @@ async def test_runner_drop_new_policy_caps_queue_and_drops_newest(tmp_path: Path
 
         # Should have first 3 events (oldest), dropped 2 newest
         assert actor.inbox.qsize() == 3
+        queued_contents = [queued_event.content for queued_event in list(actor.inbox._queue)]
+        assert queued_contents == ["msg-0", "msg-1", "msg-2"]
     finally:
         await runner.stop_and_wait()
         await workspace_service.close()
@@ -380,6 +385,8 @@ async def test_runner_drop_oldest_policy_caps_queue_and_evicts_earliest(tmp_path
 
         # Should have last 3 events (newest), dropped 2 oldest
         assert actor.inbox.qsize() == 3
+        queued_contents = [queued_event.content for queued_event in list(actor.inbox._queue)]
+        assert queued_contents == ["msg-2", "msg-3", "msg-4"]
     finally:
         await runner.stop_and_wait()
         await workspace_service.close()
@@ -527,4 +534,3 @@ async def test_runner_synthetic_overload_never_exceeds_max(tmp_path: Path) -> No
         await runner.stop_and_wait()
         await workspace_service.close()
         await db.close()
-

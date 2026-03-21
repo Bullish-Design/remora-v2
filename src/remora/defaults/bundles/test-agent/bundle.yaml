@@ -1,5 +1,5 @@
 name: test-agent
-externals_version: 1
+externals_version: 2
 tools_dir: tools
 system_prompt: >-
   You are a test scaffolding virtual agent.

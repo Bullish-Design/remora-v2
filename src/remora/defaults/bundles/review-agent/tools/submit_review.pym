@@ -8,7 +8,7 @@ notify_user: bool = Input("notify_user", default=False)
 
 
 @external
-async def send_message(to_agent: str, content: str) -> bool: ...
+async def send_message(to_agent: str, content: str) -> dict[str, object]: ...
 
 
 review_message = f"[Review/{severity.upper()}] {finding}"
@@ -16,8 +16,9 @@ submitted = await send_message(node_id, review_message)
 if notify_user:
     await send_message("user", f"Review of {node_id}: {review_message}")
 
-if submitted:
+if submitted.get("sent"):
     result = f"Review submitted to {node_id} (severity={severity})"
 else:
-    result = f"Failed to submit review to {node_id}"
+    reason = str(submitted.get("reason", "unknown"))
+    result = f"Failed to submit review to {node_id} ({reason})"
 result

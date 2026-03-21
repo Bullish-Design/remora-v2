@@ -66,19 +66,19 @@ def _write_bundles(root: Path) -> None:
         "from grail import Input, external\n"
         "to_node_id: str = Input('to_node_id')\n"
         "content: str = Input('content')\n"
-        "@external\nasync def send_message(to_node_id: str, content: str) -> bool: ...\n"
+        "@external\nasync def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n"
         "result = await send_message(to_node_id, content)\n"
-        "if result:\n"
+        "if result.get('sent'):\n"
         "    message = f'Message sent to {to_node_id}'\n"
         "else:\n"
-        "    message = f'Failed to send message to {to_node_id}'\n"
+        "    message = f\"Message not sent to {to_node_id} ({result.get('reason', 'unknown')})\"\n"
         "message\n",
     )
     write_file(
         code / "tools" / "rewrite_self.pym",
         "from grail import Input, external\n"
         "new_source: str = Input('new_source')\n"
-        "@external\nasync def write_file(path: str, content: str) -> bool: ...\n"
+        "@external\nasync def write_file(path: str, content: str) -> None: ...\n"
         "@external\nasync def propose_changes(reason: str = '') -> str: ...\n"
         "@external\nasync def my_node_id() -> str: ...\n"
         "node_id = await my_node_id()\n"

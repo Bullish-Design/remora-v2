@@ -59,4 +59,4 @@ prompt_templates:
     Be specific. Skip trivial exchanges.
 
 # Externals API version (incremented when capabilities change)
-externals_version: 1
+externals_version: 2

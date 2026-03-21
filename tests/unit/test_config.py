@@ -258,3 +258,31 @@ def test_runtime_config_invalid_inbox_size_rejected() -> None:
 
     with pytest.raises(ValidationError):
         RuntimeConfig(actor_inbox_max_items=-1)
+
+
+def test_runtime_config_api_limit_defaults() -> None:
+    """Default values for chat/conversation API bounds."""
+    from remora.core.model.config import RuntimeConfig
+
+    config = RuntimeConfig()
+    assert config.chat_message_max_chars == 4000
+    assert config.conversation_history_max_entries == 200
+    assert config.conversation_message_max_chars == 2000
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("chat_message_max_chars", 0),
+        ("chat_message_max_chars", -1),
+        ("conversation_history_max_entries", 0),
+        ("conversation_history_max_entries", -5),
+        ("conversation_message_max_chars", 0),
+        ("conversation_message_max_chars", -10),
+    ],
+)
+def test_runtime_config_api_limits_must_be_positive(field_name: str, value: int) -> None:
+    from remora.core.model.config import RuntimeConfig
+
+    with pytest.raises(ValidationError):
+        RuntimeConfig(**{field_name: value})

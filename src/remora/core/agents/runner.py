@@ -72,7 +72,7 @@ class ActorPool:
     def _handle_inbox_overflow(self, actor: Actor, event: Event, agent_id: str) -> None:
         """Handle queue full condition according to overflow policy."""
         policy = self._config.runtime.actor_inbox_overflow_policy
-        max_size = self._config.runtime.actor_inbox_max_items
+        queue_size = actor.inbox.qsize()
 
         if self._metrics:
             self._metrics.actor_inbox_overflow_total += 1
@@ -81,7 +81,7 @@ class ActorPool:
             "Actor inbox overflow: agent_id=%s policy=%s queue_size=%d",
             agent_id,
             policy,
-            max_size,
+            queue_size,
         )
 
         if policy == OverflowPolicy.DROP_OLDEST:

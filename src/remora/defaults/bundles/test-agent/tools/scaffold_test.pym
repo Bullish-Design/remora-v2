@@ -6,7 +6,7 @@ test_type: str = Input("test_type", default="unit")
 
 
 @external
-async def event_emit(event_type: str, payload: dict) -> bool: ...
+async def event_emit(event_type: str, payload: dict) -> None: ...
 
 
 @external
@@ -22,9 +22,6 @@ else:
         "intent": f"Create {test_type} tests for {node.get('name', 'unknown')}",
         "element_type": node.get("node_type", "function"),
     }
-    sent = await event_emit("ScaffoldRequestEvent", payload)
-    if sent:
-        result = f"Test scaffold request submitted for {node.get('name', 'unknown')} ({test_type})"
-    else:
-        result = f"Test scaffold request failed for {node.get('name', 'unknown')} ({test_type})"
+    await event_emit("ScaffoldRequestEvent", payload)
+    result = f"Test scaffold request submitted for {node.get('name', 'unknown')} ({test_type})"
 result

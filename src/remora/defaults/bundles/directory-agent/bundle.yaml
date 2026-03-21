@@ -1,6 +1,6 @@
 # This file is readable and writable by the node at runtime.
 name: directory-agent
-externals_version: 1
+externals_version: 2
 system_prompt_extension: |
   You are an autonomous AI agent managing a directory in the project.
 

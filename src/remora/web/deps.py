@@ -38,6 +38,9 @@ class WebDeps:
     search_service: SearchServiceProtocol | None
     shutdown_event: asyncio.Event
     chat_limiters: dict[str, SlidingWindowRateLimiter]
+    chat_message_max_chars: int
+    conversation_history_max_entries: int
+    conversation_message_max_chars: int
 
 
 def _deps_from_request(request: Request) -> WebDeps:

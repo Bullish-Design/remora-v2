@@ -78,12 +78,12 @@ def _write_llm_test_bundles(root: Path, model_name: str) -> None:
             'to_node_id: str = Input("to_node_id")\n'
             'content: str = Input("content")\n\n'
             "@external\n"
-            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
             "result = await send_message(to_node_id, content)\n"
-            "if result:\n"
+            "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Failed to send message to {to_node_id}"\n'
+            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
             "message\n"
         ),
     )
@@ -115,12 +115,12 @@ def _write_kv_roundtrip_bundles(root: Path, model_name: str) -> None:
             'to_node_id: str = Input("to_node_id")\n'
             'content: str = Input("content")\n\n'
             "@external\n"
-            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
             "result = await send_message(to_node_id, content)\n"
-            "if result:\n"
+            "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Failed to send message to {to_node_id}"\n'
+            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
             "message\n"
         ),
     )
@@ -131,9 +131,9 @@ def _write_kv_roundtrip_bundles(root: Path, model_name: str) -> None:
             'key: str = Input("key")\n'
             'value: str = Input("value")\n\n'
             "@external\n"
-            "async def kv_set(key: str, value: str) -> bool: ...\n\n"
-            "ok = await kv_set(key, value)\n"
-            'message = f"Stored value for {key}" if ok else f"Failed to store value for {key}"\n'
+            "async def kv_set(key: str, value: str) -> None: ...\n\n"
+            "await kv_set(key, value)\n"
+            'message = f"Stored value for {key}"\n'
             "message\n"
         ),
     )
@@ -185,12 +185,12 @@ def _write_reactive_mode_bundles(root: Path, model_name: str) -> None:
             'to_node_id: str = Input("to_node_id")\n'
             'content: str = Input("content")\n\n'
             "@external\n"
-            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
             "result = await send_message(to_node_id, content)\n"
-            "if result:\n"
+            "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Failed to send message to {to_node_id}"\n'
+            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
             "message\n"
         ),
     )
@@ -229,12 +229,12 @@ def _write_virtual_agent_bundles(root: Path, model_name: str) -> None:
             'to_node_id: str = Input("to_node_id")\n'
             'content: str = Input("content")\n\n'
             "@external\n"
-            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
             "result = await send_message(to_node_id, content)\n"
-            "if result:\n"
+            "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Failed to send message to {to_node_id}"\n'
+            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
             "message\n"
         ),
     )

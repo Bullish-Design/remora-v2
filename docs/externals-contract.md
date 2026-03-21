@@ -2,8 +2,8 @@
 
 This document defines the versioned core-to-bundle externals API contract.
 
-- Current core externals version: `1`
-- Source of truth: `src/remora/core/externals.py`
+- Current core externals version: `2`
+- Source of truth: `src/remora/core/tools/context.py`
 - Bundle declaration field: `externals_version` in `bundle.yaml`
 
 ## Compatibility rule
@@ -13,12 +13,12 @@ When loading `_bundle/bundle.yaml`:
 1. If `externals_version` is omitted, no version constraint is enforced.
 2. If `externals_version` is greater than core `EXTERNALS_VERSION`, core logs a warning and continues.
 
-## Version 1 capabilities
+## Version 2 capabilities
 
 ### File capabilities
 
 1. `read_file(path: str) -> str`
-2. `write_file(path: str, content: str) -> bool`
+2. `write_file(path: str, content: str) -> None`
 3. `list_dir(path: str = ".") -> list[str]`
 4. `file_exists(path: str) -> bool`
 5. `search_files(pattern: str) -> list[str]`
@@ -27,8 +27,8 @@ When loading `_bundle/bundle.yaml`:
 ### KV capabilities
 
 1. `kv_get(key: str) -> Any | None`
-2. `kv_set(key: str, value: Any) -> bool`
-3. `kv_delete(key: str) -> bool`
+2. `kv_set(key: str, value: Any) -> None`
+3. `kv_delete(key: str) -> None`
 4. `kv_list(prefix: str = "") -> list[str]`
 
 ### Graph capabilities
@@ -41,16 +41,16 @@ When loading `_bundle/bundle.yaml`:
 
 ### Event capabilities
 
-1. `event_emit(event_type: str, payload: dict[str, Any], tags: list[str] | None = None) -> bool`
+1. `event_emit(event_type: str, payload: dict[str, Any], tags: list[str] | None = None) -> None`
 2. `event_subscribe(event_types: list[str] | None = None, from_agents: list[str] | None = None, path_glob: str | None = None, tags: list[str] | None = None) -> int`
 3. `event_unsubscribe(subscription_id: int) -> bool`
 4. `event_get_history(target_id: str, limit: int = 20) -> list[dict[str, Any]]`
 
 ### Communication capabilities
 
-1. `send_message(to_node_id: str, content: str) -> bool`
-2. `broadcast(pattern: str, content: str) -> int`
-3. `request_human_input(prompt: str, timeout_s: float | None = None) -> str`
+1. `send_message(to_node_id: str, content: str) -> dict[str, str | bool]`
+2. `broadcast(pattern: str, content: str) -> str`
+3. `request_human_input(question: str, options: list[str] | None = None) -> str`
 4. `propose_changes(reason: str = "") -> str`
 
 ### Search capabilities

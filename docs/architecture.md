@@ -57,6 +57,7 @@ Reactive loop:
 - Responsibility: keep graph projection synchronized with the filesystem.
 - Emits: `NodeDiscoveredEvent`, `NodeChangedEvent`, `NodeRemovedEvent`, `ContentChangedEvent`.
 - Handles: directory materialization, virtual agent materialization, bundle provisioning, subscription refresh.
+- Lifecycle: `start(event_bus)` subscribes exactly once; `stop()` unsubscribes and is safe to call repeatedly.
 
 ### Stores
 
@@ -189,6 +190,11 @@ Turn controls:
 - Shared semaphore limits concurrent turns (`max_concurrency`).
 - Depth tracking enforces `max_trigger_depth` per correlation ID.
 - Cooldown enforces `trigger_cooldown_ms`.
+- Actor inboxes are bounded (`actor_inbox_max_items`) with explicit overflow policy:
+  `drop_new`, `drop_oldest`, or `reject`.
+- Overflow behavior is observable via metrics:
+  `actor_inbox_overflow_total`, `actor_inbox_dropped_oldest_total`,
+  `actor_inbox_dropped_new_total`, `actor_inbox_rejected_total`.
 
 ## 6. Workspace and Tool Execution
 
@@ -241,4 +247,3 @@ Tool execution flow:
 2. Export it in `to_capabilities_dict()`.
 3. Add unit coverage in `tests/unit/test_externals.py`.
 4. Document it in `docs/externals-api.md`.
-

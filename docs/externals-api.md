@@ -16,7 +16,7 @@
 
 This document describes the external functions available to Grail `.pym` tool scripts through `TurnContext.to_capabilities_dict()`.
 
-Current exported function count: **25**.
+Current exported function count: **28**.
 
 Each function below includes:
 
@@ -33,8 +33,8 @@ Each function below includes:
 | KV Store | `kv_get`, `kv_set`, `kv_delete`, `kv_list` |
 | Graph | `graph_get_node`, `graph_query_nodes`, `graph_get_edges`, `graph_get_children`, `graph_set_status` |
 | Events | `event_emit`, `event_subscribe`, `event_unsubscribe`, `event_get_history` |
-| Messaging | `send_message`, `broadcast` |
-| Code Modification | `apply_rewrite`, `get_node_source` |
+| Messaging | `send_message`, `broadcast`, `request_human_input`, `propose_changes` |
+| Code Modification | `get_node_source` |
 | Self Introspection | `my_node_id`, `my_correlation_id` |
 
 ## 3. File Operations
@@ -57,20 +57,20 @@ result
 
 Notes: Raises an error if the file does not exist.
 
-### `write_file(path: str, content: str) -> bool`
+### `write_file(path: str, content: str) -> None`
 
 Writes text content to a workspace file.
 
 ```python
 @external
-async def write_file(path: str, content: str) -> bool: ...
+async def write_file(path: str, content: str) -> None: ...
 
-ok = await write_file("notes/todo.md", "# TODO\n")
-result = "written" if ok else "failed"
+await write_file("notes/todo.md", "# TODO\n")
+result = "written"
 result
 ```
 
-Notes: Returns `True` on success.
+Notes: Completes silently on success.
 
 ### `list_dir(path: str = ".") -> list[str]`
 
@@ -145,7 +145,7 @@ result = value or "missing"
 result
 ```
 
-### `kv_set(key: str, value: Any) -> bool`
+### `kv_set(key: str, value: Any) -> None`
 
 Writes a KV value.
 
@@ -153,20 +153,21 @@ Writes a KV value.
 @external
 async def kv_set(key: str, value): ...
 
-ok = await kv_set("memory:last_review", "clean")
-result = "ok" if ok else "failed"
+await kv_set("memory:last_review", "clean")
+result = "ok"
 result
 ```
 
-### `kv_delete(key: str) -> bool`
+### `kv_delete(key: str) -> None`
 
 Deletes a KV key.
 
 ```python
 @external
-async def kv_delete(key: str) -> bool: ...
+async def kv_delete(key: str) -> None: ...
 
-result = await kv_delete("memory:last_review")
+await kv_delete("memory:last_review")
+result = "deleted"
 result
 ```
 
@@ -258,16 +259,16 @@ Notes: Intended for controlled coordination workflows.
 
 ## 6. Event Operations
 
-### `event_emit(event_type: str, payload: dict[str, Any]) -> bool`
+### `event_emit(event_type: str, payload: dict[str, Any]) -> None`
 
 Emits a custom event tagged with the current correlation ID.
 
 ```python
 @external
-async def event_emit(event_type: str, payload: dict) -> bool: ...
+async def event_emit(event_type: str, payload: dict) -> None: ...
 
-ok = await event_emit("ScaffoldRequestEvent", {"intent": "add tests"})
-result = ok
+await event_emit("ScaffoldRequestEvent", {"intent": "add tests"})
+result = "emitted"
 result
 ```
 
@@ -311,16 +312,19 @@ result
 
 ## 7. Messaging
 
-### `send_message(to_node_id: str, content: str) -> bool`
+### `send_message(to_node_id: str, content: str) -> dict[str, str | bool]`
 
 Sends an `AgentMessageEvent` from the current node to another node (or `"user"`).
 
 ```python
 @external
-async def send_message(to_node_id: str, content: str) -> bool: ...
+async def send_message(to_node_id: str, content: str) -> dict[str, str | bool]: ...
 
-ok = await send_message("user", "Done.")
-result = ok
+send_result = await send_message("user", "Done.")
+if send_result.get("sent"):
+    result = "sent"
+else:
+    result = f"not-sent:{send_result.get('reason', 'unknown')}"
 result
 ```
 
@@ -346,24 +350,24 @@ Pattern behavior:
 
 ## 8. Code Modification
 
-### `apply_rewrite(new_source: str) -> bool`
+### `propose_changes(reason: str = "") -> str`
 
-Rewrites the current node's source in-place and emits `ContentChangedEvent`.
+Creates a rewrite proposal event based on files changed in the current workspace.
 
 ```python
 @external
-async def apply_rewrite(new_source: str) -> bool: ...
+async def propose_changes(reason: str = "") -> str: ...
 
-ok = await apply_rewrite("def fn():\n    return 42\n")
-result = ok
+proposal_id = await propose_changes("Refactor implementation details")
+result = proposal_id
 result
 ```
 
 Notes:
 
-- Uses byte-range replacement when available.
-- Falls back to first source-text replacement otherwise.
-- Returns `False` if target node/file is unavailable.
+- Transitions node status to `awaiting_review`.
+- Emits `RewriteProposalEvent` with the changed file list.
+- Returns a generated proposal ID.
 
 ### `get_node_source(target_id: str) -> str`
 
@@ -403,4 +407,3 @@ async def my_correlation_id() -> str | None: ...
 result = await my_correlation_id()
 result
 ```
-

@@ -40,6 +40,9 @@ def test_get_chat_limiter_reuses_per_ip() -> None:
         search_service=None,
         shutdown_event=asyncio.Event(),
         chat_limiters={},
+        chat_message_max_chars=4000,
+        conversation_history_max_entries=200,
+        conversation_message_max_chars=2000,
     )
     request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
@@ -61,6 +64,9 @@ def test_chat_limiter_evicts_oldest_when_capacity_reached() -> None:
         search_service=None,
         shutdown_event=asyncio.Event(),
         chat_limiters={},
+        chat_message_max_chars=4000,
+        conversation_history_max_entries=200,
+        conversation_message_max_chars=2000,
     )
     for i in range(_MAX_CHAT_LIMITERS):
         deps.chat_limiters[f"ip-{i}"] = SlidingWindowRateLimiter(10, 60.0)

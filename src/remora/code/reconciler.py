@@ -63,6 +63,7 @@ class FileReconciler:
         self._search_service = search_service
         self._tx = tx
         self._bundle_search_paths = resolve_bundle_search_paths(config, self._project_root)
+        self._query_paths = resolve_query_paths(self._config, self._project_root)
         self._file_state: dict[str, tuple[int, set[str]]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
         self._file_lock_generations: dict[str, int] = {}
@@ -222,7 +223,7 @@ class FileReconciler:
             [Path(file_path)],
             language_map=self._config.behavior.language_map,
             language_registry=self._language_registry,
-            query_paths=resolve_query_paths(self._config, self._project_root),
+            query_paths=self._query_paths,
             ignore_patterns=self._config.project.workspace_ignore_patterns,
             languages=(
                 list(self._config.project.discovery_languages)

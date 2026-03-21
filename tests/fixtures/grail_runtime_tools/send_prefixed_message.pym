@@ -5,11 +5,11 @@ content: str = Input("content")
 
 
 @external
-async def send_message(to_node_id: str, content: str) -> bool: ...
+async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...
 
 
-sent = await send_message(to_node_id, "[runtime] " + content)
-if sent:
+send_result = await send_message(to_node_id, "[runtime] " + content)
+if send_result.get("sent"):
     result = "sent:" + to_node_id
 else:
     result = "failed:" + to_node_id

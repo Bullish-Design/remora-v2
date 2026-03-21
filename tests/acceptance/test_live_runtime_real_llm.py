@@ -76,9 +76,9 @@ def _write_send_message_project(
             'to_node_id: str = Input("to_node_id")\n'
             'content: str = Input("content")\n\n'
             "@external\n"
-            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
-            "ok = await send_message(to_node_id, content)\n"
-            "result = \"sent\" if ok else \"failed\"\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
+            "send_result = await send_message(to_node_id, content)\n"
+            "result = \"sent\" if send_result.get(\"sent\") else \"failed\"\n"
             "result\n"
         ),
     )
@@ -143,7 +143,7 @@ def _write_proposal_project(
         (
             "from grail import external\n\n"
             "@external\n"
-            "async def write_file(path: str, content: str) -> bool: ...\n"
+            "async def write_file(path: str, content: str) -> None: ...\n"
             "@external\n"
             "async def propose_changes(reason: str = '') -> str: ...\n"
             "@external\n"
@@ -230,10 +230,10 @@ def _write_reactive_mode_project(
             "@external\n"
             "async def my_node_id() -> str: ...\n"
             "@external\n"
-            "async def send_message(to_node_id: str, content: str) -> bool: ...\n\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
             "node_id = await my_node_id()\n"
-            "ok = await send_message(node_id, \"reactive-ok\")\n"
-            "result = \"reactive-ok\" if ok else \"failed\"\n"
+            "send_result = await send_message(node_id, \"reactive-ok\")\n"
+            "result = \"reactive-ok\" if send_result.get(\"sent\") else \"failed\"\n"
             "result\n"
         ),
     )
@@ -242,7 +242,7 @@ def _write_reactive_mode_project(
         (
             "from grail import external\n\n"
             "@external\n"
-            "async def write_file(path: str, content: str) -> bool: ...\n"
+            "async def write_file(path: str, content: str) -> None: ...\n"
             "@external\n"
             "async def propose_changes(reason: str = '') -> str: ...\n\n"
             "await write_file(\"source/src/app.py\", \"def alpha():\\n    return 3\\n\")\n"

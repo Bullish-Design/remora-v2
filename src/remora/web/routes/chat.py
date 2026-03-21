@@ -23,6 +23,16 @@ async def api_chat(request: Request) -> JSONResponse:
     message = str(data.get("message", "")).strip()
     if not node_id or not message:
         return JSONResponse({"error": "node_id and message are required"}, status_code=400)
+    max_chars = deps.chat_message_max_chars
+    if len(message) > max_chars:
+        return JSONResponse(
+            {
+                "error": "message exceeds max length",
+                "max_chars": max_chars,
+                "received_chars": len(message),
+            },
+            status_code=413,
+        )
 
     node = await deps.node_store.get_node(node_id)
     if node is None:

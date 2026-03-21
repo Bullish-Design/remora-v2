@@ -1,5 +1,5 @@
 name: companion
-externals_version: 1
+externals_version: 2
 system_prompt: |
   You are the project companion observer. You receive turn_digested
   notifications from all code agents after they complete self-reflection.

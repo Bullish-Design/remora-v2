@@ -282,6 +282,48 @@ async def test_api_chat_missing_node_returns_404(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_chat_accepts_message_at_exact_max_length(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+    app = create_app(
+        event_store,
+        node_store,
+        EventBus(),
+        chat_message_max_chars=5,
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/chat",
+            json={"node_id": "src/app.py::a", "message": "hello"},
+        )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_chat_rejects_message_above_max_length(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+    app = create_app(
+        event_store,
+        node_store,
+        EventBus(),
+        chat_message_max_chars=5,
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/chat",
+            json={"node_id": "src/app.py::a", "message": "hello!"},
+        )
+    assert response.status_code == 413
+    payload = response.json()
+    assert payload == {
+        "error": "message exceeds max length",
+        "max_chars": 5,
+        "received_chars": 6,
+    }
+
+
+@pytest.mark.asyncio
 async def test_api_respond_requires_request_id_and_response(web_env) -> None:
     client, _node_store, _event_store, _source_path = web_env
     response = await client.post(
@@ -889,6 +931,47 @@ async def test_conversation_endpoint_returns_history(web_env) -> None:
     assert payload["node_id"] == "src/app.py::a"
     assert payload["history"][0]["role"] == "user"
     assert payload["history"][1]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_conversation_endpoint_enforces_history_and_content_limits(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeActor:
+        @property
+        def history(self) -> list[Message]:
+            return [
+                Message(role="user", content="111111"),
+                Message(role="assistant", content="222222"),
+                Message(role="user", content="333333"),
+                Message(role="assistant", content="444444"),
+                Message(role="user", content="555555"),
+            ]
+
+    class FakeActorPool:
+        @property
+        def actors(self) -> dict[str, FakeActor]:
+            return {"src/app.py::a": FakeActor()}
+
+    app = create_app(
+        event_store,
+        node_store,
+        EventBus(),
+        actor_pool=FakeActorPool(),
+        conversation_history_max_entries=3,
+        conversation_message_max_chars=4,
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/nodes/src/app.py::a/conversation")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["node_id"] == "src/app.py::a"
+    assert payload["truncated"] is True
+    assert payload["history_limit"] == 3
+    assert len(payload["history"]) == 3
+    assert [item["content"] for item in payload["history"]] == ["3333", "4444", "5555"]
 
 
 @pytest.mark.asyncio

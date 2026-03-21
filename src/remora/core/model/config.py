@@ -138,12 +138,26 @@ class RuntimeConfig(BaseModel):
     broadcast_max_targets: int = 50
     actor_inbox_max_items: int = 1000
     actor_inbox_overflow_policy: OverflowPolicy = OverflowPolicy.DROP_NEW
+    chat_message_max_chars: int = 4000
+    conversation_history_max_entries: int = 200
+    conversation_message_max_chars: int = 2000
 
     @field_validator("actor_inbox_max_items")
     @classmethod
     def _validate_inbox_size(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("actor_inbox_max_items must be greater than 0")
+        return value
+
+    @field_validator(
+        "chat_message_max_chars",
+        "conversation_history_max_entries",
+        "conversation_message_max_chars",
+    )
+    @classmethod
+    def _validate_positive_runtime_limits(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("runtime limits must be greater than 0")
         return value
 
 
@@ -168,7 +182,7 @@ class BehaviorConfig(BaseModel):
     languages: dict[str, dict[str, Any]] = Field(default_factory=dict)
     language_map: dict[str, str] = Field(default_factory=dict)
     prompt_templates: dict[str, str] = Field(default_factory=dict)
-    externals_version: int = 1
+    externals_version: int = 2
 
     @field_validator("language_map")
     @classmethod

@@ -183,6 +183,57 @@ async def test_reconcile_cycle_modified_file_only(
 
 
 @pytest.mark.asyncio
+async def test_reconciler_caches_query_path_resolution(
+    reconcile_env,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (
+        node_store,
+        event_store,
+        workspace_service,
+        config,
+        _reconciler,
+        language_registry,
+        subscription_manager,
+    ) = reconcile_env
+
+    resolve_calls = 0
+    real_resolve_query_paths = reconciler_module.resolve_query_paths
+
+    def counting_resolve_query_paths(config_obj, project_root):  # noqa: ANN001, ANN202
+        nonlocal resolve_calls
+        resolve_calls += 1
+        return real_resolve_query_paths(config_obj, project_root)
+
+    monkeypatch.setattr(reconciler_module, "resolve_query_paths", counting_resolve_query_paths)
+
+    reconciler = FileReconciler(
+        config,
+        node_store,
+        event_store,
+        workspace_service,
+        project_root=tmp_path,
+        language_registry=language_registry,
+        subscription_manager=subscription_manager,
+    )
+
+    assert resolve_calls == 1
+
+    first = tmp_path / "src" / "first.py"
+    second = tmp_path / "src" / "second.py"
+    write_file(first, "def first():\n    return 1\n")
+    write_file(second, "def second():\n    return 2\n")
+    await reconciler.reconcile_cycle()
+
+    write_file(second, "def second():\n    return 3\n")
+    await asyncio.sleep(0.001)
+    await reconciler.reconcile_cycle()
+
+    assert resolve_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_reconcile_cycle_handles_new_and_deleted_files(reconcile_env, tmp_path: Path) -> None:
     (
         node_store,
@@ -236,6 +287,22 @@ async def test_reconcile_subscription_idempotency(reconcile_env, tmp_path: Path)
         )
         matched = await event_store.subscriptions.get_matching_agents(message_event)
         assert node.node_id in matched
+
+
+@pytest.mark.asyncio
+async def test_reconciler_stop_is_idempotent(reconcile_env) -> None:
+    (
+        _node_store,
+        _event_store,
+        _workspace_service,
+        _config,
+        reconciler,
+        _language_registry,
+        _subscription_manager,
+    ) = reconcile_env
+
+    reconciler.stop()
+    reconciler.stop()
 
 
 @pytest.mark.asyncio

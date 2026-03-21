@@ -72,14 +72,25 @@ async def api_conversation(request: Request) -> JSONResponse:
     actor = deps.actor_pool.actors.get(node_id)
     if actor is None:
         return JSONResponse({"error": "No active actor for this node"}, status_code=404)
+    history_limit = deps.conversation_history_max_entries
+    message_limit = deps.conversation_message_max_chars
+    full_history = actor.history
+    clipped_history = full_history[-history_limit:]
     history = [
         {
             "role": str(getattr(message, "role", "")),
-            "content": str(getattr(message, "content", ""))[:2000],
+            "content": str(getattr(message, "content", ""))[:message_limit],
         }
-        for message in actor.history
+        for message in clipped_history
     ]
-    return JSONResponse({"node_id": node_id, "history": history})
+    return JSONResponse(
+        {
+            "node_id": node_id,
+            "history": history,
+            "truncated": len(full_history) > history_limit,
+            "history_limit": history_limit,
+        }
+    )
 
 
 def routes() -> list[Route]:

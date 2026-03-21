@@ -7,7 +7,7 @@ agent_id: str = Input("agent_id", default="")
 
 
 @external
-async def event_emit(event_type: str, payload: dict) -> bool: ...
+async def event_emit(event_type: str, payload: dict) -> None: ...
 
 
 payload = {
@@ -15,9 +15,6 @@ payload = {
     "intent": intent,
     "element_type": element_type or "function",
 }
-sent = await event_emit("ScaffoldRequestEvent", payload)
-if sent:
-    result = f"Scaffold request submitted: {intent}"
-else:
-    result = "Failed to submit scaffold request"
+await event_emit("ScaffoldRequestEvent", payload)
+result = f"Scaffold request submitted: {intent}"
 result
