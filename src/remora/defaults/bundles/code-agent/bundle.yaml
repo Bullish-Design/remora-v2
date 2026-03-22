@@ -40,7 +40,7 @@ prompts:
 max_turns: 8
 self_reflect:
   enabled: true
-  model: "Qwen/Qwen3-1.7B"
+  model: "Qwen/Qwen3-4B-Instruct-2507-FP8"
   max_turns: 2
   prompt: |
     You just completed a conversation turn. Reflect on the exchange and record metadata.
