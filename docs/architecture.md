@@ -47,7 +47,7 @@ Reactive loop:
 
 ### RuntimeServices
 
-- File: `src/remora/core/services.py`
+- File: `src/remora/core/services/container.py`
 - Responsibility: dependency container and ownership of core service instances.
 - Creates: `NodeStore`, `EventStore`, `EventBus`, `SubscriptionRegistry`, `TriggerDispatcher`, `CairnWorkspaceService`, `ActorPool`, `FileReconciler`, `Metrics`.
 
@@ -55,13 +55,14 @@ Reactive loop:
 
 - File: `src/remora/code/reconciler.py`
 - Responsibility: keep graph projection synchronized with the filesystem.
-- Emits: `NodeDiscoveredEvent`, `NodeChangedEvent`, `NodeRemovedEvent`, `ContentChangedEvent`.
+- Emits: `NodeDiscoveredEvent`, `NodeChangedEvent`, `NodeRemovedEvent`.
+- Subscribes to: `ContentChangedEvent` for immediate targeted reconciliation.
 - Handles: directory materialization, virtual agent materialization, bundle provisioning, subscription refresh.
 - Lifecycle: `start(event_bus)` subscribes exactly once; `stop()` unsubscribes and is safe to call repeatedly.
 
 ### Stores
 
-- `NodeStore` (`src/remora/core/graph.py`): nodes + edges projection tables.
+- `NodeStore` (`src/remora/core/storage/graph.py`): nodes + edges projection tables.
 - `EventStore` (`src/remora/core/events/store.py`): append-only event log, fan-out to bus + dispatcher.
 - `SubscriptionRegistry` (`src/remora/core/events/subscriptions.py`): pattern-based routing metadata.
 
@@ -69,14 +70,15 @@ Reactive loop:
 
 - `EventBus` (`src/remora/core/events/bus.py`): in-process pub/sub + stream API.
 - `TriggerDispatcher` (`src/remora/core/events/dispatcher.py`): subscription matching + router callback.
-- `ActorPool` (`src/remora/core/runner.py`): actor lifecycle, routing, idle eviction.
-- `Actor` (`src/remora/core/actor.py`): turn execution loop, prompt assembly, tool loading, model invocation.
+- `ActorPool` (`src/remora/core/agents/runner.py`): actor lifecycle, routing, idle eviction.
+- `Actor` (`src/remora/core/agents/actor.py`): inbox loop and turn dispatch.
+- `AgentTurnExecutor` (`src/remora/core/agents/turn.py`): prompt assembly, tool loading, model invocation, completion/error events.
 
 ### Workspace and Tools
 
-- `CairnWorkspaceService` (`src/remora/core/workspace.py`): per-agent workspace lifecycle and bundle materialization.
-- `GrailTool` + discovery (`src/remora/core/grail.py`): loads `_bundle/tools/*.pym`, wraps execution in structured tool interface.
-- `TurnContext` (`src/remora/core/externals.py`): external API injected into tools.
+- `CairnWorkspaceService` (`src/remora/core/storage/workspace.py`): per-agent workspace lifecycle and bundle materialization.
+- `GrailTool` + discovery (`src/remora/core/tools/grail.py`): loads `_bundle/tools/*.pym`, wraps execution in structured tool interface.
+- `TurnContext` (`src/remora/core/tools/context.py`): external API injected into tools.
 
 ### Frontends
 
@@ -85,7 +87,7 @@ Reactive loop:
 
 ## 3. Data Model
 
-Remora uses SQLite with WAL mode (`open_database` in `src/remora/core/db.py`).
+Remora uses SQLite with WAL mode (`open_database` in `src/remora/core/storage/db.py`).
 
 ### `nodes`
 
@@ -96,7 +98,7 @@ Key columns:
 - `node_id` (PK)
 - `node_type`, `name`, `full_name`
 - `file_path`, `start_line`, `end_line`, `start_byte`, `end_byte`
-- `source_code`, `source_hash`
+- `text`, `source_hash`
 - `parent_id`, `status`, `role`
 
 Indexes: by type, file, status, parent.
@@ -226,7 +228,7 @@ Tool execution flow:
 ### Add a New Language
 
 1. Extend `language_map` in config.
-2. Provide parser/query support under configured `query_paths`.
+2. Provide parser/query support under configured `query_search_paths`.
 3. Validate discovery output via `remora discover`.
 
 ### Add a New Bundle
@@ -237,8 +239,8 @@ Tool execution flow:
 
 ### Add a New API Endpoint
 
-1. Add handler in `src/remora/web/server.py`.
-2. Register `Route(...)`.
+1. Add handler in `src/remora/web/routes/<feature>.py` (or extend an existing route module).
+2. Register `Route(...)` in that module and include it via `_build_routes()` in `src/remora/web/server.py`.
 3. Add/extend unit tests in `tests/unit/test_web_server.py`.
 
 ### Add a New External Function

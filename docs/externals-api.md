@@ -9,8 +9,9 @@
 5. Graph Operations
 6. Event Operations
 7. Messaging
-8. Code Modification
-9. Self Introspection
+8. Search
+9. Code Modification
+10. Self Introspection
 
 ## 1. Overview
 
@@ -34,6 +35,7 @@ Each function below includes:
 | Graph | `graph_get_node`, `graph_query_nodes`, `graph_get_edges`, `graph_get_children`, `graph_set_status` |
 | Events | `event_emit`, `event_subscribe`, `event_unsubscribe`, `event_get_history` |
 | Messaging | `send_message`, `broadcast`, `request_human_input`, `propose_changes` |
+| Search | `semantic_search`, `find_similar_code` |
 | Code Modification | `get_node_source` |
 | Self Introspection | `my_node_id`, `my_correlation_id` |
 
@@ -259,31 +261,38 @@ Notes: Intended for controlled coordination workflows.
 
 ## 6. Event Operations
 
-### `event_emit(event_type: str, payload: dict[str, Any]) -> None`
+### `event_emit(event_type: str, payload: dict[str, Any], tags: list[str] | None = None) -> None`
 
 Emits a custom event tagged with the current correlation ID.
 
 ```python
 @external
-async def event_emit(event_type: str, payload: dict) -> None: ...
+async def event_emit(event_type: str, payload: dict, tags: list[str] | None = None) -> None: ...
 
-await event_emit("ScaffoldRequestEvent", {"intent": "add tests"})
+await event_emit("scaffold_request", {"intent": "add tests"}, tags=["tests", "scaffold"])
 result = "emitted"
 result
 ```
 
-### `event_subscribe(event_types: list[str] | None = None, from_agents: list[str] | None = None, path_glob: str | None = None) -> int`
+### `event_subscribe(event_types: list[str] | None = None, from_agents: list[str] | None = None, path_glob: str | None = None, tags: list[str] | None = None) -> int`
 
 Creates a subscription pattern for the current agent.
 
 ```python
 @external
-async def event_subscribe(event_types: list[str] | None = None, from_agents: list[str] | None = None, path_glob: str | None = None) -> int: ...
+async def event_subscribe(
+    event_types: list[str] | None = None,
+    from_agents: list[str] | None = None,
+    path_glob: str | None = None,
+    tags: list[str] | None = None,
+) -> int: ...
 
-sub_id = await event_subscribe(event_types=["NodeChangedEvent"], path_glob="src/**")
+sub_id = await event_subscribe(event_types=["node_changed"], path_glob="src/**")
 result = sub_id
 result
 ```
+
+Notes: event type values use stable string IDs (for example `node_changed`, `agent_message`, `turn_digested`).
 
 ### `event_unsubscribe(subscription_id: int) -> bool`
 
@@ -348,7 +357,44 @@ Pattern behavior:
 - `file:<path>`: nodes in specific file
 - fallback: substring match on `node_id`
 
-## 8. Code Modification
+## 8. Search
+
+### `semantic_search(query: str, collection: str | None = None, top_k: int = 10, mode: str = "hybrid") -> list[dict[str, Any]]`
+
+Runs semantic search through the configured search backend.
+
+```python
+@external
+async def semantic_search(
+    query: str,
+    collection: str | None = None,
+    top_k: int = 10,
+    mode: str = "hybrid",
+) -> list[dict]: ...
+
+results = await semantic_search("where is trigger depth enforced?", "code", 5, "hybrid")
+result = results
+result
+```
+
+### `find_similar_code(chunk_id: str, collection: str | None = None, top_k: int = 10) -> list[dict[str, Any]]`
+
+Finds chunks similar to a known chunk ID.
+
+```python
+@external
+async def find_similar_code(
+    chunk_id: str,
+    collection: str | None = None,
+    top_k: int = 10,
+) -> list[dict]: ...
+
+results = await find_similar_code("chunk_abc123", "code", 10)
+result = results
+result
+```
+
+## 9. Code Modification
 
 ### `propose_changes(reason: str = "") -> str`
 
@@ -382,7 +428,7 @@ result = source[:400]
 result
 ```
 
-## 9. Self Introspection
+## 10. Self Introspection
 
 ### `my_node_id() -> str`
 

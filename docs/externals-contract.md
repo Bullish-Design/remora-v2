@@ -11,7 +11,7 @@ This document defines the versioned core-to-bundle externals API contract.
 When loading `_bundle/bundle.yaml`:
 
 1. If `externals_version` is omitted, no version constraint is enforced.
-2. If `externals_version` is greater than core `EXTERNALS_VERSION`, core logs a warning and continues.
+2. If `externals_version` is greater than core `EXTERNALS_VERSION`, the turn fails with `IncompatibleBundleError`.
 
 ## Version 2 capabilities
 

@@ -85,11 +85,11 @@ Project/discovery:
 - `discovery_paths`: paths to scan (supports relative and absolute)
 - `discovery_languages`: optional language allowlist
 - `language_map`: extension -> language mapping
-- `query_paths`: tree-sitter query directories
+- `query_search_paths`: tree-sitter query directories
 
 Bundles:
 
-- `bundle_root`: bundle directory root
+- `bundle_search_paths`: bundle search directories (first match wins by path order)
 - `bundle_overlays`: node type -> bundle name mapping
 
 LLM:
@@ -119,12 +119,10 @@ Workspace behavior:
 
 ### Environment Variables
 
-Settings are also available via `REMORA_`-prefixed environment variables (Pydantic settings model). Example:
+Prefer setting runtime values in `remora.yaml`.
 
-```bash
-export REMORA_MODEL_BASE_URL="http://localhost:8000/v1"
-export REMORA_MODEL_DEFAULT="Qwen/Qwen3-4B"
-```
+For environment-specific values, use shell-style expansion in YAML (`${VAR:-default}`),
+which is expanded at config load time.
 
 ### Shell-Style Expansion
 
@@ -139,7 +137,7 @@ model_default: "${REMORA_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}"
 
 ### Bundle Layout
 
-A bundle is a directory under `bundle_root` with:
+A bundle is a directory discoverable via `bundle_search_paths` with:
 
 - `bundle.yaml`
 - optional `tools/*.pym`
@@ -217,7 +215,7 @@ virtual_agents:
   - id: "test-agent"
     role: "test-agent"
     subscriptions:
-      - event_types: ["NodeChangedEvent", "NodeDiscoveredEvent"]
+      - event_types: ["node_changed", "node_discovered"]
         path_glob: "tests/**"
 ```
 

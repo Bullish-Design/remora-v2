@@ -16,7 +16,6 @@ bundle_overlays:
   function: "code-agent"
   class: "code-agent"
   method: "code-agent"
-  file: "code-agent"
   directory: "directory-agent"
 
 # Optional declarative virtual agents.
@@ -24,14 +23,14 @@ bundle_overlays:
 #   - id: "test-agent"
 #     role: "test-agent"
 #     subscriptions:
-#       - event_types: ["NodeChangedEvent", "NodeDiscoveredEvent"]
+#       - event_types: ["node_changed", "node_discovered"]
 #         path_glob: "tests/**"
-#       - event_types: ["NodeChangedEvent"]
+#       - event_types: ["node_changed"]
 #         path_glob: "src/**"
 
 # --- Companion System (Layer 2: Project-Level Observer) ---
 # The companion observer tracks activity across all agents and builds
-# project-level insights. It subscribes to TurnDigestedEvent, which is
+# project-level insights. It subscribes to `turn_digested`, which is
 # emitted after each agent's self-reflection (Layer 1) completes.
 #
 # Layer 1 (per-agent self-reflection) is configured in bundle.yaml
@@ -43,7 +42,7 @@ bundle_overlays:
 #   - id: companion-observer
 #     role: companion
 #     subscriptions:
-#       - event_types: ["TurnDigestedEvent"]
+#       - event_types: ["turn_digested"]
 
 model_base_url: "http://localhost:8000/v1"
 model_default: "Qwen/Qwen3-4B"
