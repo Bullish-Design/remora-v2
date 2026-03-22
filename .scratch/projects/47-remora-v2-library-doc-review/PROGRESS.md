@@ -7,3 +7,5 @@
 - [x] Review documentation end-to-end
 - [x] Produce detailed documentation review report
 - [x] Implement prioritized documentation and example-config fixes
+- [x] Draft new one-stop developer guide (`HOW_TO_USE_REMORA.md`)
+- [x] Validate guide consistency against current runtime/config surfaces
