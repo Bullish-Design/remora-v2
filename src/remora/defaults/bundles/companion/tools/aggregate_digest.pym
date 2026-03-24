@@ -5,6 +5,8 @@ agent_id: str = Input("agent_id")
 summary: str = Input("summary")
 tags: str = Input("tags")  # comma-separated
 insight: str = Input("insight", default="")
+MAX_SUMMARY = 500
+MAX_INSIGHT = 200
 
 
 @external
@@ -14,13 +16,47 @@ async def kv_get(key: str) -> object: ...
 @external
 async def kv_set(key: str, value: object) -> None: ...
 
+
 @external
 async def my_correlation_id() -> str | None: ...
 
+
+def as_dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    result: list[dict[str, object]] = []
+    for item in value:
+        if isinstance(item, dict):
+            result.append(item)
+    return result
+
+
+def as_int_dict(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, int] = {}
+    for key, count in value.items():
+        if isinstance(key, str) and isinstance(count, int):
+            result[key] = count
+    return result
+
+
+def as_nested_dict(value: object) -> dict[str, dict[str, object]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, dict[str, object]] = {}
+    for key, item in value.items():
+        if isinstance(key, str) and isinstance(item, dict):
+            result[key] = item
+    return result
+
+
 tag_list = [item.strip() for item in tags.split(",") if item.strip()]
 correlation_id = await my_correlation_id()
+summary = summary[:MAX_SUMMARY]
+insight = insight[:MAX_INSIGHT]
 
-activity_log = await kv_get("project/activity_log") or []
+activity_log = as_dict_list(await kv_get("project/activity_log"))
 activity_log.append(
     {
         "agent_id": agent_id,
@@ -32,12 +68,12 @@ activity_log.append(
 activity_log = activity_log[-200:]
 await kv_set("project/activity_log", activity_log)
 
-tag_frequency = await kv_get("project/tag_frequency") or {}
+tag_frequency = as_int_dict(await kv_get("project/tag_frequency"))
 for tag in tag_list:
     tag_frequency[tag] = tag_frequency.get(tag, 0) + 1
 await kv_set("project/tag_frequency", tag_frequency)
 
-agent_activity = await kv_get("project/agent_activity") or {}
+agent_activity = as_nested_dict(await kv_get("project/agent_activity"))
 agent_activity[agent_id] = {
     "last_summary": summary,
     "last_tags": tag_list,
@@ -46,7 +82,7 @@ agent_activity[agent_id] = {
 await kv_set("project/agent_activity", agent_activity)
 
 if insight:
-    insights = await kv_get("project/insights") or []
+    insights = as_dict_list(await kv_get("project/insights"))
     insights.append(
         {
             "insight": insight,

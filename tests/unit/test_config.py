@@ -238,6 +238,7 @@ def test_runtime_config_actor_inbox_defaults() -> None:
     config = RuntimeConfig()
     assert config.actor_inbox_max_items == 1000
     assert config.actor_inbox_overflow_policy == OverflowPolicy.DROP_NEW
+    assert config.max_reactive_turns_per_correlation == 3
 
 
 def test_runtime_config_invalid_overflow_policy_rejected() -> None:
@@ -279,6 +280,8 @@ def test_runtime_config_api_limit_defaults() -> None:
         ("conversation_history_max_entries", -5),
         ("conversation_message_max_chars", 0),
         ("conversation_message_max_chars", -10),
+        ("max_reactive_turns_per_correlation", 0),
+        ("max_reactive_turns_per_correlation", -1),
     ],
 )
 def test_runtime_config_api_limits_must_be_positive(field_name: str, value: int) -> None:

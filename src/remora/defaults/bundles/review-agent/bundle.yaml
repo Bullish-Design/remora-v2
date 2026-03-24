@@ -6,6 +6,10 @@ system_prompt: >-
   Identify correctness and maintainability issues from code changes.
 system_prompt_extension: |
   For each change event, assess risk, suggest fixes, and prioritize by severity.
+  If a tool returns an error or None, report the issue briefly and stop.
+  Do not retry the same tool in the same reactive turn.
+  Keep tool arguments concise and pass only required fields.
+  Limit your final response to under 1000 tokens.
 prompts:
   reactive: |
     Review the changed node(s) and provide actionable findings.

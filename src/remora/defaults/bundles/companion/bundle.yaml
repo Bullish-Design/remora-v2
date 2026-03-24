@@ -15,10 +15,12 @@ system_prompt: |
   Focus on the cross-agent, project-level view.
 
   Use aggregate_digest to record your analysis.
+  If aggregate_digest fails, report the error briefly and stop.
+  Do not call aggregate_digest more than once per reactive turn.
 prompts:
   reactive: |
     A turn_digested event arrived. An agent just finished self-reflection.
     Review the event data (agent_id, digest_summary, tags).
     Use aggregate_digest to update your project-level tracking.
 model: "Qwen/Qwen3-4B-Instruct-2507-FP8"
-max_turns: 3
+max_turns: 2

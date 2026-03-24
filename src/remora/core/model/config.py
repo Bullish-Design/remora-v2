@@ -129,6 +129,7 @@ class RuntimeConfig(BaseModel):
 
     max_concurrency: int = 4
     max_trigger_depth: int = 5
+    max_reactive_turns_per_correlation: int = 3
     trigger_cooldown_ms: int = 1000
     human_input_timeout_s: float = 300.0
     actor_idle_timeout_s: float = 300.0
@@ -153,6 +154,7 @@ class RuntimeConfig(BaseModel):
         "chat_message_max_chars",
         "conversation_history_max_entries",
         "conversation_message_max_chars",
+        "max_reactive_turns_per_correlation",
     )
     @classmethod
     def _validate_positive_runtime_limits(cls, value: int) -> int:

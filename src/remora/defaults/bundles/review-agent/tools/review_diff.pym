@@ -2,10 +2,12 @@
 from grail import Input, external
 
 node_id: str = Input("node_id")
+MAX_PREVIEW = 500
+MAX_OUTPUT = 2000
 
 
 @external
-async def graph_get_node(target_id: str) -> dict: ...
+async def graph_get_node(target_id: str) -> dict | None: ...
 
 
 @external
@@ -20,7 +22,7 @@ node = await graph_get_node(node_id)
 if not node:
     result = f"Node {node_id} not found."
 else:
-    current_source = node.get("source_code", "")
+    current_source = node.get("source_code") or ""
     previous_key = f"review:previous_source:{node_id}"
     previous_source = await kv_get(previous_key)
 
@@ -33,7 +35,8 @@ else:
         await kv_set(previous_key, current_source)
         result = (
             f"Changes detected.\n\n"
-            f"Previous ({len(previous_source)} chars):\n{previous_source[:500]}\n\n"
-            f"Current ({len(current_source)} chars):\n{current_source[:500]}"
+            f"Previous ({len(previous_source)} chars):\n{previous_source[:MAX_PREVIEW]}\n\n"
+            f"Current ({len(current_source)} chars):\n{current_source[:MAX_PREVIEW]}"
         )
+result = result[:MAX_OUTPUT]
 result

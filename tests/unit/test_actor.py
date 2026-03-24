@@ -12,9 +12,17 @@ import pytest_asyncio
 from structured_agents import Message
 from structured_agents.events import (
     ModelRequestEvent as SAModelRequestEvent,
+)
+from structured_agents.events import (
     ModelResponseEvent as SAModelResponseEvent,
+)
+from structured_agents.events import (
     ToolCallEvent as SAToolCallEvent,
+)
+from structured_agents.events import (
     ToolResultEvent as SAToolResultEvent,
+)
+from structured_agents.events import (
     TurnCompleteEvent as SATurnCompleteEvent,
 )
 from tests.doubles import RecordingOutbox
@@ -22,17 +30,13 @@ from tests.factories import make_node
 
 from remora.core.agents.actor import (
     Actor,
-    AgentTurnExecutor,
     Outbox,
     PromptBuilder,
     Trigger,
     TriggerPolicy,
 )
-from remora.core.model.config import BehaviorConfig, BundleConfig, Config, InfraConfig, RuntimeConfig
-from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentCompleteEvent,
-    AgentErrorEvent,
     AgentMessageEvent,
     AgentStartEvent,
     ContentChangedEvent,
@@ -41,9 +45,17 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
+from remora.core.model.config import (
+    BehaviorConfig,
+    BundleConfig,
+    Config,
+    InfraConfig,
+    RuntimeConfig,
+)
+from remora.core.model.types import EventType, NodeStatus
+from remora.core.storage.db import open_database
 from remora.core.storage.graph import NodeStore
 from remora.core.storage.transaction import TransactionContext
-from remora.core.model.types import EventType, NodeStatus
 from remora.core.storage.workspace import CairnWorkspaceService
 
 _TEST_USER_TEMPLATE = (
@@ -248,6 +260,29 @@ def test_trigger_policy_release_clears_depth_timestamp(actor_env) -> None:
 
     assert "corr-reset" not in policy.depths
     assert "corr-reset" not in policy.depth_timestamps
+
+
+def test_trigger_policy_limits_reactive_turns_per_correlation() -> None:
+    config = Config(
+        infra=InfraConfig(workspace_root=".remora-trigger-policy"),
+        runtime=RuntimeConfig(
+            trigger_cooldown_ms=0,
+            max_trigger_depth=50,
+        ),
+        behavior=BehaviorConfig(prompt_templates={"user": _TEST_USER_TEMPLATE}),
+    )
+    policy = TriggerPolicy(config)
+
+    assert policy.should_trigger("corr-loop")
+    policy.release_depth("corr-loop")
+
+    assert policy.should_trigger("corr-loop")
+    policy.release_depth("corr-loop")
+
+    assert policy.should_trigger("corr-loop")
+    policy.release_depth("corr-loop")
+
+    assert not policy.should_trigger("corr-loop")
 
 
 @pytest.mark.asyncio
