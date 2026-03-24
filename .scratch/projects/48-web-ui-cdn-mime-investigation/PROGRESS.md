@@ -25,3 +25,10 @@
 - [x] Constrain horizontal spread using type tracks + tighter sibling spread
 - [x] Increase vertical spacing to use tall viewport effectively
 - [x] Re-run targeted tests and confirm pass
+
+## Phase 4: Wider x-distribution within tall layout
+- [x] Create new plan file in same project directory (`PLAN_04_WIDER_X_DISTRIBUTION.md`)
+- [x] Add failing test markers for x-distribution controls
+- [x] Increase horizontal separation by node type, including directory/file tracks
+- [x] Add deterministic x-wave/hash offsets for long chain spread
+- [x] Re-run targeted tests and confirm pass

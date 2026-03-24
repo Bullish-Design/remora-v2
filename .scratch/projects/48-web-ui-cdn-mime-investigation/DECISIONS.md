@@ -35,3 +35,13 @@
 
 10. Expose clear spacing constants for iterative tuning.
 - Rationale: practical follow-up tuning is expected, so constants are centralized (`FILE_BAND_SPACING`, `DEPTH_ROW_SPACING`, `SIBLING_SPREAD`, `TYPE_TRACK_OFFSETS`).
+
+## Phase 4 (Wider x distribution)
+11. Keep tall flow but intentionally widen x spacing.
+- Rationale: screenshot feedback showed near-single-column collapse.
+
+12. Expand type tracks to include directory/file and increase separation.
+- Rationale: most nodes in current graph were on fallback/center tracks.
+
+13. Add deterministic depth-wave/hash x offsets.
+- Rationale: long single-child chains need non-sibling-based spread to avoid a rigid spine.

@@ -1,6 +1,6 @@
 # CONTEXT
 
-Project 48 now includes three completed phases.
+Project 48 now includes four completed phases.
 
 ## Phase 1 completed
 - Root cause for console MIME/script errors identified and fixed.
@@ -19,9 +19,16 @@ Project 48 now includes three completed phases.
 - Layout updated for narrow/tall sidebar usage:
   - file bands are stacked vertically (`FILE_BAND_SPACING`)
   - depth still flows downward (`DEPTH_ROW_SPACING`)
-  - x is constrained using `TYPE_TRACK_OFFSETS` + small `SIBLING_SPREAD`
+  - x constrained using `TYPE_TRACK_OFFSETS` + `SIBLING_SPREAD`
 - Added unfiled section label for nodes without `file_path`.
-- Updated tests to assert vertical-band markers.
+
+## Phase 4 completed
+- New plan file created: `PLAN_04_WIDER_X_DISTRIBUTION.md`.
+- Increased x distribution while keeping tall flow:
+  - stronger node-type track separation including `directory` and `file`
+  - larger sibling spread
+  - deterministic `DEPTH_WAVE_AMPLITUDE` + `HASH_X_SPREAD`
+- Trigger for this phase: user screenshot showed graph collapsed into a near-single vertical spine.
 
 ## Current validation state
 - Ran: `devenv shell -- pytest tests/unit/test_views.py -q`
