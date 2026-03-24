@@ -252,6 +252,8 @@
   <script>
     const graph = new graphology.Graph();
     const nodeLabelHitboxes = new Map();
+    const labelMeasureCanvas = document.createElement("canvas");
+    const labelMeasureContext = labelMeasureCanvas.getContext("2d");
     const FILE_BAND_SPACING = 4.4;
     const DEPTH_ROW_SPACING = 1.7;
     const LEVEL_SPREAD = 2.4;
@@ -743,24 +745,83 @@ function addTimelineEvent(eventType, payload) {
       renderAgentPanel(nodeId);
     }
 
-    function hitTestLabeledNode(viewportX, viewportY) {
+    function hitTestLabeledNode(event) {
+      const pixelRatio = renderer.getRenderParams().pixelRatio || 1;
+      const viewportX = event.x;
+      const viewportY = event.y;
+      const clickCandidates = [
+        { x: viewportX, y: viewportY },
+        { x: event.x * pixelRatio, y: event.y * pixelRatio },
+        { x: viewportX / pixelRatio, y: viewportY / pixelRatio },
+      ];
+
       let winner = null;
       let minArea = Number.POSITIVE_INFINITY;
-      for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
-        if (
-          viewportX >= box.x &&
-          viewportX <= box.x + box.width &&
-          viewportY >= box.y &&
-          viewportY <= box.y + box.height &&
-          box.area < minArea
-        ) {
-          winner = nodeId;
-          minArea = box.area;
+      for (const clickPoint of clickCandidates) {
+        for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
+          if (
+            clickPoint.x >= box.x &&
+            clickPoint.x <= box.x + box.width &&
+            clickPoint.y >= box.y &&
+            clickPoint.y <= box.y + box.height &&
+            box.area < minArea
+          ) {
+            winner = nodeId;
+            minArea = box.area;
+          }
         }
       }
-      if (!winner || !graph.hasNode(winner)) return null;
-      const nodeType = graph.getNodeAttribute(winner, "node_type");
-      if (nodeType === "__label__") return null;
+      if (winner && graph.hasNode(winner)) {
+        const nodeType = graph.getNodeAttribute(winner, "node_type");
+        if (nodeType !== "__label__") return winner;
+      }
+
+      // Fallback path: derive viewport positions from Sigma display data directly.
+      const dims = renderer.getDimensions();
+      graph.forEachNode((nodeId) => {
+        const data = renderer.getNodeDisplayData(nodeId);
+        if (!data?.label || data.hidden || data.node_type === "__label__") return;
+        const points = [
+          { x: data.x, y: data.y },
+          renderer.graphToViewport({ x: data.x, y: data.y }),
+          renderer.framedGraphToViewport({ x: data.x, y: data.y }),
+        ];
+        let point = points[0];
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const candidate of points) {
+          const dx = candidate.x < 0 ? -candidate.x : Math.max(0, candidate.x - dims.width);
+          const dy = candidate.y < 0 ? -candidate.y : Math.max(0, candidate.y - dims.height);
+          const score = dx + dy;
+          if (score < bestScore) {
+            bestScore = score;
+            point = candidate;
+          }
+        }
+        const isFileLabel = data.node_type === "__label__";
+        const fontSize = isFileLabel ? 11 : 12;
+        const padX = isFileLabel ? 6 : 8;
+        const padY = isFileLabel ? 3 : 4;
+        if (!labelMeasureContext) return;
+        const fontWeight = isFileLabel ? "600" : "500";
+        labelMeasureContext.font = `${fontWeight} ${fontSize}px "IBM Plex Mono", "IBM Plex Sans", sans-serif`;
+        const textWidth = labelMeasureContext.measureText(String(data.label)).width;
+        const boxWidth = textWidth + padX * 2;
+        const boxHeight = fontSize + padY * 2;
+        const left = point.x - boxWidth / 2;
+        const top = point.y - boxHeight / 2;
+        for (const clickPoint of clickCandidates) {
+          if (
+            clickPoint.x >= left &&
+            clickPoint.x <= left + boxWidth &&
+            clickPoint.y >= top &&
+            clickPoint.y <= top + boxHeight &&
+            boxWidth * boxHeight < minArea
+          ) {
+            winner = nodeId;
+            minArea = boxWidth * boxHeight;
+          }
+        }
+      });
       return winner;
     }
 
@@ -774,7 +835,7 @@ function addTimelineEvent(eventType, payload) {
     });
 
     renderer.on("clickStage", ({ event }) => {
-      const hitNode = hitTestLabeledNode(event.x, event.y);
+      const hitNode = hitTestLabeledNode(event);
       if (!hitNode) return;
       selectNode(hitNode);
     });

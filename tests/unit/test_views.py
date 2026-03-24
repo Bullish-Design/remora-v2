@@ -59,3 +59,4 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "const DEPTH_ZIGZAG_SPREAD =" in html
     assert "const nodeLabelHitboxes = new Map();" in html
     assert 'renderer.on("clickStage"' in html
+    assert "event.x * pixelRatio" in html

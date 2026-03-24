@@ -34,3 +34,12 @@ Project 48 now includes seven completed phases.
 - Validation:
   - Ran `devenv shell -- pytest tests/unit/test_views.py -q`
   - Result `6 passed`
+
+## Phase 8 refinement
+- Initial hitbox patch still missed clicks in user browser.
+- Added coordinate-safe click candidates in stage hit test:
+  - viewport coords
+  - viewport scaled by pixelRatio
+  - viewport divided by pixelRatio
+- Added fallback selection using Sigma display-data coordinates (`getNodeDisplayData` + graph/framed-to-viewport conversions).
+- Added shared text measurement canvas/context for label box sizing consistency.
