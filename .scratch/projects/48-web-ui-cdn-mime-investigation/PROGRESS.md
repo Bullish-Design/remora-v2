@@ -32,3 +32,10 @@
 - [x] Increase horizontal separation by node type, including directory/file tracks
 - [x] Add deterministic x-wave/hash offsets for long chain spread
 - [x] Re-run targeted tests and confirm pass
+
+## Phase 5: Chain fanout rebalance
+- [x] Create new plan file in same project directory (`PLAN_05_CHAIN_FANOUT.md`)
+- [x] Add failing test marker for depth-fanout control
+- [x] Reduce depth row spacing to limit y-range domination
+- [x] Add deterministic depth fanout term for x-distribution
+- [x] Re-run targeted tests and confirm pass

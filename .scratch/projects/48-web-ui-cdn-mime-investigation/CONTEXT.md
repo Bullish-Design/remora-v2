@@ -1,6 +1,6 @@
 # CONTEXT
 
-Project 48 now includes four completed phases.
+Project 48 now includes five completed phases.
 
 ## Phase 1 completed
 - Root cause for console MIME/script errors identified and fixed.
@@ -28,7 +28,14 @@ Project 48 now includes four completed phases.
   - stronger node-type track separation including `directory` and `file`
   - larger sibling spread
   - deterministic `DEPTH_WAVE_AMPLITUDE` + `HASH_X_SPREAD`
-- Trigger for this phase: user screenshot showed graph collapsed into a near-single vertical spine.
+
+## Phase 5 completed
+- New plan file created: `PLAN_05_CHAIN_FANOUT.md`.
+- User screenshot still showed a narrow vertical spine.
+- Rebalanced layout with:
+  - reduced `DEPTH_ROW_SPACING` from 2.6 to 1.95
+  - added `DEPTH_X_FANOUT` term using deterministic left/right sign by node hash
+  - wave amplitude now increases with depth to widen lower levels
 
 ## Current validation state
 - Ran: `devenv shell -- pytest tests/unit/test_views.py -q`

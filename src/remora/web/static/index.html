@@ -252,10 +252,11 @@
   <script>
     const graph = new graphology.Graph();
     const FILE_BAND_SPACING = 12;
-    const DEPTH_ROW_SPACING = 2.6;
+    const DEPTH_ROW_SPACING = 1.95;
     const SIBLING_SPREAD = 1.1;
     const HASH_X_SPREAD = 1.0;
     const DEPTH_WAVE_AMPLITUDE = 1.25;
+    const DEPTH_X_FANOUT = 0.42;
     const FILE_HEADER_OFFSET_Y = -1.3;
     const FILE_HEADER_X = -5.2;
     const UNFILED_BAND_Y = -FILE_BAND_SPACING;
@@ -433,8 +434,12 @@
             siblings.length > 1
               ? (siblingIndex - (siblings.length - 1) / 2) * SIBLING_SPREAD
               : 0;
-          const depthWave = Math.sin(depth * 0.85 + (hashNodeId(node.node_id) % 7)) * DEPTH_WAVE_AMPLITUDE;
-          const x = typeTrackX + spread + depthWave + deterministicOffset(node.node_id, HASH_X_SPREAD);
+          const hash = hashNodeId(node.node_id);
+          const side = (hash & 1) === 0 ? -1 : 1;
+          const depthFanout = side * depth * DEPTH_X_FANOUT;
+          const waveAmplitude = DEPTH_WAVE_AMPLITUDE + depth * 0.1;
+          const depthWave = Math.sin(depth * 0.85 + (hash % 7)) * waveAmplitude;
+          const x = typeTrackX + spread + depthFanout + depthWave + deterministicOffset(node.node_id, HASH_X_SPREAD);
           const y = baseBandY + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.22);
           graph.addNode(node.node_id, {
             label: node.name,

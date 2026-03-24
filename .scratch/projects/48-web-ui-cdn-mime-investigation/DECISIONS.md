@@ -45,3 +45,10 @@
 
 13. Add deterministic depth-wave/hash x offsets.
 - Rationale: long single-child chains need non-sibling-based spread to avoid a rigid spine.
+
+## Phase 5 (Chain fanout)
+14. Rebalance extents by reducing depth spacing and increasing depth-based x fanout.
+- Rationale: Sigma fit still emphasized y-range heavily, keeping nodes visually narrow.
+
+15. Add a signed deterministic depth fanout term.
+- Rationale: breaks single-chain spine behavior even when sibling spread is zero.

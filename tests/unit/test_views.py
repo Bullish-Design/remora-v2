@@ -55,3 +55,4 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "function buildFileBands(nodes)" in html
     assert "const HASH_X_SPREAD =" in html
     assert "const DEPTH_WAVE_AMPLITUDE =" in html
+    assert "const DEPTH_X_FANOUT =" in html
