@@ -13,16 +13,16 @@ from structured_agents import Message
 from tests.factories import make_node
 
 from remora import __version__
-from remora.core.model.config import Config, InfraConfig
-from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     EventBus,
     EventStore,
     RewriteProposalEvent,
 )
+from remora.core.model.config import Config, InfraConfig
 from remora.core.services.broker import HumanInputBroker
 from remora.core.services.metrics import Metrics
+from remora.core.storage.db import open_database
 from remora.core.storage.graph import NodeStore
 from remora.core.storage.workspace import CairnWorkspaceService
 from remora.web.server import create_app
@@ -517,7 +517,13 @@ async def test_csrf_allows_localhost_origin_for_post(web_env) -> None:
 async def test_api_events(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     await event_store.append(
-        AgentMessageEvent(from_agent="user", to_agent="src/app.py::a", content="ping")
+        AgentMessageEvent(
+            from_agent="user",
+            to_agent="src/app.py::a",
+            content="ping",
+            correlation_id="corr-events-1",
+            tags=("chat",),
+        )
     )
 
     response = await client.get("/api/events")
@@ -525,6 +531,59 @@ async def test_api_events(web_env) -> None:
     payload = response.json()
     assert isinstance(payload, list)
     assert payload and payload[0]["event_type"] == "agent_message"
+    assert set(payload[0].keys()) == {
+        "event_type",
+        "timestamp",
+        "correlation_id",
+        "tags",
+        "payload",
+    }
+    assert payload[0]["correlation_id"] == "corr-events-1"
+    assert payload[0]["tags"] == ["chat"]
+    assert payload[0]["payload"]["content"] == "ping"
+
+
+@pytest.mark.asyncio
+async def test_api_events_supports_type_and_correlation_filters(web_env) -> None:
+    client, _node_store, event_store, _source_path = web_env
+    await event_store.append(
+        AgentMessageEvent(
+            from_agent="user",
+            to_agent="src/app.py::a",
+            content="match-1",
+            correlation_id="corr-events-match",
+        )
+    )
+    await event_store.append(
+        AgentMessageEvent(
+            from_agent="user",
+            to_agent="src/app.py::a",
+            content="skip-correlation",
+            correlation_id="corr-events-other",
+        )
+    )
+
+    by_type = await client.get("/api/events?event_type=agent_message")
+    assert by_type.status_code == 200
+    type_payload = by_type.json()
+    assert isinstance(type_payload, list)
+    assert type_payload
+    assert all(item["event_type"] == "agent_message" for item in type_payload)
+
+    by_corr = await client.get("/api/events?correlation_id=corr-events-match")
+    assert by_corr.status_code == 200
+    corr_payload = by_corr.json()
+    assert isinstance(corr_payload, list)
+    assert len(corr_payload) == 1
+    assert corr_payload[0]["payload"]["content"] == "match-1"
+
+    combined = await client.get(
+        "/api/events?event_type=agent_message&correlation_id=corr-events-match"
+    )
+    assert combined.status_code == 200
+    combined_payload = combined.json()
+    assert len(combined_payload) == 1
+    assert combined_payload[0]["payload"]["content"] == "match-1"
 
 
 @pytest.mark.asyncio

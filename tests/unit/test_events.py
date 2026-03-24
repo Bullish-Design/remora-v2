@@ -8,8 +8,8 @@ from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
     ContentChangedEvent,
-    CustomEvent,
     CursorFocusEvent,
+    CustomEvent,
     HumanInputRequestEvent,
     HumanInputResponseEvent,
     ModelRequestEvent,
@@ -248,3 +248,44 @@ def test_turn_digested_event_summary_method() -> None:
     event = TurnDigestedEvent(agent_id="agent-a", digest_summary="reflection completed")
     assert event.summary() == "reflection completed"
     assert event.summary() == event.digest_summary
+
+
+def test_remora_tool_result_event_structured_error_fields() -> None:
+    event = RemoraToolResultEvent(
+        agent_id="agent-a",
+        tool_name="review_diff",
+        is_error=True,
+        error_class="ToolError",
+        error_reason="node not found",
+        output_preview="Tool failed",
+        turn=2,
+    )
+    envelope = event.to_envelope()
+    assert envelope["payload"]["is_error"] is True
+    assert envelope["payload"]["error_class"] == "ToolError"
+    assert envelope["payload"]["error_reason"] == "node not found"
+
+
+def test_agent_error_event_structured_fields() -> None:
+    event = AgentErrorEvent(
+        agent_id="agent-a",
+        error="Tool 'review_diff' failed: node not found",
+        error_class="ToolError",
+        error_reason="node not found",
+    )
+    envelope = event.to_envelope()
+    assert envelope["payload"]["error_class"] == "ToolError"
+    assert envelope["payload"]["error_reason"] == "node not found"
+
+
+def test_turn_complete_event_error_summary() -> None:
+    event = TurnCompleteEvent(
+        agent_id="agent-a",
+        turn=3,
+        tool_calls_count=2,
+        errors_count=1,
+        error_summary="ToolError",
+    )
+    envelope = event.to_envelope()
+    assert envelope["payload"]["errors_count"] == 1
+    assert envelope["payload"]["error_summary"] == "ToolError"

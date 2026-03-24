@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     AgentStartEvent,
@@ -16,6 +15,7 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
+from remora.core.storage.db import open_database
 from remora.core.storage.transaction import TransactionContext
 
 
@@ -52,6 +52,44 @@ async def test_eventstore_query_events(event_env) -> None:
     assert len(events) == 2
     assert events[0]["event_type"] == "agent_message"
     assert events[1]["event_type"] == "agent_start"
+
+
+@pytest.mark.asyncio
+async def test_eventstore_query_events_with_filters(event_env) -> None:
+    store, _bus, _db = event_env
+    await store.append(
+        AgentMessageEvent(
+            from_agent="a",
+            to_agent="b",
+            content="m1",
+            correlation_id="corr-1",
+        )
+    )
+    await store.append(
+        AgentMessageEvent(
+            from_agent="a",
+            to_agent="c",
+            content="m2",
+            correlation_id="corr-2",
+        )
+    )
+    await store.append(AgentStartEvent(agent_id="worker", correlation_id="corr-1"))
+
+    by_type = await store.get_events(limit=10, event_type="agent_start")
+    assert len(by_type) == 1
+    assert by_type[0]["event_type"] == "agent_start"
+
+    by_corr = await store.get_events(limit=10, correlation_id="corr-2")
+    assert len(by_corr) == 1
+    assert by_corr[0]["payload"]["content"] == "m2"
+
+    combined = await store.get_events(
+        limit=10,
+        event_type="agent_message",
+        correlation_id="corr-1",
+    )
+    assert len(combined) == 1
+    assert combined[0]["payload"]["content"] == "m1"
 
 
 @pytest.mark.asyncio

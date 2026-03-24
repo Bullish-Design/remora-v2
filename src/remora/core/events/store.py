@@ -120,12 +120,29 @@ class EventStore:
         async with self._tx.batch():
             yield
 
-    async def get_events(self, limit: int = 100) -> list[dict[str, Any]]:
-        """Get recent events, newest first."""
-        cursor = await self._db.execute(
-            "SELECT * FROM events ORDER BY id DESC LIMIT ?",
-            (limit,),
-        )
+    async def get_events(
+        self,
+        limit: int = 100,
+        event_type: str | None = None,
+        correlation_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get recent events, newest first, optionally filtered by type/correlation."""
+        clauses: list[str] = []
+        params: list[Any] = []
+        if event_type:
+            clauses.append("event_type = ?")
+            params.append(event_type)
+        if correlation_id:
+            clauses.append("correlation_id = ?")
+            params.append(correlation_id)
+
+        query = "SELECT * FROM events"
+        if clauses:
+            query += f" WHERE {' AND '.join(clauses)}"
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = await self._db.execute(query, tuple(params))
         rows = await cursor.fetchall()
         result = [dict(row) for row in rows]
         for row in result:

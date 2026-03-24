@@ -15,6 +15,14 @@ _Record key decisions with rationale here as work proceeds._
 3. **Companion max turns reduced from 3 to 2**
    - Rationale: Companion is observer/summarizer and should be single-shot or near single-shot in reactive mode; lower turn count reduces loop/amplification risk.
 
+4. **Keep `EventStore.get_events` row shape for internal consumers; normalize envelope shape in `/api/events` route**
+   - Rationale: SSE replay and internal callers depend on DB row metadata (including `id`), while downstream scripts/API clients need a stable envelope.
+   - Result: Added `event_type`/`correlation_id` filtering in `EventStore.get_events`, and route-level normalization to `{event_type,timestamp,correlation_id,tags,payload}`.
+
+5. **Derive tool error class/reason in `OutboxObserver` and aggregate per-turn error summary**
+   - Rationale: structured-agents tool result events do not always provide explicit error class/reason fields.
+   - Result: `RemoraToolResultEvent` now gets `error_class`/`error_reason`; `TurnCompleteEvent.error_summary` is synthesized from observed tool error classes when errors occur.
+
 ## Pending Decisions
 
 1. **Vendored JS library format**: Bundle graphology + sigma as minified UMD files in `src/remora/web/static/vendor/` vs. inline in `index.html`?

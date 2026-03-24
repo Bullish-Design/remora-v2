@@ -1110,6 +1110,8 @@ async def test_actor_execute_turn_emits_error_event_on_kernel_failure(
 
     error_event = next(event for event in events if event["event_type"] == EventType.AGENT_ERROR)
     assert "connection refused" in error_event["payload"]["error"]
+    assert error_event["payload"]["error_class"] == "ModelError"
+    assert "connection refused" in error_event["payload"]["error_reason"]
 
     updated_node = await env["node_store"].get_node(node.node_id)
     assert updated_node is not None
@@ -1340,6 +1342,80 @@ async def test_actor_emits_kernel_observability_events(actor_env, monkeypatch) -
     assert "remora_tool_call" in event_types
     assert "remora_tool_result" in event_types
     assert "turn_complete" in event_types
+
+
+@pytest.mark.asyncio
+async def test_actor_emits_structured_tool_error_observability_events(
+    actor_env, monkeypatch
+) -> None:
+    env = actor_env
+    node = make_node("src/app.py::observed-errors")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class ObservedErrorKernel:
+        def __init__(self, observer):
+            self._observer = observer
+
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            await self._observer.emit(
+                SAToolResultEvent(
+                    turn=2,
+                    tool_name="review_diff",
+                    call_id="call-err-1",
+                    is_error=True,
+                    duration_ms=7,
+                    output_preview=(
+                        "Tool 'review_diff' failed: TypeError: "
+                        "expected dict but received None"
+                    ),
+                )
+            )
+            await self._observer.emit(
+                SATurnCompleteEvent(
+                    turn=2,
+                    tool_calls_count=1,
+                    tool_results_count=1,
+                    errors_count=1,
+                )
+            )
+            return SimpleNamespace(final_message=Message(role="assistant", content="done"))
+
+        async def close(self) -> None:
+            return None
+
+    def capture_kernel(**kwargs):  # noqa: ANN003, ANN202
+        return ObservedErrorKernel(kwargs["observer"])
+
+    monkeypatch.setattr("remora.core.agents.turn.create_kernel", capture_kernel)
+    monkeypatch.setattr("remora.core.agents.turn.discover_tools", _empty_tools)
+
+    actor = _make_actor(env, node.node_id)
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-observe-error",
+    )
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-observe-error",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="observe"),
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=40)
+    tool_error = next(event for event in events if event["event_type"] == "remora_tool_result")
+    assert tool_error["correlation_id"] == "corr-observe-error"
+    assert tool_error["payload"]["is_error"] is True
+    assert tool_error["payload"]["error_class"] == "TypeError"
+    assert "expected dict but received None" in tool_error["payload"]["error_reason"]
+
+    turn_complete = next(event for event in events if event["event_type"] == "turn_complete")
+    assert turn_complete["correlation_id"] == "corr-observe-error"
+    assert turn_complete["payload"]["errors_count"] == 1
+    assert "TypeError" in turn_complete["payload"]["error_summary"]
 
 
 @pytest.mark.asyncio

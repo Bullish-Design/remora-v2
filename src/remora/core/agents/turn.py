@@ -180,10 +180,14 @@ class AgentTurnExecutor:
                 if self._metrics is not None:
                     self._metrics.agent_turns_failed += 1
                 await self._node_store.transition_status(node_id, NodeStatus.ERROR)
+                error_text = str(exc)
+                error_reason = error_text.splitlines()[0][:200] if error_text else ""
                 await outbox.emit(
                     AgentErrorEvent(
                         agent_id=node_id,
-                        error=str(exc),
+                        error=error_text,
+                        error_class=type(exc).__name__,
+                        error_reason=error_reason,
                         correlation_id=trigger.correlation_id,
                     )
                 )

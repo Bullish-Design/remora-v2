@@ -57,6 +57,8 @@ class AgentErrorEvent(Event):
     event_type: str = EventType.AGENT_ERROR
     agent_id: str
     error: str
+    error_class: str = ""
+    error_reason: str = ""
 
     def summary(self) -> str:
         return self.error
@@ -189,6 +191,8 @@ class RemoraToolResultEvent(Event):
     agent_id: str
     tool_name: str
     is_error: bool = False
+    error_class: str = ""
+    error_reason: str = ""
     duration_ms: int = 0
     output_preview: str = ""
     turn: int = 0
@@ -202,6 +206,7 @@ class TurnCompleteEvent(Event):
     turn: int = 0
     tool_calls_count: int = 0
     errors_count: int = 0
+    error_summary: str = ""
 
 
 class TurnDigestedEvent(Event):
