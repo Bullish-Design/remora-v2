@@ -30,3 +30,16 @@ def test_graph_html_escapes_source_rendering() -> None:
 def test_graph_html_uses_batch_edge_endpoint() -> None:
     html = _index_html()
     assert '/api/edges' in html
+
+
+def test_graph_html_uses_valid_cdn_script_paths() -> None:
+    html = _index_html()
+    assert "https://unpkg.com/sigma@3.0.0-beta.31/dist/sigma.min.js" in html
+    assert (
+        "https://unpkg.com/sigma@3.0.0-beta.31/build/sigma.min.js" not in html
+    )
+    assert (
+        "https://unpkg.com/graphology-layout-forceatlas2@0.10.1/build/"
+        "graphology-layout-forceatlas2.min.js"
+        not in html
+    )
