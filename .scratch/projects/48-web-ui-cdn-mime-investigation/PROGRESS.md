@@ -46,3 +46,9 @@
 - [x] Reduce depth spacing further and increase x spread constants
 - [x] Add depth zigzag term that grows with depth
 - [x] Re-run targeted tests and confirm pass
+
+## Phase 7: Band key and level spread rework
+- [x] Rework file-band grouping to coarse semantic keys (top src segment) instead of full path
+- [x] Add per-depth level spread (`LEVEL_SPREAD`) so same-depth nodes occupy width
+- [x] Keep depth fanout/zigzag and increase their combined influence
+- [x] Re-run targeted tests and confirm pass

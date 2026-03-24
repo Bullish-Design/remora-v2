@@ -251,24 +251,25 @@
   </aside>
   <script>
     const graph = new graphology.Graph();
-    const FILE_BAND_SPACING = 12;
-    const DEPTH_ROW_SPACING = 1.25;
-    const SIBLING_SPREAD = 1.35;
-    const HASH_X_SPREAD = 1.25;
-    const DEPTH_WAVE_AMPLITUDE = 1.8;
-    const DEPTH_X_FANOUT = 0.28;
-    const DEPTH_ZIGZAG_SPREAD = 0.65;
+    const FILE_BAND_SPACING = 4.4;
+    const DEPTH_ROW_SPACING = 1.7;
+    const LEVEL_SPREAD = 2.4;
+    const SIBLING_SPREAD = 1.8;
+    const HASH_X_SPREAD = 1.8;
+    const DEPTH_WAVE_AMPLITUDE = 2.5;
+    const DEPTH_X_FANOUT = 0.8;
+    const DEPTH_ZIGZAG_SPREAD = 1.35;
     const FILE_HEADER_OFFSET_Y = -1.3;
-    const FILE_HEADER_X = -7.0;
-    const UNFILED_BAND_Y = -FILE_BAND_SPACING;
+    const FILE_HEADER_X = -9.0;
+    const UNFILED_BAND_Y = 0;
     const TYPE_TRACK_OFFSETS = Object.freeze({
-      directory: -5.0,
-      file: -2.5,
-      class: -0.6,
-      function: 1.2,
-      method: 3.4,
-      section: 4.8,
-      table: 4.8,
+      directory: -6.5,
+      file: -3.4,
+      class: -1.2,
+      function: 1.6,
+      method: 4.2,
+      section: 6.0,
+      table: 6.0,
     });
 
     function drawRoundedRect(context, x, y, width, height, radius) {
@@ -375,14 +376,36 @@
       return (unit - 0.5) * scale;
     }
 
+    function fileBandKeyFromPath(filePath) {
+      if (!filePath || filePath === ".") return "__unfiled__";
+      const normalized = String(filePath).replace(/\\/g, "/");
+      if (normalized.startsWith("src/")) {
+        const relative = normalized.slice(4);
+        const parts = relative.split("/").filter(Boolean);
+        return parts[0] || "src";
+      }
+      const srcMarker = "/src/";
+      const srcIndex = normalized.lastIndexOf(srcMarker);
+      if (srcIndex >= 0) {
+        const relative = normalized.slice(srcIndex + srcMarker.length);
+        const parts = relative.split("/").filter(Boolean);
+        return parts[0] || "src";
+      }
+      const parts = normalized.split("/").filter(Boolean);
+      if (parts.length >= 2) return parts[parts.length - 2];
+      return parts[0] || "__unfiled__";
+    }
+
     function buildFileBands(nodes) {
-      const filePaths = [...new Set(nodes.map((node) => node.file_path).filter(Boolean))].sort();
-      return new Map(filePaths.map((filePath, index) => [filePath, index * FILE_BAND_SPACING]));
+      const keys = [...new Set(nodes.map((node) => fileBandKeyFromPath(node.file_path)))].sort();
+      const center = (keys.length - 1) / 2;
+      return new Map(keys.map((key, index) => [key, (index - center) * FILE_BAND_SPACING]));
     }
 
     function bandYForNode(fileBands, filePath) {
+      const key = fileBandKeyFromPath(filePath);
       if (!filePath) return UNFILED_BAND_Y;
-      return fileBands.get(filePath) ?? UNFILED_BAND_Y;
+      return fileBands.get(key) ?? UNFILED_BAND_Y;
     }
 
     async function loadGraph() {
@@ -394,6 +417,7 @@
       const depthCache = {};
       const visiting = new Set();
       const parentToChildren = {};
+      const nodesByDepth = {};
 
       function nodeDepth(nodeId) {
         if (depthCache[nodeId] !== undefined) return depthCache[nodeId];
@@ -424,6 +448,23 @@
       }
 
       for (const node of nodes) {
+        const depth = nodeDepth(node.node_id);
+        nodesByDepth[depth] ||= [];
+        nodesByDepth[depth].push(node.node_id);
+      }
+      for (const depthKey of Object.keys(nodesByDepth)) {
+        nodesByDepth[depthKey].sort((left, right) => {
+          const leftNode = nodeById[left];
+          const rightNode = nodeById[right];
+          const leftPath = leftNode?.file_path || "";
+          const rightPath = rightNode?.file_path || "";
+          const leftName = leftNode?.name || left;
+          const rightName = rightNode?.name || right;
+          return leftPath.localeCompare(rightPath) || leftName.localeCompare(rightName) || left.localeCompare(right);
+        });
+      }
+
+      for (const node of nodes) {
         if (!graph.hasNode(node.node_id)) {
           const filePath = node.file_path || "";
           const baseBandY = bandYForNode(fileBands, filePath);
@@ -435,13 +476,19 @@
             siblings.length > 1
               ? (siblingIndex - (siblings.length - 1) / 2) * SIBLING_SPREAD
               : 0;
+          const levelNodes = nodesByDepth[depth] || [node.node_id];
+          const levelIndex = levelNodes.indexOf(node.node_id);
+          const levelSpread =
+            levelNodes.length > 1
+              ? (levelIndex - (levelNodes.length - 1) / 2) * LEVEL_SPREAD
+              : 0;
           const hash = hashNodeId(node.node_id);
           const side = (hash & 1) === 0 ? -1 : 1;
           const depthFanout = side * depth * DEPTH_X_FANOUT;
           const depthZigzag = ((depth % 2 === 0) ? -1 : 1) * Math.floor(depth / 2) * DEPTH_ZIGZAG_SPREAD;
           const waveAmplitude = DEPTH_WAVE_AMPLITUDE + depth * 0.18;
           const depthWave = Math.sin(depth * 0.85 + (hash % 7)) * waveAmplitude;
-          const x = typeTrackX + spread + depthFanout + depthZigzag + depthWave + deterministicOffset(node.node_id, HASH_X_SPREAD);
+          const x = typeTrackX + spread + levelSpread + depthFanout + depthZigzag + depthWave + deterministicOffset(node.node_id, HASH_X_SPREAD);
           const y = baseBandY + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.22);
           graph.addNode(node.node_id, {
             label: node.name,
@@ -456,19 +503,18 @@
         }
       }
 
-      for (const [filePath, bandY] of fileBands.entries()) {
-        const labelId = `__label__${filePath}`;
+      for (const [bandKey, bandY] of fileBands.entries()) {
+        const labelId = `__label__${bandKey}`;
         if (graph.hasNode(labelId)) continue;
-        const shortName = filePath.split("/").pop();
         graph.addNode(labelId, {
-          label: shortName,
+          label: bandKey,
           forceLabel: true,
           size: 1.7,
           x: FILE_HEADER_X,
           y: bandY + FILE_HEADER_OFFSET_Y,
           color: "#9fb2c8",
           node_type: "__label__",
-          file_path: filePath,
+          file_path: bandKey,
         });
       }
 
