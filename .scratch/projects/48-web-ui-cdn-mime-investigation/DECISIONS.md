@@ -22,7 +22,16 @@
 
 6. Use deterministic lane/depth/sibling placement.
 - Rationale: predictable organization improves readability and avoids random layout jitter.
-- Strategy: file-path columns, parent-depth rows, deterministic sibling spread + tiny deterministic offsets to reduce overlap.
 
 7. Remove stale ForceAtlas2 controls from HTML.
 - Rationale: ForceAtlas2 script was intentionally removed in phase 1; leaving runtime toggles/attributes would be dead config.
+
+## Phase 3 (Sidebar tall layout)
+8. Pivot file grouping from x-axis lanes to y-axis bands.
+- Rationale: sidebar contexts are narrow; vertical stacking preserves readability better than wide spread.
+
+9. Keep x-axis compact and semantic.
+- Rationale: assign narrow x tracks by node type plus limited sibling spread so the graph remains usable in skinny panes.
+
+10. Expose clear spacing constants for iterative tuning.
+- Rationale: practical follow-up tuning is expected, so constants are centralized (`FILE_BAND_SPACING`, `DEPTH_ROW_SPACING`, `SIBLING_SPREAD`, `TYPE_TRACK_OFFSETS`).

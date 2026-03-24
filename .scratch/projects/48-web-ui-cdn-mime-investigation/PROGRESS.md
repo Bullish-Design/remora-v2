@@ -17,3 +17,11 @@
 - [x] Replace random cluster placement with deterministic file-lane/depth layout
 - [x] Remove stale ForceAtlas2 data attribute/runtime hook
 - [x] Re-run targeted tests and confirm pass
+
+## Phase 3: Sidebar tall/narrow layout tuning
+- [x] Create new plan file in same project directory (`PLAN_03_SIDEBAR_TALL_LAYOUT.md`)
+- [x] Add failing view test markers for vertical-band organization
+- [x] Replace file-lane (x-axis) layout with file-band (y-axis) layout
+- [x] Constrain horizontal spread using type tracks + tighter sibling spread
+- [x] Increase vertical spacing to use tall viewport effectively
+- [x] Re-run targeted tests and confirm pass

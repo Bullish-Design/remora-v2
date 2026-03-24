@@ -251,12 +251,17 @@
   </aside>
   <script>
     const graph = new graphology.Graph();
-    const FILE_LANE_SPACING = 7;
-    const DEPTH_ROW_SPACING = 2.5;
-    const SIBLING_SPREAD = 1.1;
-    const FILE_HEADER_Y = -3;
-    const ROOT_ROW_Y = -0.8;
-    const UNFILED_LANE_X = -FILE_LANE_SPACING;
+    const FILE_BAND_SPACING = 12;
+    const DEPTH_ROW_SPACING = 2.6;
+    const SIBLING_SPREAD = 0.45;
+    const FILE_HEADER_OFFSET_Y = -1.3;
+    const FILE_HEADER_X = -2.8;
+    const UNFILED_BAND_Y = -FILE_BAND_SPACING;
+    const TYPE_TRACK_OFFSETS = Object.freeze({
+      function: -1.0,
+      class: 0,
+      method: 1.0,
+    });
 
     function drawRoundedRect(context, x, y, width, height, radius) {
       const r = Math.min(radius, width / 2, height / 2);
@@ -362,21 +367,22 @@
       return (unit - 0.5) * scale;
     }
 
-    function buildFileLanes(nodes) {
+    function buildFileBands(nodes) {
       const filePaths = [...new Set(nodes.map((node) => node.file_path).filter(Boolean))].sort();
-      return new Map(filePaths.map((filePath, index) => [filePath, index * FILE_LANE_SPACING]));
+      return new Map(filePaths.map((filePath, index) => [filePath, index * FILE_BAND_SPACING]));
     }
 
-    function laneXForNode(fileLanes, filePath) {
-      if (!filePath) return UNFILED_LANE_X;
-      return fileLanes.get(filePath) ?? UNFILED_LANE_X;
+    function bandYForNode(fileBands, filePath) {
+      if (!filePath) return UNFILED_BAND_Y;
+      return fileBands.get(filePath) ?? UNFILED_BAND_Y;
     }
 
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
       const nodeById = Object.fromEntries(nodes.map((node) => [node.node_id, node]));
-      const fileLanes = buildFileLanes(nodes);
+      const fileBands = buildFileBands(nodes);
+      const hasUnfiled = nodes.some((node) => !node.file_path);
       const depthCache = {};
       const visiting = new Set();
       const parentToChildren = {};
@@ -412,7 +418,8 @@
       for (const node of nodes) {
         if (!graph.hasNode(node.node_id)) {
           const filePath = node.file_path || "";
-          const laneX = laneXForNode(fileLanes, filePath);
+          const baseBandY = bandYForNode(fileBands, filePath);
+          const typeTrackX = TYPE_TRACK_OFFSETS[node.node_type] ?? 0;
           const depth = nodeDepth(node.node_id);
           const siblings = parentToChildren[node.parent_id || "__root__"] || [node.node_id];
           const siblingIndex = siblings.indexOf(node.node_id);
@@ -420,8 +427,8 @@
             siblings.length > 1
               ? (siblingIndex - (siblings.length - 1) / 2) * SIBLING_SPREAD
               : 0;
-          const x = laneX + spread + deterministicOffset(node.node_id, 0.28);
-          const y = ROOT_ROW_Y + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.2);
+          const x = typeTrackX + spread + deterministicOffset(node.node_id, 0.16);
+          const y = baseBandY + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.22);
           graph.addNode(node.node_id, {
             label: node.name,
             forceLabel: true,
@@ -435,7 +442,7 @@
         }
       }
 
-      for (const [filePath, laneX] of fileLanes.entries()) {
+      for (const [filePath, bandY] of fileBands.entries()) {
         const labelId = `__label__${filePath}`;
         if (graph.hasNode(labelId)) continue;
         const shortName = filePath.split("/").pop();
@@ -443,11 +450,24 @@
           label: shortName,
           forceLabel: true,
           size: 1.7,
-          x: laneX,
-          y: FILE_HEADER_Y,
+          x: FILE_HEADER_X,
+          y: bandY + FILE_HEADER_OFFSET_Y,
           color: "#9fb2c8",
           node_type: "__label__",
           file_path: filePath,
+        });
+      }
+
+      if (hasUnfiled && !graph.hasNode("__label____unfiled__")) {
+        graph.addNode("__label____unfiled__", {
+          label: "(unfiled)",
+          forceLabel: true,
+          size: 1.5,
+          x: FILE_HEADER_X,
+          y: UNFILED_BAND_Y + FILE_HEADER_OFFSET_Y,
+          color: "#9fb2c8",
+          node_type: "__label__",
+          file_path: "",
         });
       }
 
