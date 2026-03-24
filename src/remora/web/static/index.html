@@ -9,23 +9,24 @@
   <script src="https://unpkg.com/graphology-layout-forceatlas2@0.10.1/build/graphology-layout-forceatlas2.min.js"></script>
   <style>
     :root {
-      --bg: #f6f2ea;
-      --panel: #ffffff;
-      --ink: #1f1a16;
-      --muted: #6f645c;
-      --line: #d8cec3;
-      --accent: #0f766e;
-      --running: #ea580c;
-      --done: #15803d;
-      --error: #b91c1c;
-      --function: #2563eb;
-      --class: #7c3aed;
-      --method: #0f766e;
+      color-scheme: dark;
+      --bg: #0a1018;
+      --panel: #101826;
+      --ink: #e5edf7;
+      --muted: #9fb2c8;
+      --line: #233247;
+      --accent: #22d3ee;
+      --running: #fb923c;
+      --done: #34d399;
+      --error: #f87171;
+      --function: #60a5fa;
+      --class: #a78bfa;
+      --method: #22d3ee;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: radial-gradient(1200px 800px at 10% 0%, #fff8ec, var(--bg));
+      background: radial-gradient(1200px 800px at 10% 0%, #17263a, var(--bg));
       color: var(--ink);
       font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
       display: flex;
@@ -40,9 +41,9 @@
       overflow-y: auto;
     }
     h1 { margin: 0 0 12px; font-size: 1.1rem; letter-spacing: 0.02em; }
-    #connection-status.connected { color: #15803d; }
+    #connection-status.connected { color: #34d399; }
     #connection-status.disconnected {
-      color: #b91c1c;
+      color: #f87171;
       animation: pulse 1s infinite;
     }
     @keyframes pulse {
@@ -53,7 +54,7 @@
     #node-details pre {
       max-height: 220px;
       overflow: auto;
-      background: #f9f6f0;
+      background: #111b2b;
       border: 1px solid var(--line);
       padding: 10px;
       border-radius: 8px;
@@ -69,7 +70,7 @@
       border-radius: 8px;
       padding: 8px;
       margin: 6px 0;
-      background: #fffcf7;
+      background: #111b2b;
     }
     button {
       border: 0;
@@ -77,7 +78,7 @@
       padding: 8px 10px;
       cursor: pointer;
       background: var(--accent);
-      color: white;
+      color: #03131d;
       margin-right: 6px;
     }
     #events {
@@ -85,7 +86,7 @@
       overflow: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #f9f6f0;
+      background: #111b2b;
       padding: 8px;
       font-size: 0.82rem;
       white-space: pre-wrap;
@@ -95,7 +96,7 @@
       overflow: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #f9f6f0;
+      background: #111b2b;
       padding: 8px;
       font-size: 0.78rem;
     }
@@ -104,9 +105,9 @@
       grid-template-columns: 70px 1fr;
       gap: 4px 10px;
       padding: 6px 8px;
-      border-left: 3px solid #6f645c;
+      border-left: 3px solid #9fb2c8;
       margin-bottom: 6px;
-      background: #fffcf7;
+      background: #111b2b;
     }
     .timeline-event .timeline-type {
       font-weight: 700;
@@ -115,15 +116,15 @@
     .timeline-event .timeline-meta {
       color: var(--muted);
     }
-    .timeline-event.type-agent_start { border-color: #2563eb; }
-    .timeline-event.type-agent_complete { border-color: #15803d; }
-    .timeline-event.type-agent_error { border-color: #b91c1c; }
-    .timeline-event.type-agent_message { border-color: #ea580c; }
-    .timeline-event.type-content_changed { border-color: #7c3aed; }
+    .timeline-event.type-agent_start { border-color: #60a5fa; }
+    .timeline-event.type-agent_complete { border-color: #34d399; }
+    .timeline-event.type-agent_error { border-color: #f87171; }
+    .timeline-event.type-agent_message { border-color: #fb923c; }
+    .timeline-event.type-content_changed { border-color: #a78bfa; }
     #agent-panel {
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: #f9f6f0;
+      background: #111b2b;
       padding: 10px;
       margin-top: 12px;
     }
@@ -137,7 +138,7 @@
       overflow: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fffcf7;
+      background: #111b2b;
       padding: 8px;
       margin-bottom: 8px;
     }
@@ -146,18 +147,18 @@
       padding: 8px;
       border-radius: 8px;
       border: 1px solid var(--line);
-      background: #fff;
+      background: #111b2b;
     }
     .panel-user {
-      border-left: 4px solid #0f766e;
-      background: #e0f2f1;
+      border-left: 4px solid #22d3ee;
+      background: #103041;
     }
     .panel-agent {
-      border-left: 4px solid #2563eb;
+      border-left: 4px solid #60a5fa;
     }
     .panel-error {
-      border-left: 4px solid #b91c1c;
-      background: #fee2e2;
+      border-left: 4px solid #f87171;
+      background: #3d1d27;
     }
     .panel-meta {
       font-size: 0.72rem;
@@ -176,7 +177,7 @@
       margin-top: 8px;
       max-height: 180px;
       overflow: auto;
-      background: #f4f4f5;
+      background: #111b2b;
       border-radius: 6px;
       padding: 8px;
       font-family: monospace;
@@ -201,7 +202,7 @@
         margin-bottom: 12px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: #f9f6f0;
+        background: #111b2b;
       ">
         <div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;">
           FOLLOWING CURSOR
@@ -220,13 +221,13 @@
         <div id="companion-source" style="
           font-family: monospace;
           font-size: 11px;
-          background: #fffcf7;
+          background: #111b2b;
           padding: 8px;
           border-radius: 4px;
           max-height: 200px;
           overflow-y: auto;
           white-space: pre-wrap;
-          color: #1f1a16;
+          color: #e5edf7;
         "></div>
       </div>
     </section>
@@ -258,7 +259,7 @@
           return {
             ...data,
             size: 2,
-            color: "#6f645c",
+            color: "#9fb2c8",
             label: data.label,
           };
         }
@@ -287,14 +288,14 @@
           .trim();
       }
       if (status === "awaiting_input" || status === "awaiting_review") {
-        return "#ca8a04";
+        return "#fbbf24";
       }
       if (status === "error") {
         return getComputedStyle(document.documentElement)
           .getPropertyValue("--error")
           .trim();
       }
-      if (status === "idle") return colorByType[nodeType] || "#4f46e5";
+      if (status === "idle") return colorByType[nodeType] || "#818cf8";
       return getComputedStyle(document.documentElement).getPropertyValue("--done").trim();
     }
 
@@ -405,7 +406,7 @@
           size: 3,
           x: cluster.cx,
           y: cluster.cy,
-          color: "#6f645c",
+          color: "#9fb2c8",
           node_type: "__label__",
           file_path: filePath,
         });
@@ -734,7 +735,7 @@ function addTimelineEvent(eventType, payload) {
               size: 3,
               x: cluster.cx,
               y: cluster.cy,
-              color: "#6f645c",
+              color: "#9fb2c8",
               node_type: "__label__",
               file_path: filePath,
             });
