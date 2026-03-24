@@ -57,6 +57,13 @@ _Record key decisions with rationale here as work proceeds._
    - Rationale: `Metrics.snapshot()` now includes actor inbox backpressure counters; tests must assert the current public snapshot shape to prevent false negatives.
    - Result: `tests/unit/test_metrics.py` now includes the four actor inbox counter keys and validates default zero values.
 
+13. **Publish WS6 docs as focused references plus operator updates in HOW_TO**
+   - Rationale: WS6 acceptance requires both deep references (virtual/event contracts) and practical setup/troubleshooting in the primary operations guide.
+   - Result:
+     - Added `docs/virtual-agents.md` for architecture, lifecycle, tool contracts, loop guards, and customization.
+     - Added `docs/event-semantics.md` for envelope schema, full event-type payload reference, error field contracts, `/api/events` filters, and `/sse` behavior.
+     - Updated `docs/HOW_TO_USE_REMORA.md` with `Offline Web UI`, `Search Setup`, and `LSP Setup` sections plus explicit search/lsp troubleshooting guidance.
+
 ## Pending Decisions
 
 1. **WS6 documentation scope split**: Keep WS6 in one commit or split into architecture docs + operator docs commits?

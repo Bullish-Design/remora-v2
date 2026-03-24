@@ -1,6 +1,6 @@
 # Progress — 49-demo-v2-update
 
-## Status: WS1 + WS2 + WS3 + WS4 + WS5 Complete
+## Status: WS1 + WS2 + WS3 + WS4 + WS5 + WS6 Complete
 
 | # | Task | Status |
 |---|------|--------|
@@ -22,6 +22,8 @@
 | 16 | Implement WS5 regression test expansion | done |
 | 17 | Resolve unit-suite regression in metrics snapshot assertion | done |
 | 18 | Run WS5 verification suite | done |
+| 19 | Implement WS6 upstream documentation set | done |
+| 20 | Validate WS6 references/endpoints against code | done |
 
 ## Workstream Status
 
@@ -32,4 +34,4 @@
 | 3 | Offline-Safe Web UI Defaults | done |
 | 4 | Search and LSP Operator UX | done |
 | 5 | Upstream Regression Tests | done |
-| 6 | Upstream Documentation | pending |
+| 6 | Upstream Documentation | done |

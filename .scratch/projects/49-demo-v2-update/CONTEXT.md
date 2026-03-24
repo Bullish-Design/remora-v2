@@ -1,10 +1,11 @@
 # Context — 49-demo-v2-update
 
 ## Current State
-- WS1, WS2, WS3, WS4, and WS5 implementations completed from `DEMO_UPDATE_IMPLEMENTATION_GUIDE.md`.
+- WS1, WS2, WS3, WS4, WS5, and WS6 implementations completed from `DEMO_UPDATE_IMPLEMENTATION_GUIDE.md`.
 - Search and LSP operator diagnostics are now explicit/actionable.
 - `/api/events` invalid parameter errors now follow structured response shape.
 - WS5 regression tests now cover virtual reactive runtime behavior, structured event error fields, and correlation propagation.
+- WS6 documentation set now published for virtual agents, event semantics, and offline/search/lsp operator setup.
 
 ## Files Changed For WS1
 - `src/remora/defaults/bundles/review-agent/tools/review_diff.pym`
@@ -53,6 +54,11 @@
 - `tests/unit/test_event_error_fields.py` (new)
 - `tests/unit/test_metrics.py` (snapshot key assertion aligned with current metrics fields)
 
+## Files Changed For WS6
+- `docs/virtual-agents.md` (new)
+- `docs/event-semantics.md` (new)
+- `docs/HOW_TO_USE_REMORA.md` (offline UI + search/lsp setup + troubleshooting updates)
+
 ## Verification Results
 - `devenv shell -- pytest tests/integration/test_virtual_reactive_flow.py tests/unit/test_actor.py tests/unit/test_config.py tests/unit/test_grail.py tests/unit/test_companion_tools.py tests/unit/test_bundle_configs.py tests/unit/test_runner.py tests/integration/test_grail_runtime_tools.py -q`
   - Result: `126 passed`
@@ -78,6 +84,14 @@
   - Result: all checks passed
 - `devenv shell -- pytest tests/unit -q`
   - Result: `420 passed`
+- `rg -n "^### Offline Web UI|^### LSP Setup|^### Search Setup|docs/event-semantics.md|docs/virtual-agents.md|search_not_configured|search_backend_unavailable" docs/HOW_TO_USE_REMORA.md docs/event-semantics.md docs/virtual-agents.md`
+  - Result: required WS6 sections and references present
+- Manual source alignment check:
+  - `src/remora/core/events/types.py`
+  - `src/remora/web/routes/events.py`
+  - `src/remora/web/routes/search.py`
+  - `src/remora/web/sse.py`
+  - Result: docs match current envelope fields, event types, and search diagnostics
 
 ## What's Next
-- WS1 + WS2 + WS3 + WS4 + WS5 are done. Next implementation target is WS6 (upstream docs).
+- All guide workstreams (WS1-WS6) are complete.

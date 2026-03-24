@@ -35,13 +35,13 @@ This guide is a practical one-stop reference for developers building application
 - How to add test/review/observer roles without binding to a file-backed node.
 
 11. Web APIs and UI Integration
-- Key REST/SSE endpoints and how to consume them from an external app.
+- Key REST/SSE endpoints, offline UI behavior, and integration patterns.
 
 12. LSP Integration
-- Embedded vs standalone usage and what editor features are exposed.
+- Setup flow, diagnostics, and embedded vs standalone usage.
 
 13. Search/Index Integration
-- Enabling semantic search and using `remora index` effectively.
+- Setup flow, diagnostics, and indexing/search usage.
 
 14. Programmatic Embedding (Using Remora from Python)
 - How to start/stop runtime services from your own Python application.
@@ -80,6 +80,7 @@ Use Remora when you want application behavior to emerge from event-triggered, to
 - Events are persisted in SQLite (`events` table) and then dispatched.
 - Event type IDs are snake_case strings (for example: `node_changed`, `agent_message`, `turn_digested`).
 - Subscription matching is pattern-based (`event_types`, `from_agents`, `to_agent`, `path_glob`, `tags`).
+- Full contract reference: `docs/event-semantics.md`.
 
 ### Actors
 - Each active node can have an actor with an inbox.
@@ -375,6 +376,7 @@ Use virtual agents for:
 
 Design tip:
 - Keep virtual roles narrow and explicit; broad subscriptions can overwhelm runtime throughput.
+- Detailed architecture and tool contracts: `docs/virtual-agents.md`.
 
 ## 11. Web APIs and UI Integration
 
@@ -391,6 +393,27 @@ Key endpoints:
 - `POST /api/proposals/{node_id}/reject`
 - `POST /api/search` (when search is enabled and available)
 - `GET /sse`
+
+### Offline Web UI
+Remora ships vendored graph UI scripts and does not require CDN access.
+
+Static assets:
+- `/static/vendor/graphology.umd.min.js`
+- `/static/vendor/sigma.min.js`
+
+`src/remora/web/static/index.html` references these local paths directly.
+
+Quick verification:
+
+```bash
+curl -sS -I http://127.0.0.1:8080/static/vendor/graphology.umd.min.js
+curl -sS -I http://127.0.0.1:8080/static/vendor/sigma.min.js
+```
+
+If either request is not `200`:
+- Check package/static file install state.
+- Verify your runtime serves `src/remora/web/static/`.
+- Verify `index.html` script tags still point to `/static/vendor/*`.
 
 ### SSE Integration
 Use `GET /sse` for live event streaming.
@@ -415,6 +438,24 @@ Server-side protections:
 
 ## 12. LSP Integration
 
+### LSP Setup
+
+Install optional LSP dependencies:
+
+```bash
+devenv shell -- uv sync --extra lsp
+```
+
+Sanity check:
+
+```bash
+devenv shell -- remora lsp --help
+```
+
+If `pygls` is missing, Remora reports:
+- install command: `uv sync --extra lsp`
+- docs reference: `docs/HOW_TO_USE_REMORA.md#lsp-setup`
+
 ### Embedded Mode
 Start LSP inside runtime:
 
@@ -436,6 +477,41 @@ devenv shell -- remora lsp
 - `didOpen` / `didSave` content-change event emission
 
 ## 13. Search/Index Integration
+
+### Search Setup
+
+Install optional search dependencies:
+
+```bash
+devenv shell -- uv sync --extra search
+```
+
+Enable in `remora.yaml`:
+
+```yaml
+search:
+  enabled: true
+  mode: "remote"
+  embeddy_url: "http://localhost:8585"
+  timeout: 30.0
+  default_collection: "code"
+```
+
+Verify API behavior:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/search \
+  -H "content-type: application/json" \
+  -d '{"query":"actor inbox overflow","top_k":5}'
+```
+
+Troubleshooting matrix:
+
+| Symptom | HTTP Code | Cause | Fix |
+|---|---:|---|---|
+| `search_not_configured` | `501` | Search extra not installed/configured | `devenv shell -- uv sync --extra search` |
+| `search_backend_unavailable` | `503` | Embedding backend unreachable | Start/check embeddy and URL |
+| `invalid_request` | `400` | Missing/invalid payload fields | Send valid `query`, `top_k`, and `mode` |
 
 Enable search in `remora.yaml`:
 
@@ -575,13 +651,16 @@ devenv shell -- env REMORA_TEST_MODEL_URL='http://remora-server:8000/v1' REMORA_
 - Review proposal diff via proposal endpoints before acceptance.
 
 ### Search Unavailable
-- Verify `search.enabled: true`.
-- Verify embeddy availability (remote mode) or local backend dependencies.
-- Run `remora index` and inspect reported errors.
+- Confirm `POST /api/search` status:
+  - `501 search_not_configured` -> run `devenv shell -- uv sync --extra search`.
+  - `503 search_backend_unavailable` -> fix embeddy connectivity/config.
+- Verify `search.enabled: true` in `remora.yaml`.
+- Run `devenv shell -- remora index` and inspect errors.
 
 ### LSP Shows Nothing
-- Ensure `.remora/remora.db` exists.
-- Use embedded mode (`start --lsp`) or point standalone LSP at active runtime DB.
+- Ensure `.remora/remora.db` exists and runtime has discovered nodes.
+- Ensure LSP deps are installed: `devenv shell -- uv sync --extra lsp`.
+- Use embedded mode (`devenv shell -- remora start --lsp`) or standalone (`devenv shell -- remora lsp`).
 
 ## 18. End-to-End Build Blueprint
 
