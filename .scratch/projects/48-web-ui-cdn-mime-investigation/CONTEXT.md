@@ -23,3 +23,14 @@ Project 48 now includes seven completed phases.
 ## Current validation state
 - Ran: `devenv shell -- pytest tests/unit/test_views.py -q`
 - Result: `6 passed`
+
+## Phase 8 completed
+- Added box-hitbox click alignment:
+  - `nodeLabelHitboxes` map populated in `drawNodeBoxLabel`
+  - `clickStage` now hit-tests label boxes and selects matching node
+  - `clickNode` ignores `__label__` nodes
+- Fixed stale SSE discovery path that still referenced removed layout helpers (`getFileCluster`/`deterministicPosition`).
+  - `node_discovered` now calls `loadGraph()` to stay consistent with current layout pipeline.
+- Validation:
+  - Ran `devenv shell -- pytest tests/unit/test_views.py -q`
+  - Result `6 passed`

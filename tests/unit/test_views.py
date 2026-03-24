@@ -57,3 +57,5 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "const DEPTH_WAVE_AMPLITUDE =" in html
     assert "const DEPTH_X_FANOUT =" in html
     assert "const DEPTH_ZIGZAG_SPREAD =" in html
+    assert "const nodeLabelHitboxes = new Map();" in html
+    assert 'renderer.on("clickStage"' in html

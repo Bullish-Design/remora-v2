@@ -52,3 +52,11 @@
 - [x] Add per-depth level spread (`LEVEL_SPREAD`) so same-depth nodes occupy width
 - [x] Keep depth fanout/zigzag and increase their combined influence
 - [x] Re-run targeted tests and confirm pass
+
+## Phase 8: Click hitbox alignment with box labels
+- [x] Add failing test markers for box-hitbox click wiring
+- [x] Add `nodeLabelHitboxes` tracking during label draw
+- [x] Add stage-click hit testing against label boxes
+- [x] Keep click-node path but ignore non-selectable label nodes
+- [x] Remove stale `node_discovered` layout path and reuse `loadGraph()`
+- [x] Re-run targeted tests and confirm pass

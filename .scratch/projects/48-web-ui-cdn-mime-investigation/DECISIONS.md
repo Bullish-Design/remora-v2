@@ -59,3 +59,13 @@
 
 17. Increase type-track spread and hash spread again while lowering depth spacing.
 - Rationale: screenshot evidence still showed center collapse after phase 5.
+
+## Phase 8 (Click alignment)
+18. Track label hitboxes at render time and select via stage clicks.
+- Rationale: box visuals are larger than Sigma's native node pick area, so users were missing intended click targets.
+
+19. Keep native `clickNode` but filter out `__label__` nodes.
+- Rationale: avoid selecting decorative/group label nodes.
+
+20. Replace stale incremental discovery placement with `loadGraph()`.
+- Rationale: old branch referenced removed helpers and could desync layout logic over time.

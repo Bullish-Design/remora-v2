@@ -251,6 +251,7 @@
   </aside>
   <script>
     const graph = new graphology.Graph();
+    const nodeLabelHitboxes = new Map();
     const FILE_BAND_SPACING = 4.4;
     const DEPTH_ROW_SPACING = 1.7;
     const LEVEL_SPREAD = 2.4;
@@ -313,6 +314,15 @@
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillText(text, data.x, data.y);
+      if (data.node_id) {
+        nodeLabelHitboxes.set(data.node_id, {
+          x,
+          y,
+          width: boxWidth,
+          height: boxHeight,
+          area: boxWidth * boxHeight,
+        });
+      }
       context.restore();
     }
 
@@ -491,6 +501,7 @@
           const x = typeTrackX + spread + levelSpread + depthFanout + depthZigzag + depthWave + deterministicOffset(node.node_id, HASH_X_SPREAD);
           const y = baseBandY + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.22);
           graph.addNode(node.node_id, {
+            node_id: node.node_id,
             label: node.name,
             forceLabel: true,
             size: 2.4,
@@ -507,6 +518,7 @@
         const labelId = `__label__${bandKey}`;
         if (graph.hasNode(labelId)) continue;
         graph.addNode(labelId, {
+          node_id: labelId,
           label: bandKey,
           forceLabel: true,
           size: 1.7,
@@ -520,6 +532,7 @@
 
       if (hasUnfiled && !graph.hasNode("__label____unfiled__")) {
         graph.addNode("__label____unfiled__", {
+          node_id: "__label____unfiled__",
           label: "(unfiled)",
           forceLabel: true,
           size: 1.5,
@@ -730,8 +743,40 @@ function addTimelineEvent(eventType, payload) {
       renderAgentPanel(nodeId);
     }
 
+    function hitTestLabeledNode(viewportX, viewportY) {
+      let winner = null;
+      let minArea = Number.POSITIVE_INFINITY;
+      for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
+        if (
+          viewportX >= box.x &&
+          viewportX <= box.x + box.width &&
+          viewportY >= box.y &&
+          viewportY <= box.y + box.height &&
+          box.area < minArea
+        ) {
+          winner = nodeId;
+          minArea = box.area;
+        }
+      }
+      if (!winner || !graph.hasNode(winner)) return null;
+      const nodeType = graph.getNodeAttribute(winner, "node_type");
+      if (nodeType === "__label__") return null;
+      return winner;
+    }
+
+    renderer.on("beforeRender", () => {
+      nodeLabelHitboxes.clear();
+    });
+
     renderer.on("clickNode", ({ node }) => {
+      if (graph.hasNode(node) && graph.getNodeAttribute(node, "node_type") === "__label__") return;
       selectNode(node);
+    });
+
+    renderer.on("clickStage", ({ event }) => {
+      const hitNode = hitTestLabeledNode(event.x, event.y);
+      if (!hitNode) return;
+      selectNode(hitNode);
     });
 
     document.getElementById("send-chat").addEventListener("click", async () => {
@@ -826,36 +871,11 @@ function addTimelineEvent(eventType, payload) {
         }
       };
 
-      evtSource.addEventListener("node_discovered", (event) => {
+      evtSource.addEventListener("node_discovered", async (event) => {
         const payload = ssePayload(event);
-        if (!graph.hasNode(payload.node_id)) {
-          const filePath = payload.file_path || "";
-          const { x, y } = filePath
-            ? getFileCluster(filePath)
-            : deterministicPosition(payload.node_id);
-          graph.addNode(payload.node_id, {
-            label: payload.name || payload.node_id.split("::").pop(),
-            size: 8,
-            x,
-            y,
-            node_type: payload.node_type || "function",
-            color: nodeColor(payload.node_type || "function", "idle"),
-            file_path: filePath,
-          });
-
-          if (filePath && !graph.hasNode(`__label__${filePath}`)) {
-            const cluster = fileGroups[filePath];
-            graph.addNode(`__label__${filePath}`, {
-              label: filePath.split("/").pop(),
-              size: 3,
-              x: cluster.cx,
-              y: cluster.cy,
-              color: "#9fb2c8",
-              node_type: "__label__",
-              file_path: filePath,
-            });
-          }
-        }
+        // Re-run layout using authoritative API state to keep incremental discovery
+        // aligned with the current deterministic positioning strategy.
+        await loadGraph();
         renderer.refresh();
         appendEventLine(`node_discovered: ${payload.node_id}`);
         addTimelineEvent("node_discovered", payload);
