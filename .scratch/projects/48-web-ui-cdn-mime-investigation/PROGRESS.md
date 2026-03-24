@@ -39,3 +39,10 @@
 - [x] Reduce depth row spacing to limit y-range domination
 - [x] Add deterministic depth fanout term for x-distribution
 - [x] Re-run targeted tests and confirm pass
+
+## Phase 6: Aggressive fanout pass
+- [x] Create new plan file in same project directory (`PLAN_06_AGGRESSIVE_FANOUT.md`)
+- [x] Add failing test marker for depth zigzag fanout
+- [x] Reduce depth spacing further and increase x spread constants
+- [x] Add depth zigzag term that grows with depth
+- [x] Re-run targeted tests and confirm pass

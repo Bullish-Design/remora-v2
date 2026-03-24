@@ -52,3 +52,10 @@
 
 15. Add a signed deterministic depth fanout term.
 - Rationale: breaks single-chain spine behavior even when sibling spread is zero.
+
+## Phase 6 (Aggressive fanout)
+16. Add depth zigzag component that grows with depth.
+- Rationale: creates guaranteed horizontal divergence for deep chains.
+
+17. Increase type-track spread and hash spread again while lowering depth spacing.
+- Rationale: screenshot evidence still showed center collapse after phase 5.
