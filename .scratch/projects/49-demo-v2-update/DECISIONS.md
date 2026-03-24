@@ -23,6 +23,14 @@ _Record key decisions with rationale here as work proceeds._
    - Rationale: structured-agents tool result events do not always provide explicit error class/reason fields.
    - Result: `RemoraToolResultEvent` now gets `error_class`/`error_reason`; `TurnCompleteEvent.error_summary` is synthesized from observed tool error classes when errors occur.
 
+6. **Vendor graph JS dependencies in `src/remora/web/static/vendor/` and reference them via `/static/vendor/*`**
+   - Rationale: offline/network-restricted environments were failing when `index.html` depended on unpkg CDN.
+   - Result: vendored `graphology.umd.min.js` and `sigma.min.js`, updated `index.html` script tags, and removed CDN reliance.
+
+7. **Explicit wheel include patterns for static JS/HTML via Hatch**
+   - Rationale: enforce deterministic package distribution of UI static assets for downstream installs.
+   - Result: `[tool.hatch.build.targets.wheel].include` now includes `src/remora/web/static/**/*.js` and `src/remora/web/static/**/*.html`.
+
 ## Pending Decisions
 
 1. **Vendored JS library format**: Bundle graphology + sigma as minified UMD files in `src/remora/web/static/vendor/` vs. inline in `index.html`?

@@ -1,6 +1,6 @@
 # Progress — 49-demo-v2-update
 
-## Status: WS1 + WS2 Complete
+## Status: WS1 + WS2 + WS3 Complete
 
 | # | Task | Status |
 |---|------|--------|
@@ -13,6 +13,9 @@
 | 7 | Implement WS2 (event/failure observability) | done |
 | 8 | Add WS2 observability/filter tests | done |
 | 9 | Run WS2 verification suite | done |
+| 10 | Implement WS3 (offline-safe web UI defaults) | done |
+| 11 | Add WS3 static asset and packaging tests | done |
+| 12 | Run WS3 verification suite | done |
 
 ## Workstream Status
 
@@ -20,7 +23,7 @@
 |----|------|--------|
 | 1 | Harden Virtual Bundle Runtime Reliability | done |
 | 2 | Improve Event/Failure Observability | done |
-| 3 | Offline-Safe Web UI Defaults | pending |
+| 3 | Offline-Safe Web UI Defaults | done |
 | 4 | Search and LSP Operator UX | pending |
 | 5 | Upstream Regression Tests | pending |
 | 6 | Upstream Documentation | pending |
