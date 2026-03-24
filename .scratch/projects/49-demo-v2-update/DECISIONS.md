@@ -47,13 +47,17 @@ _Record key decisions with rationale here as work proceeds._
      - `remora lsp` now lazily imports and catches `ImportError`.
      - LSP messages now reference `uv sync --extra lsp` and docs anchor.
 
+11. **Add WS5 regression coverage as focused unit tests using real runtime entry points**
+   - Rationale: WS5 requires durable guarantees around virtual-reactive flows and event payload contracts, and these are best validated with isolated unit tests that still execute real tool/runtime code paths.
+   - Result:
+     - Added `tests/unit/test_virtual_reactive_flow.py` for missing-node handling, malformed companion KV recovery, and loop-guard cap checks.
+     - Added `tests/unit/test_event_error_fields.py` for structured error fields and correlation-id propagation through actor execution.
+
+12. **Align `test_metrics_snapshot` to the expanded metrics contract**
+   - Rationale: `Metrics.snapshot()` now includes actor inbox backpressure counters; tests must assert the current public snapshot shape to prevent false negatives.
+   - Result: `tests/unit/test_metrics.py` now includes the four actor inbox counter keys and validates default zero values.
+
 ## Pending Decisions
 
-1. **Vendored JS library format**: Bundle graphology + sigma as minified UMD files in `src/remora/web/static/vendor/` vs. inline in `index.html`?
-   - Leaning: separate files in `vendor/` for cache-ability and clarity.
-
-2. **Event error fields**: Add `error_class` and `error_reason` to existing `AgentErrorEvent` vs. create new `ToolFailureEvent`?
-   - Leaning: enrich existing events to avoid proliferating event types.
-
-3. **Self-trigger loop guard**: Max reactive turns per correlation_id vs. per agent per time window?
-   - Needs investigation of existing `TriggerPolicy` and rate limiter.
+1. **WS6 documentation scope split**: Keep WS6 in one commit or split into architecture docs + operator docs commits?
+   - Leaning: split by document group to keep review and rollback simple.

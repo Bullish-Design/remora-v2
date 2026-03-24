@@ -1,9 +1,10 @@
 # Context — 49-demo-v2-update
 
 ## Current State
-- WS1, WS2, WS3, and WS4 implementations completed from `DEMO_UPDATE_IMPLEMENTATION_GUIDE.md`.
+- WS1, WS2, WS3, WS4, and WS5 implementations completed from `DEMO_UPDATE_IMPLEMENTATION_GUIDE.md`.
 - Search and LSP operator diagnostics are now explicit/actionable.
 - `/api/events` invalid parameter errors now follow structured response shape.
+- WS5 regression tests now cover virtual reactive runtime behavior, structured event error fields, and correlation propagation.
 
 ## Files Changed For WS1
 - `src/remora/defaults/bundles/review-agent/tools/review_diff.pym`
@@ -47,6 +48,11 @@
 - `tests/unit/test_web_server.py`
 - `tests/unit/test_cli.py`
 
+## Files Changed For WS5
+- `tests/unit/test_virtual_reactive_flow.py` (new)
+- `tests/unit/test_event_error_fields.py` (new)
+- `tests/unit/test_metrics.py` (snapshot key assertion aligned with current metrics fields)
+
 ## Verification Results
 - `devenv shell -- pytest tests/integration/test_virtual_reactive_flow.py tests/unit/test_actor.py tests/unit/test_config.py tests/unit/test_grail.py tests/unit/test_companion_tools.py tests/unit/test_bundle_configs.py tests/unit/test_runner.py tests/integration/test_grail_runtime_tools.py -q`
   - Result: `126 passed`
@@ -64,6 +70,14 @@
   - Result: all checks passed
 - `devenv shell -- ruff check src/remora/web/routes/_errors.py src/remora/web/routes/search.py src/remora/web/routes/events.py src/remora/lsp/__init__.py src/remora/__main__.py src/remora/core/services/search.py tests/unit/test_web_server.py tests/unit/test_cli.py`
   - Result: all checks passed
+- `devenv shell -- uv sync --extra dev`
+  - Result: dependencies synced
+- `devenv shell -- pytest tests/unit/test_virtual_reactive_flow.py tests/unit/test_event_error_fields.py -vv`
+  - Result: `6 passed`
+- `devenv shell -- ruff check tests/unit/test_virtual_reactive_flow.py tests/unit/test_event_error_fields.py tests/unit/test_metrics.py`
+  - Result: all checks passed
+- `devenv shell -- pytest tests/unit -q`
+  - Result: `420 passed`
 
 ## What's Next
-- WS1 + WS2 + WS3 + WS4 are done. Next implementation targets are WS5 (regression test expansion) and WS6 (docs).
+- WS1 + WS2 + WS3 + WS4 + WS5 are done. Next implementation target is WS6 (upstream docs).

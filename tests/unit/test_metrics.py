@@ -23,10 +23,18 @@ def test_metrics_snapshot() -> None:
         "workspace_cache_hit_rate",
         "active_actors",
         "pending_inbox_items",
+        "actor_inbox_overflow_total",
+        "actor_inbox_dropped_oldest_total",
+        "actor_inbox_dropped_new_total",
+        "actor_inbox_rejected_total",
         "uptime_seconds",
     }
     assert snapshot["agent_turns_total"] == 3
     assert snapshot["workspace_cache_hit_rate"] == 0.6
+    assert snapshot["actor_inbox_overflow_total"] == 0
+    assert snapshot["actor_inbox_dropped_oldest_total"] == 0
+    assert snapshot["actor_inbox_dropped_new_total"] == 0
+    assert snapshot["actor_inbox_rejected_total"] == 0
 
 
 def test_cache_hit_rate_calculation() -> None:
@@ -38,4 +46,3 @@ def test_cache_hit_rate_calculation() -> None:
 
     metrics = Metrics(workspace_provisions_total=4, workspace_cache_hits=0)
     assert metrics.cache_hit_rate == 0.0
-

@@ -1,6 +1,6 @@
 # Progress — 49-demo-v2-update
 
-## Status: WS1 + WS2 + WS3 + WS4 Complete
+## Status: WS1 + WS2 + WS3 + WS4 + WS5 Complete
 
 | # | Task | Status |
 |---|------|--------|
@@ -19,6 +19,9 @@
 | 13 | Implement WS4 (search/LSP operator UX) | done |
 | 14 | Add WS4 diagnostics tests (search + lsp + events) | done |
 | 15 | Run WS4 verification suite | done |
+| 16 | Implement WS5 regression test expansion | done |
+| 17 | Resolve unit-suite regression in metrics snapshot assertion | done |
+| 18 | Run WS5 verification suite | done |
 
 ## Workstream Status
 
@@ -28,5 +31,5 @@
 | 2 | Improve Event/Failure Observability | done |
 | 3 | Offline-Safe Web UI Defaults | done |
 | 4 | Search and LSP Operator UX | done |
-| 5 | Upstream Regression Tests | pending |
+| 5 | Upstream Regression Tests | done |
 | 6 | Upstream Documentation | pending |
