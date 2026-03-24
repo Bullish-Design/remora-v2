@@ -1,5 +1,6 @@
 # DECISIONS
 
+## Phase 1 (CDN issue)
 1. Treat the MIME mismatch as symptom, not root cause.
 - Rationale: the browser reports MIME mismatch because the requested script URLs return 404 plain text, not JavaScript.
 
@@ -14,4 +15,14 @@
 4. Fix strategy implemented.
 - Update Sigma script include from `/build/sigma.min.js` to `/dist/sigma.min.js`.
 - Remove ForceAtlas2 script include that points to a non-existent `/build/*.min.js` artifact.
-- Keep runtime guard `if (window.graphologyLayoutForceatlas2)` so optional layout remains non-fatal if introduced later.
+
+## Phase 2 (Node visuals/layout)
+5. Use Sigma custom node label drawing for box visuals.
+- Rationale: gives box-like nodes with names while staying inside current Sigma architecture, avoiding a large renderer migration.
+
+6. Use deterministic lane/depth/sibling placement.
+- Rationale: predictable organization improves readability and avoids random layout jitter.
+- Strategy: file-path columns, parent-depth rows, deterministic sibling spread + tiny deterministic offsets to reduce overlap.
+
+7. Remove stale ForceAtlas2 controls from HTML.
+- Rationale: ForceAtlas2 script was intentionally removed in phase 1; leaving runtime toggles/attributes would be dead config.

@@ -185,8 +185,7 @@
     }
   </style>
 </head>
-  <!-- Configure Sigma via the data attribute below. Increase `data-sigma-iterations` for slower, smoother layouts. -->
-<body data-sigma-iterations="30">
+<body>
   <div id="graph"></div>
   <aside id="sidebar">
     <h1>
@@ -252,23 +251,75 @@
   </aside>
   <script>
     const graph = new graphology.Graph();
+    const FILE_LANE_SPACING = 7;
+    const DEPTH_ROW_SPACING = 2.5;
+    const SIBLING_SPREAD = 1.1;
+    const FILE_HEADER_Y = -3;
+    const ROOT_ROW_Y = -0.8;
+    const UNFILED_LANE_X = -FILE_LANE_SPACING;
+
+    function drawRoundedRect(context, x, y, width, height, radius) {
+      const r = Math.min(radius, width / 2, height / 2);
+      context.beginPath();
+      context.moveTo(x + r, y);
+      context.lineTo(x + width - r, y);
+      context.quadraticCurveTo(x + width, y, x + width, y + r);
+      context.lineTo(x + width, y + height - r);
+      context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+      context.lineTo(x + r, y + height);
+      context.quadraticCurveTo(x, y + height, x, y + height - r);
+      context.lineTo(x, y + r);
+      context.quadraticCurveTo(x, y, x + r, y);
+      context.closePath();
+    }
+
+    function drawNodeBoxLabel(context, data) {
+      if (!data.label || data.hidden) return;
+      const isFileLabel = data.node_type === "__label__";
+      const text = String(data.label);
+      const fontSize = isFileLabel ? 11 : 12;
+      const fontWeight = isFileLabel ? "600" : "500";
+      const padX = isFileLabel ? 6 : 8;
+      const padY = isFileLabel ? 3 : 4;
+
+      context.save();
+      context.font = `${fontWeight} ${fontSize}px "IBM Plex Mono", "IBM Plex Sans", sans-serif`;
+      const textWidth = context.measureText(text).width;
+      const boxWidth = textWidth + padX * 2;
+      const boxHeight = fontSize + padY * 2;
+      const x = data.x - boxWidth / 2;
+      const y = data.y - boxHeight / 2;
+      drawRoundedRect(context, x, y, boxWidth, boxHeight, isFileLabel ? 6 : 8);
+      context.fillStyle = isFileLabel ? "rgba(16, 24, 38, 0.76)" : "rgba(10, 16, 24, 0.9)";
+      context.fill();
+      context.strokeStyle = data.color || "#22d3ee";
+      context.lineWidth = isFileLabel ? 1 : 1.4;
+      context.stroke();
+      context.fillStyle = isFileLabel ? "#9fb2c8" : "#e5edf7";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(text, data.x, data.y);
+      context.restore();
+    }
+
     const renderer = new Sigma(graph, document.getElementById("graph"), {
+      labelRenderedSizeThreshold: 0,
+      defaultDrawNodeLabel: drawNodeBoxLabel,
+      zIndex: true,
       nodeReducer: (node, data) => {
         if (data.node_type === "__label__") {
           return {
             ...data,
-            size: 2,
+            size: 1.7,
             color: "#9fb2c8",
             label: data.label,
+            forceLabel: true,
           };
         }
         return data;
       },
     });
-    const SIGMA_ITERATIONS = Number(document.body.dataset.sigmaIterations) || 30;
     let selectedNode = null;
-    const fileGroups = {};
-    let fileIndex = 0;
     const timelineEvents = [];
     const MAX_TIMELINE_EVENTS = 200;
     const agentEventCache = new Map();
@@ -306,41 +357,26 @@
       return hash >>> 0;
     }
 
-    function deterministicPosition(nodeId) {
-      const hash = hashNodeId(nodeId);
-      const radius = 0.25 + ((hash % 100) / 100) * 0.5;
-      const angle = (hash % 360) * (Math.PI / 180);
-      return {
-        x: 0.5 + radius * Math.cos(angle),
-        y: 0.5 + radius * Math.sin(angle),
-      };
+    function deterministicOffset(nodeId, scale) {
+      const unit = (hashNodeId(nodeId) % 1000) / 1000;
+      return (unit - 0.5) * scale;
     }
 
-    function getFileCluster(filePath) {
-      if (!fileGroups[filePath]) {
-        const angle = (fileIndex / 6) * 2 * Math.PI;
-        const radius = 3;
-        fileGroups[filePath] = {
-          cx: radius * Math.cos(angle),
-          cy: radius * Math.sin(angle),
-          index: fileIndex,
-          count: 0,
-        };
-        fileIndex++;
-      }
+    function buildFileLanes(nodes) {
+      const filePaths = [...new Set(nodes.map((node) => node.file_path).filter(Boolean))].sort();
+      return new Map(filePaths.map((filePath, index) => [filePath, index * FILE_LANE_SPACING]));
+    }
 
-      const cluster = fileGroups[filePath];
-      cluster.count++;
-      return {
-        x: cluster.cx + (Math.random() - 0.5) * 1.5,
-        y: cluster.cy + (Math.random() - 0.5) * 1.5,
-      };
+    function laneXForNode(fileLanes, filePath) {
+      if (!filePath) return UNFILED_LANE_X;
+      return fileLanes.get(filePath) ?? UNFILED_LANE_X;
     }
 
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
       const nodeById = Object.fromEntries(nodes.map((node) => [node.node_id, node]));
+      const fileLanes = buildFileLanes(nodes);
       const depthCache = {};
       const visiting = new Set();
       const parentToChildren = {};
@@ -366,27 +402,30 @@
       }
 
       for (const parentKey of Object.keys(parentToChildren)) {
-        parentToChildren[parentKey].sort();
+        parentToChildren[parentKey].sort((left, right) => {
+          const leftName = nodeById[left]?.name || left;
+          const rightName = nodeById[right]?.name || right;
+          return leftName.localeCompare(rightName) || left.localeCompare(right);
+        });
       }
 
       for (const node of nodes) {
         if (!graph.hasNode(node.node_id)) {
           const filePath = node.file_path || "";
-          const base = filePath
-            ? getFileCluster(filePath)
-            : deterministicPosition(node.node_id);
+          const laneX = laneXForNode(fileLanes, filePath);
           const depth = nodeDepth(node.node_id);
           const siblings = parentToChildren[node.parent_id || "__root__"] || [node.node_id];
           const siblingIndex = siblings.indexOf(node.node_id);
           const spread =
             siblings.length > 1
-              ? (siblingIndex - (siblings.length - 1) / 2) * 0.45
+              ? (siblingIndex - (siblings.length - 1) / 2) * SIBLING_SPREAD
               : 0;
-          const x = base.x + spread;
-          const y = base.y + depth * 0.6;
+          const x = laneX + spread + deterministicOffset(node.node_id, 0.28);
+          const y = ROOT_ROW_Y + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.2);
           graph.addNode(node.node_id, {
             label: node.name,
-            size: 8,
+            forceLabel: true,
+            size: 2.4,
             x,
             y,
             color: nodeColor(node.node_type, node.status),
@@ -396,15 +435,16 @@
         }
       }
 
-      for (const [filePath, cluster] of Object.entries(fileGroups)) {
+      for (const [filePath, laneX] of fileLanes.entries()) {
         const labelId = `__label__${filePath}`;
         if (graph.hasNode(labelId)) continue;
         const shortName = filePath.split("/").pop();
         graph.addNode(labelId, {
           label: shortName,
-          size: 3,
-          x: cluster.cx,
-          y: cluster.cy,
+          forceLabel: true,
+          size: 1.7,
+          x: laneX,
+          y: FILE_HEADER_Y,
           color: "#9fb2c8",
           node_type: "__label__",
           file_path: filePath,
@@ -419,10 +459,6 @@
         if (!graph.hasEdge(key)) {
           graph.addEdgeWithKey(key, edge.from_id, edge.to_id, { label: edge.edge_type, size: 1 });
         }
-      }
-
-      if (window.graphologyLayoutForceatlas2) {
-        window.graphologyLayoutForceatlas2.assign(graph, { iterations: SIGMA_ITERATIONS });
       }
       renderer.refresh();
     }

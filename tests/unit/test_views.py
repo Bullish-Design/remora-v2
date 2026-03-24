@@ -43,3 +43,11 @@ def test_graph_html_uses_valid_cdn_script_paths() -> None:
         "graphology-layout-forceatlas2.min.js"
         not in html
     )
+
+
+def test_graph_html_uses_box_labels_and_structured_layout() -> None:
+    html = _index_html()
+    assert "function drawNodeBoxLabel(" in html
+    assert "defaultDrawNodeLabel: drawNodeBoxLabel" in html
+    assert "const FILE_LANE_SPACING =" in html
+    assert "const DEPTH_ROW_SPACING =" in html

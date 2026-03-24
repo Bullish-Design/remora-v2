@@ -1,24 +1,23 @@
 # CONTEXT
 
-- Project investigated web UI console failures related to script loading and `Sigma` runtime error.
-- Source of failing URLs: `src/remora/web/static/index.html` lines 7-9 (before fix).
+Project 48 now includes two completed phases.
 
-## Root Cause Evidence (2026-03-24)
-- Graphology URL returned valid JS (`200`, JS MIME).
-- Sigma URL at `/build/sigma.min.js` returned `404 text/plain` with `nosniff`.
-- ForceAtlas2 URL at `/build/graphology-layout-forceatlas2.min.js` returned `404 text/plain` with `nosniff`.
-- Package metadata confirmed Sigma publishes `/dist/sigma.min.js` and ForceAtlas2 package does not publish that `build/*.min.js` browser artifact.
+## Phase 1 completed
+- Root cause for console MIME/script errors identified and fixed.
+- Sigma script path updated to valid `/dist/sigma.min.js`.
+- Broken ForceAtlas2 CDN include removed.
+- Regression test added to prevent broken CDN paths reappearing.
 
-## Changes Implemented
-- `src/remora/web/static/index.html`
-  - Sigma include changed to: `https://unpkg.com/sigma@3.0.0-beta.31/dist/sigma.min.js`
-  - Removed invalid ForceAtlas2 include at `/build/graphology-layout-forceatlas2.min.js`
-- `tests/unit/test_views.py`
-  - Added `test_graph_html_uses_valid_cdn_script_paths` asserting:
-    - Sigma uses `/dist/sigma.min.js`
-    - broken Sigma `/build/...` URL absent
-    - broken ForceAtlas2 `/build/...` URL absent
+## Phase 2 completed
+- New plan file created: `PLAN_02_NODE_BOX_LAYOUT.md`.
+- Implemented box-style node labels using Sigma `defaultDrawNodeLabel` custom drawing.
+- Implemented deterministic layout organization:
+  - file lanes (columns)
+  - depth rows from parent hierarchy
+  - deterministic sibling spread + tiny deterministic offsets
+- Removed stale ForceAtlas2 body attribute/runtime hook.
+- Added/ran test coverage in `tests/unit/test_views.py` for these HTML-level expectations.
 
-## Validation
+## Current validation state
 - Ran: `devenv shell -- pytest tests/unit/test_views.py -q`
-- Result: `5 passed`
+- Result: `6 passed`
