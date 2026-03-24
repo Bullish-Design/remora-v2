@@ -62,7 +62,7 @@ class SearchService:
             if client_cls is None:
                 logger.warning(
                     "Search enabled but embeddy is not installed. "
-                    "Install with: pip install remora[search]"
+                    "Install with: uv sync --extra search"
                 )
                 return
 
@@ -102,7 +102,7 @@ class SearchService:
         except ImportError:
             logger.warning(
                 "Search local mode requires full embeddy installation. "
-                "Install with: pip install remora[search-local]"
+                "Install with: uv sync --extra search-local"
             )
             return
 

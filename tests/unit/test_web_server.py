@@ -587,11 +587,47 @@ async def test_api_events_supports_type_and_correlation_filters(web_env) -> None
 
 
 @pytest.mark.asyncio
-async def test_api_search_returns_503_when_unconfigured(web_env) -> None:
+async def test_api_events_invalid_limit_has_structured_error(web_env) -> None:
+    client, _node_store, _event_store, _source_path = web_env
+    response = await client.get("/api/events?limit=invalid")
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"] == "invalid_limit"
+    assert "integer" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_api_search_returns_501_when_unconfigured(web_env) -> None:
     client, *_rest = web_env
     response = await client.post("/api/search", json={"query": "auth"})
+    assert response.status_code == 501
+    payload = response.json()
+    assert payload["error"] == "search_not_configured"
+    assert "uv sync --extra search" in payload["message"]
+    assert payload["docs"] == "/docs/search-setup"
+
+
+@pytest.mark.asyncio
+async def test_api_search_returns_503_when_backend_unavailable(web_env) -> None:
+    _client, node_store, event_store, _source_path = web_env
+
+    class FakeSearchService:
+        available = False
+
+        async def search(self, query, collection, top_k, mode):  # noqa: ANN001, ANN202
+            del query, collection, top_k, mode
+            return []
+
+    app = create_app(event_store, node_store, EventBus(), search_service=FakeSearchService())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/api/search", json={"query": "auth"})
+
     assert response.status_code == 503
-    assert "not configured" in response.json()["error"].lower()
+    payload = response.json()
+    assert payload["error"] == "search_backend_unavailable"
+    assert "not reachable" in payload["message"].lower()
+    assert payload["docs"] == "/docs/search-setup"
 
 
 @pytest.mark.asyncio

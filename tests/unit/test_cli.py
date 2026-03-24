@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import logging
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,50 @@ def test_cli_lsp_requires_existing_db(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 1
+
+
+def test_lsp_wrapper_error_message_uses_uv_sync(monkeypatch) -> None:
+    import builtins
+
+    import remora.lsp as lsp_module
+
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):  # noqa: ANN001
+        if name == "remora.lsp.server":
+            raise ImportError("pygls missing")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(ImportError) as exc_info:
+        lsp_module.create_lsp_server_standalone(Path("/tmp/remora.db"))
+    message = str(exc_info.value)
+    assert "uv sync --extra lsp" in message
+    assert "docs/HOW_TO_USE_REMORA.md#lsp-setup" in message
+
+
+def test_cli_lsp_reports_dependency_message_when_import_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db_dir = tmp_path / ".remora"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    (db_dir / "remora.db").write_text("", encoding="utf-8")
+
+    fake_module = types.ModuleType("remora.lsp")
+
+    def fail_create_lsp(_db_path: Path):  # noqa: ANN202
+        raise ImportError(
+            "LSP support requires pygls. Install with: uv sync --extra lsp\n"
+            "See docs/HOW_TO_USE_REMORA.md#lsp-setup for full setup instructions."
+        )
+
+    fake_module.create_lsp_server_standalone = fail_create_lsp
+    monkeypatch.setitem(sys.modules, "remora.lsp", fake_module)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["lsp", "--project-root", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "uv sync --extra lsp" in result.output
 
 
 def test_cli_start_smoke(tmp_path: Path) -> None:

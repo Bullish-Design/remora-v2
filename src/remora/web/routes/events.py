@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from remora.web.deps import _deps_from_request
+from remora.web.routes._errors import error_response
 from remora.web.sse import sse_stream
 
 
@@ -28,7 +29,11 @@ async def api_events(request: Request) -> JSONResponse:
     try:
         limit = max(1, min(500, int(raw_limit)))
     except ValueError:
-        return JSONResponse({"error": "invalid limit"}, status_code=400)
+        return error_response(
+            error="invalid_limit",
+            message="limit must be an integer between 1 and 500",
+            status_code=400,
+        )
     rows = await deps.event_store.get_events(
         limit=limit,
         event_type=event_type.strip() if event_type and event_type.strip() else None,

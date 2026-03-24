@@ -31,6 +31,22 @@ _Record key decisions with rationale here as work proceeds._
    - Rationale: enforce deterministic package distribution of UI static assets for downstream installs.
    - Result: `[tool.hatch.build.targets.wheel].include` now includes `src/remora/web/static/**/*.js` and `src/remora/web/static/**/*.html`.
 
+8. **Introduce shared web `error_response` helper for standardized API errors**
+   - Rationale: WS4 requires consistent `{error, message, docs?}` payload shape, especially for operator-facing diagnostics.
+   - Result: Search and events routes now emit structured error codes/messages; events invalid limit uses `invalid_limit` code.
+
+9. **Differentiate search API failure modes at route boundary**
+   - Rationale: operators need clear remediation paths for missing feature setup vs backend outage.
+   - Result:
+     - `501 search_not_configured` when `search_service is None` with `uv sync --extra search`.
+     - `503 search_backend_unavailable` when configured service is present but unavailable.
+
+10. **Keep CLI import-safe and make LSP dependency failures actionable**
+   - Rationale: avoid opaque CLI behavior and align install guidance with repo tooling (`devenv` + `uv sync`).
+   - Result:
+     - `remora lsp` now lazily imports and catches `ImportError`.
+     - LSP messages now reference `uv sync --extra lsp` and docs anchor.
+
 ## Pending Decisions
 
 1. **Vendored JS library format**: Bundle graphology + sigma as minified UMD files in `src/remora/web/static/vendor/` vs. inline in `index.html`?

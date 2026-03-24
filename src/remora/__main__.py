@@ -15,9 +15,8 @@ from remora.code.discovery import discover as discover_nodes
 from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_discovery_paths, resolve_query_paths
 from remora.core.model.config import load_config
-from remora.core.services.lifecycle import RemoraLifecycle
 from remora.core.model.node import Node
-from remora.lsp import create_lsp_server_standalone
+from remora.core.services.lifecycle import RemoraLifecycle
 
 app = typer.Typer(
     name="remora",
@@ -156,7 +155,14 @@ def lsp_command(
         logger.error("Database not found at %s. Is 'remora start' running?", db_path)
         raise typer.Exit(code=1)
 
-    lsp_server = create_lsp_server_standalone(db_path)
+    try:
+        from remora.lsp import create_lsp_server_standalone
+
+        lsp_server = create_lsp_server_standalone(db_path)
+    except ImportError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
     logger.info("Starting standalone LSP server on stdin/stdout")
     lsp_server.start_io()
 
