@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import os
+import shutil
 import socket
 import sys
 import time
@@ -15,6 +16,7 @@ from typing import Any
 
 import httpx
 import pytest
+import yaml
 from tests.factories import write_file
 
 from remora.__main__ import _configure_file_logging
@@ -271,6 +273,162 @@ def _write_reactive_mode_project(
             f"model_api_key: {model_api_key}\n"
             "timeout_s: 60\n"
             "max_turns: 8\n"
+        ),
+        encoding="utf-8",
+    )
+    return RuntimeProject(config_path=config_path, source_path=source_path)
+
+
+def _write_companion_pipeline_project(
+    root: Path,
+    *,
+    model_url: str,
+    model_name: str,
+    model_api_key: str,
+) -> RuntimeProject:
+    source_path = root / "src" / "app.py"
+    write_file(source_path, "def alpha():\n    return 1\n")
+
+    bundles_root = root / "bundles"
+    for bundle_name in ("system", "code-agent", "companion"):
+        source_bundle = Path("src/remora/defaults/bundles") / bundle_name
+        target_bundle = bundles_root / bundle_name
+        shutil.copytree(source_bundle, target_bundle)
+
+    companion_bundle = bundles_root / "companion" / "bundle.yaml"
+    companion_data = yaml.safe_load(companion_bundle.read_text(encoding="utf-8"))
+    companion_data["model"] = model_name
+    companion_data["system_prompt"] = (
+        "You are the companion observer. When a turn digest arrives, call aggregate_digest "
+        "exactly once and then respond in one short sentence."
+    )
+    companion_data["max_turns"] = 4
+    companion_bundle.write_text(yaml.safe_dump(companion_data, sort_keys=False), encoding="utf-8")
+
+    code_bundle = bundles_root / "code-agent" / "bundle.yaml"
+    code_data = yaml.safe_load(code_bundle.read_text(encoding="utf-8"))
+    code_data["model"] = model_name
+    self_reflect = code_data.get("self_reflect")
+    if isinstance(self_reflect, dict):
+        self_reflect["model"] = model_name
+    code_bundle.write_text(yaml.safe_dump(code_data, sort_keys=False), encoding="utf-8")
+
+    config_path = root / "remora.yaml"
+    config_path.write_text(
+        (
+            "discovery_paths:\n"
+            "  - src\n"
+            "discovery_languages:\n"
+            "  - python\n"
+            "language_map:\n"
+            "  .py: python\n"
+            "query_search_paths:\n"
+            "  - \"@default\"\n"
+            "workspace_root: .remora-acceptance\n"
+            "bundle_search_paths:\n"
+            f"  - {bundles_root}\n"
+            "  - \"@default\"\n"
+            f"model_base_url: {model_url}\n"
+            f"model_default: {model_name}\n"
+            f"model_api_key: {model_api_key}\n"
+            "timeout_s: 60\n"
+            "max_turns: 8\n"
+            "virtual_agents:\n"
+            "  - id: companion\n"
+            "    role: companion\n"
+            "    subscriptions:\n"
+            "      - event_types: [agent_complete]\n"
+            "        tags: [primary]\n"
+        ),
+        encoding="utf-8",
+    )
+    return RuntimeProject(config_path=config_path, source_path=source_path)
+
+
+def _write_review_agent_reactive_project(
+    root: Path,
+    *,
+    model_url: str,
+    model_name: str,
+    model_api_key: str,
+) -> RuntimeProject:
+    source_path = root / "src" / "app.py"
+    write_file(source_path, "def alpha():\n    return 1\n")
+
+    bundles_root = root / "bundles"
+    system = bundles_root / "system"
+    code = bundles_root / "code-agent"
+    review = bundles_root / "review-agent"
+    (system / "tools").mkdir(parents=True, exist_ok=True)
+    (code / "tools").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(Path("src/remora/defaults/bundles/review-agent"), review)
+
+    write_file(
+        system / "bundle.yaml",
+        (
+            "name: system\n"
+            "system_prompt: >-\n"
+            "  You are a deterministic acceptance-test agent.\n"
+            "  If the user asks for rewrite_to_magic, call rewrite_to_magic exactly once,\n"
+            "  then reply in one sentence.\n"
+            f"model: {model_name}\n"
+            "max_turns: 8\n"
+        ),
+    )
+    write_file(code / "bundle.yaml", f"name: code-agent\nmodel: {model_name}\nmax_turns: 8\n")
+    write_file(
+        code / "tools" / "rewrite_to_magic.pym",
+        (
+            "from grail import external\n\n"
+            "@external\n"
+            "async def write_file(path: str, content: str) -> None: ...\n"
+            "@external\n"
+            "async def propose_changes(reason: str = '') -> str: ...\n\n"
+            "await write_file(\"source/src/app.py\", \"def alpha():\\n    return 5\\n\")\n"
+            "proposal_id = await propose_changes(\"review reactive acceptance rewrite\")\n"
+            "proposal_id\n"
+        ),
+    )
+
+    review_bundle = review / "bundle.yaml"
+    review_data = yaml.safe_load(review_bundle.read_text(encoding="utf-8"))
+    review_data["model"] = model_name
+    review_data["system_prompt"] = (
+        "You are a review agent. For each reactive turn:\n"
+        "1) call list_recent_changes\n"
+        "2) pick the first node id\n"
+        "3) call review_diff\n"
+        "4) call submit_review with finding='Acceptance review recorded', severity='info', "
+        "notify_user=false"
+    )
+    review_data["max_turns"] = 8
+    review_bundle.write_text(yaml.safe_dump(review_data, sort_keys=False), encoding="utf-8")
+
+    config_path = root / "remora.yaml"
+    config_path.write_text(
+        (
+            "discovery_paths:\n"
+            "  - src\n"
+            "discovery_languages:\n"
+            "  - python\n"
+            "language_map:\n"
+            "  .py: python\n"
+            "query_search_paths:\n"
+            "  - \"@default\"\n"
+            "workspace_root: .remora-acceptance\n"
+            "bundle_search_paths:\n"
+            f"  - {bundles_root}\n"
+            "  - \"@default\"\n"
+            f"model_base_url: {model_url}\n"
+            f"model_default: {model_name}\n"
+            f"model_api_key: {model_api_key}\n"
+            "timeout_s: 60\n"
+            "max_turns: 8\n"
+            "virtual_agents:\n"
+            "  - id: review-agent\n"
+            "    role: review-agent\n"
+            "    subscriptions:\n"
+            "      - event_types: [node_changed]\n"
         ),
         encoding="utf-8",
     )
@@ -767,7 +925,10 @@ async def test_acceptance_reactive_file_change_triggers_live_real_llm_turn(
             )
             assert chat_response.status_code == 200
             await _wait_for_pending_proposal(client, node_id=function_node_id)
-            accept_response = await client.post(f"/api/proposals/{function_node_id}/accept", json={})
+            accept_response = await client.post(
+                f"/api/proposals/{function_node_id}/accept",
+                json={},
+            )
             assert accept_response.status_code == 200
 
             message_event = await _wait_for_event(
@@ -797,3 +958,139 @@ async def test_acceptance_reactive_file_change_triggers_live_real_llm_turn(
                 and event.get("correlation_id") == correlation_id
             ]
             assert errors == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
+@pytest.mark.real_llm
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_acceptance_companion_reacts_to_code_agent_complete(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+
+    runtime_project = _write_companion_pipeline_project(
+        tmp_path,
+        model_url=model_url,
+        model_name=model_name,
+        model_api_key=model_api_key,
+    )
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=runtime_project.config_path,
+        port=port,
+    ) as base_url:
+        async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+            node_id = await _wait_for_function_node_id(client)
+            token = f"companion-pipeline-{uuid.uuid4().hex[:8]}"
+
+            response = await client.post(
+                "/api/chat",
+                json={
+                    "node_id": node_id,
+                    "message": (
+                        "Call send_message exactly once with to_node_id='user' and "
+                        f"content='{token}'. Then reply in one short sentence."
+                    ),
+                },
+            )
+            assert response.status_code == 200
+
+            complete_event = await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "agent_complete"
+                    and event.get("payload", {}).get("agent_id") == node_id
+                ),
+            )
+            correlation_id = str(complete_event.get("correlation_id") or "").strip()
+            assert correlation_id
+
+            await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "agent_complete"
+                    and event.get("correlation_id") == correlation_id
+                    and event.get("payload", {}).get("agent_id") == "companion"
+                ),
+            )
+            events = await _fetch_events(client)
+            companion_errors = [
+                event
+                for event in events
+                if event.get("event_type") == "agent_error"
+                and event.get("correlation_id") == correlation_id
+                and event.get("payload", {}).get("agent_id") == "companion"
+            ]
+            assert companion_errors == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
+@pytest.mark.real_llm
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_acceptance_review_agent_reacts_to_node_changed(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+
+    runtime_project = _write_review_agent_reactive_project(
+        tmp_path,
+        model_url=model_url,
+        model_name=model_name,
+        model_api_key=model_api_key,
+    )
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=runtime_project.config_path,
+        port=port,
+    ) as base_url:
+        async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+            function_node_id = await _wait_for_function_node_id(client)
+            chat_response = await client.post(
+                "/api/chat",
+                json={
+                    "node_id": function_node_id,
+                    "message": "Call rewrite_to_magic exactly once, then confirm completion.",
+                },
+            )
+            assert chat_response.status_code == 200
+
+            await _wait_for_pending_proposal(client, node_id=function_node_id)
+            accept_response = await client.post(
+                f"/api/proposals/{function_node_id}/accept",
+                json={},
+            )
+            assert accept_response.status_code == 200
+
+            review_complete = await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "agent_complete"
+                    and event.get("payload", {}).get("agent_id") == "review-agent"
+                ),
+            )
+            correlation_id = str(review_complete.get("correlation_id") or "").strip()
+            assert correlation_id
+
+            await _wait_for_event(
+                client,
+                lambda event: (
+                    event.get("event_type") == "agent_complete"
+                    and event.get("correlation_id") == correlation_id
+                    and event.get("payload", {}).get("agent_id") == "review-agent"
+                ),
+            )
+            events = await _fetch_events(client)
+            review_errors = [
+                event
+                for event in events
+                if event.get("event_type") == "agent_error"
+                and event.get("correlation_id") == correlation_id
+                and event.get("payload", {}).get("agent_id") == "review-agent"
+            ]
+            assert review_errors == []

@@ -15,10 +15,21 @@ async def kv_set(key: str, value: object) -> None: ...
 @external
 async def my_correlation_id() -> str | None: ...
 
+
+def as_dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    result: list[dict[str, object]] = []
+    for item in value:
+        if isinstance(item, dict):
+            result.append(item)
+    return result
+
+
 tag_list = [item.strip() for item in tags.split(",") if item.strip()]
 correlation_id = await my_correlation_id()
 
-existing = await kv_get("companion/chat_index") or []
+existing = as_dict_list(await kv_get("companion/chat_index"))
 existing.append(
     {
         "correlation_id": correlation_id,

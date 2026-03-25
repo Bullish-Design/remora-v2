@@ -10,7 +10,7 @@
 - [x] 6. Task D: directory-agent integration tests
 - [x] 7. Task E: system tool integration tests
 - [x] 8. Task F: code-agent tool integration tests
-- [ ] 9. Acceptance test additions
+- [x] 9. Acceptance test additions
 - [ ] 10. Full verification run
 
 ## Log
@@ -49,3 +49,13 @@
   - `test_real_llm_code_agent_subscribe_to_events`
 - Verified Task F with:
   - `devenv shell -- pytest tests/integration/test_llm_turn.py -k \"code_agent_reflect_writes_to_workspace or code_agent_subscribe_to_events\" -m real_llm -v` (2 passed)
+- Extended acceptance coverage in `tests/acceptance/test_live_runtime_real_llm.py`:
+  - `test_acceptance_companion_reacts_to_code_agent_complete`
+  - `test_acceptance_review_agent_reacts_to_node_changed`
+- Added acceptance project writers for production-style companion and review-agent flows.
+- Fixed companion helper tools for grail type/runtime compatibility:
+  - `companion_summarize.pym`
+  - `companion_reflect.pym`
+  - `companion_link.pym`
+- Verified Step 9 with:
+  - `devenv shell -- pytest tests/acceptance/test_live_runtime_real_llm.py -k \"companion_reacts_to_code_agent_complete or review_agent_reacts_to_node_changed\" -m real_llm -v` (2 passed)
