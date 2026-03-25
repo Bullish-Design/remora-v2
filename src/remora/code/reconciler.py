@@ -15,6 +15,11 @@ from remora.code.directories import DirectoryManager
 from remora.code.discovery import discover
 from remora.code.languages import LanguageRegistry
 from remora.code.paths import resolve_query_paths
+from remora.code.relationships import (
+    extract_imports,
+    extract_inheritance,
+    resolve_relationships,
+)
 from remora.code.subscriptions import SubscriptionManager
 from remora.code.virtual_agents import VirtualAgentManager
 from remora.code.watcher import FileWatcher
@@ -273,6 +278,41 @@ class FileReconciler:
             projected.append(node)
 
         self._index_node_names(projected)
+
+        plugin = self._language_registry.get_by_name(
+            self._config.behavior.language_map.get(Path(file_path).suffix.lower(), "")
+        )
+        if plugin is not None and plugin.name == "python":
+            try:
+                source_bytes = Path(file_path).read_bytes()
+            except OSError:
+                source_bytes = None
+
+            if source_bytes is not None:
+                file_node_ids = [node.node_id for node in projected]
+                nodes_by_name = {node.name: node.node_id for node in projected if node.node_type == "class"}
+                raw_rels = extract_imports(
+                    source_bytes,
+                    plugin,
+                    file_path,
+                    file_node_ids[0] if file_node_ids else file_path,
+                    self._query_paths,
+                )
+                raw_rels.extend(
+                    extract_inheritance(
+                        source_bytes,
+                        plugin,
+                        file_path,
+                        nodes_by_name,
+                        self._query_paths,
+                    )
+                )
+                edges = resolve_relationships(raw_rels, self._name_index)
+                for node_id in file_node_ids:
+                    await self._node_store.delete_edges_by_type(node_id, "imports")
+                    await self._node_store.delete_edges_by_type(node_id, "inherits")
+                for edge in edges:
+                    await self._node_store.add_edge(edge.from_id, edge.to_id, edge.edge_type)
 
         if self._tx is not None:
             async with self._tx.batch():
