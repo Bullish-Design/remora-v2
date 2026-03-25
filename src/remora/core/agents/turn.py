@@ -37,6 +37,7 @@ from remora.core.storage.graph import NodeStore
 from remora.core.storage.workspace import AgentWorkspace, CairnWorkspaceService
 from remora.core.tools.context import EXTERNALS_VERSION, TurnContext
 from remora.core.tools.grail import GrailTool, discover_tools
+from remora.core.utils import mask_secret
 
 logger = logging.getLogger(__name__)
 
@@ -293,12 +294,13 @@ class AgentTurnExecutor:
                 if attempt == 0:
                     turn_log.debug(
                         (
-                            "Model request node=%s corr=%s base_url=%s model=%s "
+                            "Model request node=%s corr=%s base_url=%s api_key=%s model=%s "
                             "tools=%s system=%s user=%s"
                         ),
                         node_id,
                         trigger.correlation_id,
                         self._config.infra.model_base_url,
+                        mask_secret(self._config.infra.model_api_key),
                         model_name,
                         [schema.name for schema in tool_schemas],
                         system_prompt,

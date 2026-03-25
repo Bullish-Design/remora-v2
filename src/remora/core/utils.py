@@ -17,4 +17,13 @@ def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-__all__ = ["deep_merge"]
+def mask_secret(value: str | None, visible_chars: int = 4) -> str:
+    """Mask a secret string for safe logging."""
+    if not value:
+        return "EMPTY"
+    if len(value) <= visible_chars:
+        return "****"
+    return value[:visible_chars] + "****"
+
+
+__all__ = ["deep_merge", "mask_secret"]
