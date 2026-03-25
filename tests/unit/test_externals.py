@@ -589,6 +589,31 @@ async def test_externals_graph_get_children(context_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_externals_graph_relationship_helpers(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    source = make_node("src/app.py::source")
+    target = make_node("src/models.py::Config")
+    await node_store.upsert_node(source)
+    await node_store.upsert_node(target)
+    await node_store.add_edge(source.node_id, target.node_id, "imports")
+    await node_store.add_edge(source.node_id, target.node_id, "contains")
+
+    ws = await workspace_service.get_agent_workspace(source.node_id)
+    context = await _context(source.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    importers = await externals["graph_get_importers"](target.node_id)
+    dependencies = await externals["graph_get_dependencies"](source.node_id)
+    import_edges = await externals["graph_get_edges_by_type"](source.node_id, "imports")
+
+    assert importers == [source.node_id]
+    assert dependencies == [target.node_id]
+    assert import_edges == [
+        {"from_id": source.node_id, "to_id": target.node_id, "edge_type": "imports"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_externals_emit_uses_outbox_when_provided(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::alpha")

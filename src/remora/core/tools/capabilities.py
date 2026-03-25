@@ -187,6 +187,26 @@ class GraphCapabilities:
         target_enum = NodeStatus(new_status.strip())
         return await self._node_store.transition_status(target_id, target_enum)
 
+    async def graph_get_importers(self, target_id: str) -> list[str]:
+        """Get node IDs that import the given node."""
+        return await self._node_store.get_importers(target_id)
+
+    async def graph_get_dependencies(self, target_id: str) -> list[str]:
+        """Get node IDs that the given node imports/depends on."""
+        return await self._node_store.get_dependencies(target_id)
+
+    async def graph_get_edges_by_type(
+        self,
+        target_id: str,
+        edge_type: str,
+    ) -> list[dict[str, Any]]:
+        """Get edges of a specific type for a node."""
+        edges = await self._node_store.get_edges_by_type(target_id, edge_type)
+        return [
+            {"from_id": edge.from_id, "to_id": edge.to_id, "edge_type": edge.edge_type}
+            for edge in edges
+        ]
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "graph_get_node": self.graph_get_node,
@@ -194,6 +214,9 @@ class GraphCapabilities:
             "graph_get_edges": self.graph_get_edges,
             "graph_get_children": self.graph_get_children,
             "graph_set_status": self.graph_set_status,
+            "graph_get_importers": self.graph_get_importers,
+            "graph_get_dependencies": self.graph_get_dependencies,
+            "graph_get_edges_by_type": self.graph_get_edges_by_type,
         }
 
 
