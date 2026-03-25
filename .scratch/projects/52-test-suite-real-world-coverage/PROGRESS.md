@@ -8,7 +8,7 @@
 - [x] 4. Task B: review-agent integration tests
 - [x] 5. Task C: test-agent integration tests
 - [x] 6. Task D: directory-agent integration tests
-- [ ] 7. Task E: system tool integration tests
+- [x] 7. Task E: system tool integration tests
 - [ ] 8. Task F: code-agent tool integration tests
 - [ ] 9. Acceptance test additions
 - [ ] 10. Full verification run
@@ -37,3 +37,10 @@
 - Added `tests/integration/test_llm_directory_agent.py` with 4 real-LLM tests for `list_children`, `summarize_tree`, `get_parent`, and `broadcast_children`.
 - Verified Task D with:
   - `devenv shell -- pytest tests/integration/test_llm_directory_agent.py -m real_llm -v` (4 passed)
+- Added `tests/integration/test_llm_system_tools.py` with 4 real-LLM tests for `broadcast`, `query_agents`, `reflect`, and `subscribe`/`unsubscribe`.
+- Fixed system tool runtime issues uncovered by live tests:
+  - `query_agents.pym` no-argument query path for stable execution without optional Input defaults.
+  - `reflect.pym` no longer depends on reading a pre-existing reflection file.
+  - `subscribe.pym` no longer depends on optional Input defaults for extra filters.
+- Verified Task E with:
+  - `devenv shell -- pytest tests/integration/test_llm_system_tools.py -m real_llm -v` (4 passed)
