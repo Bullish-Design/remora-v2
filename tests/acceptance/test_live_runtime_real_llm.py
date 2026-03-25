@@ -695,6 +695,35 @@ async def _send_lsp_notification(
     await process.stdin.drain()
 
 
+async def _send_lsp_request(
+    process: asyncio.subprocess.Process,
+    *,
+    request_id: int,
+    method: str,
+    params: dict[str, Any],
+    timeout_s: float = 20.0,
+) -> dict[str, Any]:
+    if process.stdin is None or process.stdout is None:
+        raise AssertionError("LSP subprocess missing stdio pipes")
+    payload = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+        "params": params,
+    }
+    process.stdin.write(_encode_lsp_message(payload))
+    await process.stdin.drain()
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        remaining = max(0.1, deadline - time.monotonic())
+        message = await _read_lsp_message(process.stdout, timeout_s=remaining)
+        if message.get("id") == request_id:
+            return message
+
+    raise AssertionError(f"Timed out waiting for LSP response id={request_id} method={method}")
+
+
 @contextlib.asynccontextmanager
 async def _running_runtime(*, project_root: Path, config_path: Path, port: int):
     config = load_config(config_path)
@@ -836,6 +865,148 @@ async def test_acceptance_process_lsp_open_save_emits_content_changed_event(
                         and event.get("payload", {}).get("path")
                         == str(runtime_project.source_path.resolve())
                         and event.get("payload", {}).get("change_type") == "modified"
+                    ),
+                    timeout_s=30.0,
+                )
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
+async def test_acceptance_process_lsp_hover_code_action_trigger_and_change_cycle(
+    tmp_path: Path,
+) -> None:
+    runtime_project = _write_lsp_smoke_project(tmp_path)
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=runtime_project.config_path,
+        port=port,
+    ) as base_url:
+        async with _running_lsp_process(
+            tmp_path,
+            config_path=runtime_project.config_path,
+        ) as lsp_process:
+            await _initialize_lsp(lsp_process)
+            file_uri = runtime_project.source_path.resolve().as_uri()
+            source_path = str(runtime_project.source_path.resolve())
+            original_text = runtime_project.source_path.read_text(encoding="utf-8")
+            changed_text = "def alpha():\n    return 3\n"
+
+            async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+                node_id = await _wait_for_function_node_id(client)
+
+            await _send_lsp_notification(
+                lsp_process,
+                method="textDocument/didOpen",
+                params={
+                    "textDocument": {
+                        "uri": file_uri,
+                        "languageId": "python",
+                        "version": 1,
+                        "text": original_text,
+                    }
+                },
+            )
+            await _send_lsp_notification(
+                lsp_process,
+                method="textDocument/didChange",
+                params={
+                    "textDocument": {"uri": file_uri, "version": 2},
+                    "contentChanges": [{"text": changed_text}],
+                },
+            )
+
+            hover_response = await _send_lsp_request(
+                lsp_process,
+                request_id=2,
+                method="textDocument/hover",
+                params={
+                    "textDocument": {"uri": file_uri},
+                    "position": {"line": 0, "character": 4},
+                },
+            )
+            assert hover_response.get("jsonrpc") == "2.0"
+            assert hover_response.get("id") == 2
+            hover_result = hover_response.get("result")
+            assert isinstance(hover_result, dict)
+            hover_contents = hover_result.get("contents")
+            assert isinstance(hover_contents, dict)
+            hover_value = str(hover_contents.get("value", ""))
+            assert "Node ID:" in hover_value
+            assert node_id in hover_value
+
+            action_response = await _send_lsp_request(
+                lsp_process,
+                request_id=3,
+                method="textDocument/codeAction",
+                params={
+                    "textDocument": {"uri": file_uri},
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 0, "character": 8},
+                    },
+                    "context": {"diagnostics": []},
+                },
+            )
+            assert action_response.get("jsonrpc") == "2.0"
+            assert action_response.get("id") == 3
+            action_result = action_response.get("result")
+            assert isinstance(action_result, list)
+            command_names = {
+                str(action.get("command", {}).get("command"))
+                for action in action_result
+                if isinstance(action, dict)
+            }
+            assert "remora.chat" in command_names
+            assert "remora.trigger" in command_names
+
+            trigger_response = await _send_lsp_request(
+                lsp_process,
+                request_id=4,
+                method="workspace/executeCommand",
+                params={
+                    "command": "remora.trigger",
+                    "arguments": [node_id],
+                },
+            )
+            assert trigger_response.get("jsonrpc") == "2.0"
+            assert trigger_response.get("id") == 4
+            assert "error" not in trigger_response
+
+            await _send_lsp_notification(
+                lsp_process,
+                method="textDocument/didSave",
+                params={"textDocument": {"uri": file_uri}},
+            )
+
+            async with httpx.AsyncClient(base_url=base_url, timeout=5.0) as client:
+                await _wait_for_event(
+                    client,
+                    lambda event: (
+                        event.get("event_type") == "content_changed"
+                        and event.get("payload", {}).get("path") == source_path
+                        and event.get("payload", {}).get("change_type") == "opened"
+                    ),
+                    timeout_s=30.0,
+                )
+                await _wait_for_event(
+                    client,
+                    lambda event: (
+                        event.get("event_type") == "content_changed"
+                        and event.get("payload", {}).get("path") == source_path
+                        and event.get("payload", {}).get("change_type") == "modified"
+                    ),
+                    timeout_s=30.0,
+                )
+                await _wait_for_event(
+                    client,
+                    lambda event: (
+                        event.get("event_type") == "agent_message"
+                        and str(event.get("payload", {}).get("to_agent", "")).strip() != ""
+                        and event.get("payload", {}).get("from_agent") == "user"
+                        and event.get("payload", {}).get("content")
+                        == "Manual trigger from editor"
                     ),
                     timeout_s=30.0,
                 )
