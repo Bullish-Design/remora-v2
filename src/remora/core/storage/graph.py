@@ -305,6 +305,15 @@ class NodeStore:
         rows = await cursor.fetchall()
         return [row["to_id"] for row in rows]
 
+    async def delete_edges_by_type(self, node_id: str, edge_type: str) -> int:
+        """Delete all edges of a type involving a node. Used during re-extraction."""
+        cursor = await self._db.execute(
+            "DELETE FROM edges WHERE (from_id = ? OR to_id = ?) AND edge_type = ?",
+            (node_id, node_id, edge_type),
+        )
+        await self._maybe_commit()
+        return cursor.rowcount
+
     async def delete_edges(self, node_id: str) -> int:
         """Delete all edges connected to a node and return deleted count."""
         cursor = await self._db.execute(
