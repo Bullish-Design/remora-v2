@@ -6,10 +6,15 @@ MAX_OUTPUT = 2000
 
 
 @external
-async def graph_list_nodes() -> list[dict]: ...
+async def graph_query_nodes(
+    node_type: str | None = None,
+    status: str | None = None,
+    file_path: str | None = None,
+    role: str | None = None,
+) -> list[dict]: ...
 
 
-nodes = await graph_list_nodes()
+nodes = await graph_query_nodes()
 if not nodes:
     result = "No nodes found."
 else:

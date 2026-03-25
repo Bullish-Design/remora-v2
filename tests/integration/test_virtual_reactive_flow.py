@@ -75,7 +75,13 @@ async def test_review_diff_handles_missing_node_without_error() -> None:
 
 @pytest.mark.asyncio
 async def test_list_recent_changes_bounds_large_output() -> None:
-    async def graph_list_nodes() -> list[dict]:
+    async def graph_query_nodes(
+        node_type: str | None = None,
+        status: str | None = None,
+        file_path: str | None = None,
+        role: str | None = None,
+    ) -> list[dict]:
+        del node_type, status, file_path, role
         return [
             {
                 "node_type": "function",
@@ -87,7 +93,7 @@ async def test_list_recent_changes_bounds_large_output() -> None:
 
     tool = await _discover_single_tool(
         Path("src/remora/defaults/bundles/review-agent/tools/list_recent_changes.pym"),
-        capabilities={"graph_list_nodes": graph_list_nodes},
+        capabilities={"graph_query_nodes": graph_query_nodes},
     )
     result = await tool.execute(
         {},

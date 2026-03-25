@@ -3,7 +3,7 @@
 ## Step Status
 
 - [x] 1. Environment/baseline setup
-- [ ] 2. Bug fix: review-agent `graph_list_nodes` -> `graph_query_nodes`
+- [x] 2. Bug fix: review-agent `graph_list_nodes` -> `graph_query_nodes`
 - [ ] 3. Task A: companion integration tests
 - [ ] 4. Task B: review-agent integration tests
 - [ ] 5. Task C: test-agent integration tests
@@ -18,3 +18,6 @@
 - Initialized project tracking files and implementation plan.
 - Completed dependency sync and verified vLLM model endpoint reachability.
 - Captured reusable helper/test patterns in `BASELINE_NOTES.md`.
+- Fixed `review-agent/tools/list_recent_changes.pym` to call `graph_query_nodes`.
+- Added regression alignment in `tests/integration/test_virtual_reactive_flow.py`.
+- Verified with `devenv shell -- pytest tests/integration/test_virtual_reactive_flow.py -q` (5 passed).
