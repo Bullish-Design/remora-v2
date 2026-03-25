@@ -108,14 +108,24 @@ class EventBus:
         ]
 
     @asynccontextmanager
-    async def stream(self, *event_types: str) -> AsyncIterator[AsyncIterator[Event]]:
+    async def stream(
+        self,
+        *event_types: str,
+        max_buffer: int = 1000,
+    ) -> AsyncIterator[AsyncIterator[Event]]:
         """Yield an async iterator of events for optional filtered types."""
-        queue: asyncio.Queue[Event] = asyncio.Queue()
+        queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=max_buffer)
         filter_set = set(event_types) if event_types else None
 
         def enqueue(event: Event) -> None:
             if filter_set is None or event.event_type in filter_set:
-                queue.put_nowait(event)
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    logger.warning(
+                        "SSE stream buffer full, dropping event %s",
+                        event.event_type,
+                    )
 
         self.subscribe_all(enqueue)
 
