@@ -13,7 +13,7 @@ if not node:
     result = f"Node {node_id} not found."
 else:
     name = node.get("name", "unknown")
-    source = node.get("source_code", "")
+    source = node.get("text") or node.get("source_code") or ""
     node_type = node.get("node_type", "function")
     result = (
         f"Test suggestion context for {name} ({node_type}):\n\n"
