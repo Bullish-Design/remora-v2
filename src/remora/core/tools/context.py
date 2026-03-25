@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from remora.core.storage.workspace import AgentWorkspace
 
 
-EXTERNALS_VERSION = 2
+EXTERNALS_VERSION = 3
 
 
 class TurnContext:
