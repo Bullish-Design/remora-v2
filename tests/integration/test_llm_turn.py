@@ -14,13 +14,6 @@ from remora.code.languages import LanguageRegistry
 from remora.code.reconciler import FileReconciler
 from remora.code.subscriptions import SubscriptionManager
 from remora.core.agents.actor import Actor, Outbox, Trigger
-from remora.core.model.config import (
-    BehaviorConfig,
-    Config,
-    InfraConfig,
-    ProjectConfig,
-)
-from remora.core.storage.db import open_database
 from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
@@ -30,6 +23,13 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
+from remora.core.model.config import (
+    BehaviorConfig,
+    Config,
+    InfraConfig,
+    ProjectConfig,
+)
+from remora.core.storage.db import open_database
 from remora.core.storage.graph import NodeStore
 from remora.core.storage.transaction import TransactionContext
 from remora.core.storage.workspace import CairnWorkspaceService
@@ -86,7 +86,8 @@ def _write_llm_test_bundles(root: Path, model_name: str) -> None:
             "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
+            '    reason = result.get("reason", "unknown")\n'
+            '    message = f"Message not sent to {to_node_id} ({reason})"\n'
             "message\n"
         ),
     )
@@ -110,7 +111,7 @@ def _write_kv_roundtrip_bundles(root: Path, model_name: str) -> None:
             "max_turns: 8\n"
         ),
     )
-    write_file(code / "bundle.yaml", f"name: code-agent\nmax_turns: 8\n")
+    write_file(code / "bundle.yaml", "name: code-agent\nmax_turns: 8\n")
     write_file(
         system / "tools" / "send_message.pym",
         (
@@ -123,7 +124,8 @@ def _write_kv_roundtrip_bundles(root: Path, model_name: str) -> None:
             "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
+            '    reason = result.get("reason", "unknown")\n'
+            '    message = f"Message not sent to {to_node_id} ({reason})"\n'
             "message\n"
         ),
     )
@@ -193,7 +195,8 @@ def _write_reactive_mode_bundles(root: Path, model_name: str) -> None:
             "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
+            '    reason = result.get("reason", "unknown")\n'
+            '    message = f"Message not sent to {to_node_id} ({reason})"\n'
             "message\n"
         ),
     )
@@ -237,7 +240,8 @@ def _write_virtual_agent_bundles(root: Path, model_name: str) -> None:
             "if result.get(\"sent\"):\n"
             '    message = f"Message sent to {to_node_id}"\n'
             "else:\n"
-            '    message = f"Message not sent to {to_node_id} ({result.get(\'reason\', \'unknown\')})"\n'
+            '    reason = result.get("reason", "unknown")\n'
+            '    message = f"Message not sent to {to_node_id} ({reason})"\n'
             "message\n"
         ),
     )
@@ -691,6 +695,137 @@ async def test_real_llm_code_agent_subscribe_to_events(tmp_path: Path) -> None:
         )
         row = await cursor.fetchone()
         assert row is not None and int(row[0]) >= 1
+    finally:
+        if workspace_service is not None:
+            await workspace_service.close()
+        if db is not None:
+            await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_real_llm_code_agent_rewrite_self_proposes_changes(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+    timeout_s = float(os.getenv("REMORA_TEST_TIMEOUT_S", "90"))
+
+    actor = node = event_store = workspace_service = db = None
+    try:
+        actor, node, event_store, workspace_service, db, _source_path = await _setup_llm_runtime(
+            tmp_path,
+            model_url=model_url,
+            model_name=model_name,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
+            bundle_writer=_write_real_code_agent_bundles,
+        )
+        correlation_id = "corr-code-agent-rewrite-self"
+        outbox = Outbox(
+            actor_id=node.node_id,
+            event_store=event_store,
+            correlation_id=correlation_id,
+        )
+        trigger = Trigger(
+            node_id=node.node_id,
+            correlation_id=correlation_id,
+            event=AgentMessageEvent(
+                from_agent="user",
+                to_agent=node.node_id,
+                content=(
+                    "Call rewrite_self exactly once with "
+                    "new_source='def alpha():\\n    return 42\\n' and "
+                    "reason='integration rewrite self test'."
+                ),
+                correlation_id=correlation_id,
+            ),
+        )
+        await actor._execute_turn(trigger, outbox)
+
+        events = await event_store.get_events(limit=120)
+        by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
+        assert any(
+            entry["event_type"] == "remora_tool_result"
+            and entry["payload"].get("tool_name") == "rewrite_self"
+            and not entry["payload"].get("is_error")
+            for entry in by_corr
+        )
+        proposal_events = [entry for entry in by_corr if entry["event_type"] == "rewrite_proposal"]
+        assert proposal_events
+        proposal_payload = proposal_events[0]["payload"]
+        expected_workspace_path = f"source/{node.node_id.lstrip('/')}"
+        assert expected_workspace_path in proposal_payload.get("files", [])
+
+        workspace = await workspace_service.get_agent_workspace(node.node_id)
+        rewritten = await workspace.read(expected_workspace_path)
+        assert rewritten == "def alpha():\n    return 42\n"
+    finally:
+        if workspace_service is not None:
+            await workspace_service.close()
+        if db is not None:
+            await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_real_llm_code_agent_scaffold_emits_scaffold_request(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+    timeout_s = float(os.getenv("REMORA_TEST_TIMEOUT_S", "90"))
+
+    actor = node = event_store = workspace_service = db = None
+    try:
+        actor, node, event_store, workspace_service, db, _source_path = await _setup_llm_runtime(
+            tmp_path,
+            model_url=model_url,
+            model_name=model_name,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
+            bundle_writer=_write_real_code_agent_bundles,
+        )
+        correlation_id = "corr-code-agent-scaffold"
+        outbox = Outbox(
+            actor_id=node.node_id,
+            event_store=event_store,
+            correlation_id=correlation_id,
+        )
+        trigger = Trigger(
+            node_id=node.node_id,
+            correlation_id=correlation_id,
+            event=AgentMessageEvent(
+                from_agent="user",
+                to_agent=node.node_id,
+                content=(
+                    "Call scaffold exactly once with "
+                    "intent='Add tests for edge cases', element_type='function', "
+                    f"agent_id='{node.node_id}'."
+                ),
+                correlation_id=correlation_id,
+            ),
+        )
+        await actor._execute_turn(trigger, outbox)
+
+        events = await event_store.get_events(limit=120)
+        by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
+        assert any(
+            entry["event_type"] == "remora_tool_result"
+            and entry["payload"].get("tool_name") == "scaffold"
+            and not entry["payload"].get("is_error")
+            for entry in by_corr
+        )
+        scaffold_events = [
+            entry for entry in by_corr if entry["event_type"] == "ScaffoldRequestEvent"
+        ]
+        assert scaffold_events
+        payload = scaffold_events[0]["payload"]
+        assert payload["agent_id"] == node.node_id
+        assert payload["intent"] == "Add tests for edge cases"
+        assert payload["element_type"] == "function"
     finally:
         if workspace_service is not None:
             await workspace_service.close()
