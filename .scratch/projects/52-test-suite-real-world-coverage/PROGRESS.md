@@ -7,7 +7,7 @@
 - [x] 3. Task A: companion integration tests
 - [x] 4. Task B: review-agent integration tests
 - [x] 5. Task C: test-agent integration tests
-- [ ] 6. Task D: directory-agent integration tests
+- [x] 6. Task D: directory-agent integration tests
 - [ ] 7. Task E: system tool integration tests
 - [ ] 8. Task F: code-agent tool integration tests
 - [ ] 9. Acceptance test additions
@@ -34,3 +34,6 @@
 - Fixed `suggest_tests.pym` source lookup from `source_code` to `text` (with fallback).
 - Verified Task C with:
   - `devenv shell -- pytest tests/integration/test_llm_test_agent.py -m real_llm -v` (2 passed)
+- Added `tests/integration/test_llm_directory_agent.py` with 4 real-LLM tests for `list_children`, `summarize_tree`, `get_parent`, and `broadcast_children`.
+- Verified Task D with:
+  - `devenv shell -- pytest tests/integration/test_llm_directory_agent.py -m real_llm -v` (4 passed)
