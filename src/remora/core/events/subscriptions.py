@@ -6,10 +6,15 @@ import json
 import time
 import fnmatch
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
+import aiosqlite
 from pydantic import BaseModel
 
 from remora.core.events.types import Event
+
+if TYPE_CHECKING:
+    from remora.core.storage.transaction import TransactionContext
 
 _ANY_EVENT_KEY = "*"
 
