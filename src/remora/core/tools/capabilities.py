@@ -6,6 +6,7 @@ import asyncio
 import fnmatch
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from remora.core.events import (
@@ -26,6 +27,8 @@ from remora.core.storage.graph import NodeStore
 
 if TYPE_CHECKING:
     from remora.core.storage.workspace import AgentWorkspace
+
+_TEXT_EXTENSIONS = {".py", ".md", ".toml", ".yaml", ".yml", ".json", ".txt", ".pym"}
 
 
 class FileCapabilities:
@@ -62,6 +65,9 @@ class FileCapabilities:
         for file_path in paths:
             normalized = file_path.strip("/")
             if path not in {".", "/", ""} and not normalized.startswith(path.strip("/")):
+                continue
+            ext = Path(normalized).suffix.lower()
+            if ext and ext not in _TEXT_EXTENSIONS:
                 continue
             try:
                 content = await self._workspace.read(normalized)

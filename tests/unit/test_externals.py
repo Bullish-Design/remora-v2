@@ -151,6 +151,22 @@ async def test_externals_search_content_caps_results(context_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_externals_search_content_skips_non_text_extensions(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::alpha")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    await ws.write("notes/blob.bin", "needle-in-bin")
+    await ws.write("notes/readme.md", "needle-in-doc")
+    context = await _context(node.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    matches = await externals["search_content"]("needle", "notes")
+    assert any(match["file"] == "notes/readme.md" for match in matches)
+    assert all(match["file"] != "notes/blob.bin" for match in matches)
+
+
+@pytest.mark.asyncio
 async def test_externals_kv_ops(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::alpha")
