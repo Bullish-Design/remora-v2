@@ -318,3 +318,96 @@ async def test_batch_rolls_back_on_exception(db, tx) -> None:
 
     result = await store.get_node(sample_node.node_id)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_nodestore_get_edges_by_type(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::c"))
+    await store.add_edge("src/app.py::a", "src/app.py::b", "imports")
+    await store.add_edge("src/app.py::a", "src/app.py::c", "contains")
+
+    imports_out = await store.get_edges_by_type("src/app.py::a", "imports", direction="outgoing")
+    assert len(imports_out) == 1
+    assert imports_out[0].to_id == "src/app.py::b"
+    assert imports_out[0].edge_type == "imports"
+
+    contains_out = await store.get_edges_by_type(
+        "src/app.py::a",
+        "contains",
+        direction="outgoing",
+    )
+    assert len(contains_out) == 1
+    assert contains_out[0].to_id == "src/app.py::c"
+
+    imports_in = await store.get_edges_by_type("src/app.py::b", "imports", direction="incoming")
+    assert len(imports_in) == 1
+    assert imports_in[0].from_id == "src/app.py::a"
+
+    both = await store.get_edges_by_type("src/app.py::a", "imports", direction="both")
+    assert len(both) == 1
+
+
+@pytest.mark.asyncio
+async def test_nodestore_get_edges_by_type_invalid_direction(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
+    await store.create_tables()
+    with pytest.raises(ValueError, match="direction"):
+        await store.get_edges_by_type("src/app.py::a", "imports", direction="invalid")
+
+
+@pytest.mark.asyncio
+async def test_nodestore_get_importers(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::c"))
+    await store.add_edge("src/app.py::a", "src/app.py::c", "imports")
+    await store.add_edge("src/app.py::b", "src/app.py::c", "imports")
+    await store.add_edge("src/app.py::a", "src/app.py::b", "contains")
+
+    importers = await store.get_importers("src/app.py::c")
+    assert sorted(importers) == ["src/app.py::a", "src/app.py::b"]
+
+    importers_b = await store.get_importers("src/app.py::b")
+    assert importers_b == []
+
+
+@pytest.mark.asyncio
+async def test_nodestore_get_dependencies(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::c"))
+    await store.add_edge("src/app.py::a", "src/app.py::b", "imports")
+    await store.add_edge("src/app.py::a", "src/app.py::c", "imports")
+    await store.add_edge("src/app.py::a", "src/app.py::b", "contains")
+
+    deps = await store.get_dependencies("src/app.py::a")
+    assert sorted(deps) == ["src/app.py::b", "src/app.py::c"]
+
+
+@pytest.mark.asyncio
+async def test_nodestore_delete_edges_by_type(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::c"))
+    await store.add_edge("src/app.py::a", "src/app.py::b", "imports")
+    await store.add_edge("src/app.py::a", "src/app.py::c", "imports")
+    await store.add_edge("src/app.py::a", "src/app.py::b", "contains")
+
+    deleted = await store.delete_edges_by_type("src/app.py::a", "imports")
+    assert deleted == 2
+
+    remaining = await store.get_edges("src/app.py::a", direction="outgoing")
+    assert len(remaining) == 1
+    assert remaining[0].edge_type == "contains"
+
+    assert await store.get_importers("src/app.py::b") == []
