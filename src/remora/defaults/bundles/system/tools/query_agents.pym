@@ -1,14 +1,21 @@
-# Query the node graph for agents. Filter by node_type, status, or file_path pattern.
+# Query the node graph for agents. Filter by node_type or role.
 from grail import Input, external
 
 node_type: str = Input("node_type", default="")
+role: str = Input("role", default="")
 
 
 @external
-async def graph_query_nodes(node_type: str | None, status: str | None) -> list[dict]: ...
+async def graph_query_nodes(
+    node_type: str | None,
+    status: str | None,
+    file_path: str | None = None,
+    role: str | None = None,
+) -> list[dict]: ...
 
 
 node_type_value: str | None = node_type.strip() if node_type.strip() else None
-agents = await graph_query_nodes(node_type_value, None)
+role_value: str | None = role.strip() if role.strip() else None
+agents = await graph_query_nodes(node_type_value, None, None, role_value)
 result = str(agents)
 result

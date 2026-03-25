@@ -4,13 +4,44 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import PurePath
+import fnmatch
+from pathlib import PurePosixPath
 
 from pydantic import BaseModel
 
 from remora.core.events.types import Event
 
 _ANY_EVENT_KEY = "*"
+
+
+def _match_path_glob(path: str, pattern: str) -> bool:
+    """Match path globs against relative or absolute event paths.
+
+    Subscription config commonly uses project-relative globs such as ``src/**``.
+    Discovery/content events may carry absolute paths. In that case, we try both
+    direct matching and suffix matching across path segments.
+    """
+    normalized_path = path.replace("\\", "/")
+    normalized_pattern = pattern.replace("\\", "/")
+
+    path_obj = PurePosixPath(normalized_path)
+    pattern_obj = PurePosixPath(normalized_pattern)
+    pattern_str = pattern_obj.as_posix()
+
+    if path_obj.match(pattern_str) or fnmatch.fnmatch(path_obj.as_posix(), pattern_str):
+        return True
+
+    # Allow relative globs (e.g., "src/**") to match absolute event paths by suffix.
+    if path_obj.is_absolute() and not pattern_obj.is_absolute():
+        parts = [part for part in path_obj.parts if part not in {"", "/"}]
+        for idx in range(len(parts)):
+            suffix_path = PurePosixPath(*parts[idx:])
+            if suffix_path.match(pattern_str) or fnmatch.fnmatch(
+                suffix_path.as_posix(), pattern_str
+            ):
+                return True
+
+    return False
 
 
 class SubscriptionPattern(BaseModel):
@@ -47,7 +78,7 @@ class SubscriptionPattern(BaseModel):
 
         if self.path_glob:
             path = getattr(event, "path", None) or getattr(event, "file_path", None)
-            if path is None or not PurePath(path).match(self.path_glob):
+            if path is None or not _match_path_glob(str(path), self.path_glob):
                 return False
 
         if self.tags:

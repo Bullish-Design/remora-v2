@@ -134,6 +134,7 @@ class NodeStore:
         node_type: NodeType | None = None,
         status: NodeStatus | None = None,
         file_path: str | None = None,
+        role: str | None = None,
     ) -> list[Node]:
         """List nodes with optional filtering fields."""
         conditions: list[str] = []
@@ -147,6 +148,9 @@ class NodeStore:
         if file_path is not None:
             conditions.append("file_path = ?")
             params.append(file_path)
+        if role is not None:
+            conditions.append("role = ?")
+            params.append(role)
 
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
         sql = f"SELECT * FROM nodes{where_clause} ORDER BY node_id ASC"

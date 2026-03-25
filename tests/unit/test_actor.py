@@ -406,6 +406,94 @@ async def test_actor_emits_reflection_tag_on_self_completion_trigger(
 
 
 @pytest.mark.asyncio
+async def test_actor_emits_turn_digested_after_reflection_turn(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::turn-digested")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+    await ws.kv_set("companion/chat_index", [{"summary": "digest summary", "tags": ["review"]}])
+    await ws.kv_set("companion/reflections", [{"insight": "captured reflection"}])
+    await ws.kv_set("companion/links", [{"target": "src/app.py::callee", "relationship": "calls"}])
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="reflect"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.agents.turn.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.agents.turn.discover_tools", _empty_tools)
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-turn-digested",
+        event=AgentCompleteEvent(
+            agent_id=node.node_id,
+            result_summary="primary turn",
+            full_response="primary response",
+            tags=("primary",),
+        ),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-turn-digested",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=30)
+    digested = next(event for event in events if event["event_type"] == EventType.TURN_DIGESTED)
+    payload = digested["payload"]
+    assert payload["agent_id"] == node.node_id
+    assert payload["digest_summary"] == "digest summary"
+    assert payload["has_reflection"] is True
+    assert payload["has_links"] is True
+    assert digested["tags"] == ["review"]
+    assert digested["correlation_id"] == "corr-turn-digested"
+
+
+@pytest.mark.asyncio
+async def test_actor_does_not_emit_turn_digested_for_primary_turn(actor_env, monkeypatch) -> None:
+    env = actor_env
+    node = make_node("src/app.py::turn-digested-primary")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    class MockKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            del max_turns
+            return SimpleNamespace(final_message=Message(role="assistant", content="ok"))
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("remora.core.agents.turn.create_kernel", lambda **_kwargs: MockKernel())
+    monkeypatch.setattr("remora.core.agents.turn.discover_tools", _empty_tools)
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-turn-digested-primary",
+        event=AgentMessageEvent(from_agent="user", to_agent=node.node_id, content="hello"),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-turn-digested-primary",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    events = await env["event_store"].get_events(limit=20)
+    event_types = [event["event_type"] for event in events]
+    assert EventType.TURN_DIGESTED not in event_types
+
+
+@pytest.mark.asyncio
 async def test_actor_emits_user_message_on_completion(actor_env, monkeypatch) -> None:
     env = actor_env
     node = make_node("src/app.py::user-message")

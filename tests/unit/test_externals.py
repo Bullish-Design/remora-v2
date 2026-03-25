@@ -206,6 +206,49 @@ async def test_externals_graph_query_nodes_rejects_invalid_enums(context_env) ->
 
 
 @pytest.mark.asyncio
+async def test_externals_graph_query_nodes_accepts_role_alias_in_node_type(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node(
+        "demo-review-observer",
+        node_type=NodeType.VIRTUAL,
+        role="review-agent",
+        file_path="",
+    )
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    listed = await externals["graph_query_nodes"]("review-agent", None)
+    assert [item["node_id"] for item in listed] == [node.node_id]
+
+
+@pytest.mark.asyncio
+async def test_externals_graph_query_nodes_supports_explicit_role_filter(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    review = make_node(
+        "demo-review-observer",
+        node_type=NodeType.VIRTUAL,
+        role="review-agent",
+        file_path="",
+    )
+    companion = make_node(
+        "demo-companion-observer",
+        node_type=NodeType.VIRTUAL,
+        role="companion",
+        file_path="",
+    )
+    await node_store.upsert_node(review)
+    await node_store.upsert_node(companion)
+    ws = await workspace_service.get_agent_workspace(review.node_id)
+    context = await _context(review.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    listed = await externals["graph_query_nodes"]("virtual", None, None, "companion")
+    assert [item["node_id"] for item in listed] == [companion.node_id]
+
+
+@pytest.mark.asyncio
 async def test_externals_graph_set_status_rejects_invalid_status(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::a")

@@ -9,6 +9,7 @@ from remora.core.events import (
     AgentMessageEvent,
     ContentChangedEvent,
     Event,
+    NodeDiscoveredEvent,
     SubscriptionPattern,
     SubscriptionRegistry,
 )
@@ -36,6 +37,23 @@ def test_subscription_pattern_matches_path_glob() -> None:
     pattern = SubscriptionPattern(path_glob="src/**/*.py")
     assert pattern.matches(ContentChangedEvent(path="src/auth/service.py"))
     assert not pattern.matches(ContentChangedEvent(path="docs/readme.md"))
+
+
+def test_subscription_pattern_matches_relative_glob_against_absolute_path() -> None:
+    pattern = SubscriptionPattern(path_glob="src/**/*.py")
+    assert pattern.matches(ContentChangedEvent(path="/home/user/project/src/auth/service.py"))
+    assert not pattern.matches(ContentChangedEvent(path="/home/user/project/docs/readme.md"))
+
+
+def test_subscription_pattern_matches_node_file_path_with_relative_glob() -> None:
+    pattern = SubscriptionPattern(event_types=["node_discovered"], path_glob="src/**")
+    event = NodeDiscoveredEvent(
+        node_id="src/api/orders.py::create_order",
+        node_type="function",
+        file_path="/home/user/project/src/api/orders.py",
+        name="create_order",
+    )
+    assert pattern.matches(event)
 
 
 def test_subscription_pattern_none_matches_all() -> None:

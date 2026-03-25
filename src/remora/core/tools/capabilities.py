@@ -128,15 +128,25 @@ class GraphCapabilities:
         node_type: str | None = None,
         status: str | None = None,
         file_path: str | None = None,
+        role: str | None = None,
     ) -> list[dict[str, Any]]:
         normalized_node_type: NodeType | None = None
+        normalized_role: str | None = role.strip() if isinstance(role, str) and role.strip() else None
         if node_type is not None:
             node_type_name = node_type.strip()
-            valid_node_types = {serialize_enum(item) for item in NodeType}
-            if node_type_name not in valid_node_types:
-                choices = ", ".join(sorted(valid_node_types))
-                raise ValueError(f"Invalid node_type '{node_type}'. Expected one of: {choices}")
-            normalized_node_type = NodeType(node_type_name)
+            if node_type_name:
+                valid_node_types = {serialize_enum(item) for item in NodeType}
+                if node_type_name in valid_node_types:
+                    normalized_node_type = NodeType(node_type_name)
+                elif node_type_name.startswith("NodeType."):
+                    choices = ", ".join(sorted(valid_node_types))
+                    raise ValueError(
+                        f"Invalid node_type '{node_type}'. Expected one of: {choices}"
+                    )
+                elif normalized_role is None:
+                    # Compatibility fallback: some bundles provide role names
+                    # (for example "review-agent") in node_type filters.
+                    normalized_role = node_type_name
 
         normalized_status: NodeStatus | None = None
         if status is not None:
@@ -151,6 +161,7 @@ class GraphCapabilities:
             node_type=normalized_node_type,
             status=normalized_status,
             file_path=file_path,
+            role=normalized_role,
         )
         return [node.model_dump() for node in nodes]
 

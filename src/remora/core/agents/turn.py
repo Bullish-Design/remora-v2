@@ -13,7 +13,12 @@ from remora.core.agents.kernel import create_kernel, extract_response_text, run_
 from remora.core.agents.outbox import Outbox, OutboxObserver
 from remora.core.agents.prompt import PromptBuilder
 from remora.core.agents.trigger import Trigger, TriggerPolicy
-from remora.core.events import AgentCompleteEvent, AgentErrorEvent, AgentStartEvent
+from remora.core.events import (
+    AgentCompleteEvent,
+    AgentErrorEvent,
+    AgentStartEvent,
+    TurnDigestedEvent,
+)
 from remora.core.events.store import EventStore
 from remora.core.model.config import BundleConfig, Config
 from remora.core.model.errors import (
@@ -166,6 +171,7 @@ class AgentTurnExecutor:
                 await self._complete_agent_turn(
                     node_id,
                     response_text,
+                    workspace,
                     outbox,
                     trigger,
                     turn_log,
@@ -328,6 +334,7 @@ class AgentTurnExecutor:
         self,
         node_id: str,
         response_text: str,
+        workspace: AgentWorkspace,
         outbox: Outbox,
         trigger: Trigger,
         turn_log: logging.LoggerAdapter,
@@ -349,6 +356,65 @@ class AgentTurnExecutor:
                 user_message=user_message,
                 correlation_id=trigger.correlation_id,
                 tags=turn_tags,
+            )
+        )
+        if "reflection" in turn_tags:
+            await self._emit_turn_digested(
+                node_id,
+                response_text,
+                workspace,
+                outbox,
+                trigger,
+                turn_log,
+            )
+
+    async def _emit_turn_digested(
+        self,
+        node_id: str,
+        response_text: str,
+        workspace: AgentWorkspace,
+        outbox: Outbox,
+        trigger: Trigger,
+        turn_log: logging.LoggerAdapter,
+    ) -> None:
+        digest_summary = (response_text or "").strip()[:500]
+        if not digest_summary:
+            digest_summary = "Reflection turn completed."
+        has_reflection = False
+        has_links = False
+        digest_tags: tuple[str, ...] = ()
+
+        try:
+            companion_data = await workspace.get_companion_data()
+            has_reflection = bool(companion_data.reflections)
+            has_links = bool(companion_data.links)
+
+            for entry in reversed(companion_data.chat_index):
+                if not isinstance(entry, dict):
+                    continue
+                summary = entry.get("summary")
+                if isinstance(summary, str) and summary.strip():
+                    digest_summary = summary.strip()[:500]
+                raw_tags = entry.get("tags")
+                if isinstance(raw_tags, (list, tuple)):
+                    digest_tags = tuple(
+                        str(tag).strip()
+                        for tag in raw_tags
+                        if str(tag).strip()
+                    )
+                break
+        # Error boundary: digest emission should not break completed reflection turns.
+        except Exception:
+            turn_log.debug("Failed to build turn digest payload", exc_info=True)
+
+        await outbox.emit(
+            TurnDigestedEvent(
+                agent_id=node_id,
+                digest_summary=digest_summary,
+                has_reflection=has_reflection,
+                has_links=has_links,
+                correlation_id=trigger.correlation_id,
+                tags=digest_tags,
             )
         )
 
