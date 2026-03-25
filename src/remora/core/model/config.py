@@ -142,6 +142,7 @@ class RuntimeConfig(BaseModel):
     chat_message_max_chars: int = 4000
     conversation_history_max_entries: int = 200
     conversation_message_max_chars: int = 2000
+    max_model_retries: int = Field(default=1, ge=0, le=5)
 
     @field_validator("actor_inbox_max_items")
     @classmethod

@@ -71,6 +71,7 @@ class AgentTurnExecutor:
         search_service: SearchServiceProtocol | None,
         send_message_limiter: SlidingWindowRateLimiter | None = None,
         broker: HumanInputBroker | None = None,
+        max_model_retries: int = 1,
     ) -> None:
         self._node_store = node_store
         self._event_store = event_store
@@ -84,6 +85,7 @@ class AgentTurnExecutor:
         self._search_service = search_service
         self._send_message_limiter = send_message_limiter
         self._broker = broker
+        self._max_model_retries = max(0, int(max_model_retries))
 
     async def execute_turn(self, trigger: Trigger, outbox: Outbox) -> None:
         """Execute one agent turn."""
@@ -271,7 +273,7 @@ class AgentTurnExecutor:
         outbox: Outbox,
         turn_log: logging.LoggerAdapter,
     ) -> Any:
-        max_retries = 1
+        max_retries = self._max_model_retries
         last_exc: Exception | None = None
         tool_schemas = [tool.schema for tool in tools]
 

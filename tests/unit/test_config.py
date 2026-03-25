@@ -239,6 +239,7 @@ def test_runtime_config_actor_inbox_defaults() -> None:
     assert config.actor_inbox_max_items == 1000
     assert config.actor_inbox_overflow_policy == OverflowPolicy.DROP_NEW
     assert config.max_reactive_turns_per_correlation == 3
+    assert config.max_model_retries == 1
 
 
 def test_runtime_config_invalid_overflow_policy_rejected() -> None:
@@ -289,3 +290,11 @@ def test_runtime_config_api_limits_must_be_positive(field_name: str, value: int)
 
     with pytest.raises(ValidationError):
         RuntimeConfig(**{field_name: value})
+
+
+@pytest.mark.parametrize("value", [-1, 6])
+def test_runtime_config_max_model_retries_bounds(value: int) -> None:
+    from remora.core.model.config import RuntimeConfig
+
+    with pytest.raises(ValidationError):
+        RuntimeConfig(max_model_retries=value)

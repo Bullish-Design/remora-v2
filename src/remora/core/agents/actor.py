@@ -66,6 +66,7 @@ class Actor:
             search_service=search_service,
             send_message_limiter=self._send_message_limiter,
             broker=broker,
+            max_model_retries=config.runtime.max_model_retries,
         )
 
     @property

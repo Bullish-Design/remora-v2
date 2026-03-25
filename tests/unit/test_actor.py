@@ -1258,6 +1258,71 @@ async def test_actor_execute_turn_retries_kernel_once(actor_env, monkeypatch) ->
 
 
 @pytest.mark.asyncio
+async def test_actor_execute_turn_honors_configured_retry_count(actor_env, monkeypatch) -> None:
+    env = actor_env
+    env["config"] = Config(
+        infra=InfraConfig(workspace_root=".remora-actor-test"),
+        runtime=RuntimeConfig(
+            trigger_cooldown_ms=1000,
+            max_trigger_depth=2,
+            max_model_retries=0,
+        ),
+        behavior=BehaviorConfig(
+            prompt_templates={"user": _TEST_USER_TEMPLATE},
+            model_default="mock",
+            max_turns=1,
+        ),
+    )
+
+    node = make_node("src/app.py::kernel-no-retry")
+    await env["node_store"].upsert_node(node)
+    ws = await env["workspace_service"].get_agent_workspace(node.node_id)
+    await ws.write("_bundle/bundle.yaml", "system_prompt: hi\nmodel: mock\nmax_turns: 1\n")
+
+    attempts = 0
+
+    class FailKernel:
+        async def run(self, _messages, _tools, max_turns=20):  # noqa: ANN001, ANN201
+            nonlocal attempts
+            del max_turns
+            attempts += 1
+            raise ConnectionError("always-fails")
+
+        async def close(self) -> None:
+            return None
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("remora.core.agents.turn.create_kernel", lambda **_kwargs: FailKernel())
+    monkeypatch.setattr("remora.core.agents.turn.discover_tools", _empty_tools)
+    monkeypatch.setattr("remora.core.agents.turn.asyncio.sleep", _no_sleep)
+
+    actor = _make_actor(env, node.node_id)
+    trigger = Trigger(
+        node_id=node.node_id,
+        correlation_id="corr-no-retry",
+        event=AgentMessageEvent(
+            from_agent="user",
+            to_agent=node.node_id,
+            content="hello",
+            correlation_id="corr-no-retry",
+        ),
+    )
+    outbox = Outbox(
+        actor_id=node.node_id,
+        event_store=env["event_store"],
+        correlation_id="corr-no-retry",
+    )
+    await actor._execute_turn(trigger, outbox)
+
+    assert attempts == 1
+    events = await env["event_store"].get_events(limit=10)
+    event_types = [event["event_type"] for event in events]
+    assert EventType.AGENT_ERROR in event_types
+
+
+@pytest.mark.asyncio
 async def test_actor_execute_turn_respects_shared_semaphore(actor_env, monkeypatch) -> None:
     env = actor_env
     node_a = make_node("src/app.py::sem-a")
