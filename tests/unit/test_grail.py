@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 import grail
 import pytest
@@ -133,6 +134,33 @@ async def test_grail_tool_error_handling(tmp_path: Path) -> None:
     result = await tool.execute({"name": "x"}, ToolCall(id="call-2", name="demo", arguments={}))
     assert result.is_error is True
     assert "boom" in result.output
+
+
+@pytest.mark.asyncio
+async def test_grail_tool_execute_applies_optional_defaults(tmp_path: Path) -> None:
+    _ = _load_script(tmp_path)
+
+    class ScriptStub:
+        name = "demo"
+        inputs = {
+            "name": SimpleNamespace(required=True, default=None, type_annotation="str"),
+            "count": SimpleNamespace(required=False, default=7, type_annotation="int"),
+        }
+        externals = {}
+
+        async def run(self, inputs, externals):  # noqa: ANN001, ANN201
+            del externals
+            return {"name": inputs["name"], "count": inputs["count"]}
+
+    tool = GrailTool(script=ScriptStub(), capabilities={})
+    result = await tool.execute(
+        {"name": "remora"},
+        ToolCall(id="call-defaults", name="demo", arguments={"name": "remora"}),
+    )
+
+    payload = json.loads(result.output)
+    assert result.is_error is False
+    assert payload == {"name": "remora", "count": 7}
 
 
 @pytest.mark.asyncio

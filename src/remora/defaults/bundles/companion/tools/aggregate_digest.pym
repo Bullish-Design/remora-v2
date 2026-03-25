@@ -51,7 +51,21 @@ def as_nested_dict(value: object) -> dict[str, dict[str, object]]:
     return result
 
 
-tag_list = [item.strip() for item in tags.split(",") if item.strip()]
+def to_tag_list(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                trimmed = item.strip()
+                if trimmed:
+                    result.append(trimmed)
+        return result
+    return []
+
+
+tag_list = to_tag_list(tags)
 correlation_id = await my_correlation_id()
 summary = summary[:MAX_SUMMARY]
 insight = insight[:MAX_INSIGHT]

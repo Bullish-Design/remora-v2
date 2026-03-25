@@ -125,6 +125,7 @@ class GrailTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolCall | None) -> ToolResult:
         call_id = context.id if context else ""
+        normalized_arguments = self._normalize_arguments(arguments)
         started = time.perf_counter()
         logger.debug(
             "Tool start agent=%s tool=%s call_id=%s source=%s args=%s",
@@ -132,7 +133,7 @@ class GrailTool:
             self._schema.name,
             call_id or "-",
             self._source_file,
-            arguments,
+            normalized_arguments,
         )
         try:
             try:
@@ -141,7 +142,10 @@ class GrailTool:
                     for name, fn in self._capabilities.items()
                     if name in self._script.externals
                 }
-                result = await self._script.run(inputs=arguments, externals=used_capabilities)
+                result = await self._script.run(
+                    inputs=normalized_arguments,
+                    externals=used_capabilities,
+                )
                 output = result if isinstance(result, str) else json.dumps(result)
                 logger.debug(
                     "Tool complete agent=%s tool=%s call_id=%s duration_ms=%.1f output=%s",
@@ -169,7 +173,7 @@ class GrailTool:
                 call_id or "-",
                 (time.perf_counter() - started) * 1000.0,
                 self._source_file,
-                arguments,
+                normalized_arguments,
             )
             return ToolResult(
                 call_id=call_id,
@@ -177,6 +181,15 @@ class GrailTool:
                 output=str(exc),
                 is_error=True,
             )
+
+    def _normalize_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(arguments)
+        for name, spec in self._script.inputs.items():
+            if name in normalized:
+                continue
+            if not spec.required:
+                normalized[name] = spec.default
+        return normalized
 
 
 async def discover_tools(

@@ -11,7 +11,7 @@
 - [x] 7. Task E: system tool integration tests
 - [x] 8. Task F: code-agent tool integration tests
 - [x] 9. Acceptance test additions
-- [ ] 10. Full verification run
+- [x] 10. Full verification run
 
 ## Log
 
@@ -59,3 +59,15 @@
   - `companion_link.pym`
 - Verified Step 9 with:
   - `devenv shell -- pytest tests/acceptance/test_live_runtime_real_llm.py -k \"companion_reacts_to_code_agent_complete or review_agent_reacts_to_node_changed\" -m real_llm -v` (2 passed)
+- Step 10 blocker triage and fixes:
+  - Restored `query_agents.pym` filtered-input compatibility (`node_type`, `role`, `status`, `file_path`).
+  - Hardened tag parsing for list/string inputs in:
+    - `src/remora/defaults/bundles/system/tools/companion_summarize.pym`
+    - `src/remora/defaults/bundles/companion/tools/aggregate_digest.pym`
+  - Fixed Grail optional-input runtime gap by applying script defaults in `GrailTool.execute` before script execution.
+  - Added unit regression: `test_grail_tool_execute_applies_optional_defaults`.
+  - Fixed acceptance fixture determinism for reactive directory flow by provisioning `emit_mode_token` in the directory-agent test bundle writer.
+- Verified Step 10 with:
+  - `devenv shell -- pytest tests/acceptance/test_live_runtime_real_llm.py::test_acceptance_reactive_file_change_triggers_live_real_llm_turn -m real_llm -v` (passed)
+  - `devenv shell -- pytest tests/unit/test_grail.py -q` (18 passed)
+  - `devenv shell -- pytest tests/integration/test_llm_turn.py tests/integration/test_llm_companion.py tests/integration/test_llm_review_agent.py tests/integration/test_llm_test_agent.py tests/integration/test_llm_directory_agent.py tests/integration/test_llm_system_tools.py tests/acceptance/test_live_runtime_real_llm.py -m real_llm -v` (26 passed, 1 deselected)

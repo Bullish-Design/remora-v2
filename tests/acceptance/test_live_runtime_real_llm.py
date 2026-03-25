@@ -223,10 +223,35 @@ def _write_reactive_mode_project(
     write_file(code / "bundle.yaml", f"name: code-agent\nmodel: {model_name}\nmax_turns: 8\n")
     write_file(
         directory / "bundle.yaml",
-        f"name: directory-agent\nmodel: {model_name}\nmax_turns: 8\n",
+        (
+            "name: directory-agent\n"
+            "system_prompt: >-\n"
+            "  You are a deterministic acceptance-test directory agent.\n"
+            "  For reactive (non-user) turns, you MUST call emit_mode_token exactly once,\n"
+            "  then reply in one sentence.\n"
+            f"model: {model_name}\n"
+            "max_turns: 8\n"
+            "prompts:\n"
+            "  reactive: |\n"
+            "    MODE_TOKEN=reactive-ok\n"
+        ),
     )
     write_file(
         system / "tools" / "emit_mode_token.pym",
+        (
+            "from grail import external\n\n"
+            "@external\n"
+            "async def my_node_id() -> str: ...\n"
+            "@external\n"
+            "async def send_message(to_node_id: str, content: str) -> dict[str, object]: ...\n\n"
+            "node_id = await my_node_id()\n"
+            "send_result = await send_message(node_id, \"reactive-ok\")\n"
+            "result = \"reactive-ok\" if send_result.get(\"sent\") else \"failed\"\n"
+            "result\n"
+        ),
+    )
+    write_file(
+        directory / "tools" / "emit_mode_token.pym",
         (
             "from grail import external\n\n"
             "@external\n"
