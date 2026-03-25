@@ -317,7 +317,8 @@ async def test_api_chat_rejects_message_above_max_length(web_env) -> None:
     assert response.status_code == 413
     payload = response.json()
     assert payload == {
-        "error": "message exceeds max length",
+        "error": "message_too_long",
+        "message": "message exceeds max length",
         "max_chars": 5,
         "received_chars": 6,
     }
@@ -487,7 +488,10 @@ async def test_chat_rate_limit_blocks_excess(web_env) -> None:
         json={"node_id": "src/app.py::a", "message": "overflow"},
     )
     assert blocked.status_code == 429
-    assert blocked.json()["error"].startswith("Rate limit exceeded")
+    assert blocked.json() == {
+        "error": "rate_limit_exceeded",
+        "message": "Rate limit exceeded. Try again later.",
+    }
 
 
 @pytest.mark.asyncio
