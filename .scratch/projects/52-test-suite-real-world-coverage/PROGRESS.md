@@ -5,7 +5,7 @@
 - [x] 1. Environment/baseline setup
 - [x] 2. Bug fix: review-agent `graph_list_nodes` -> `graph_query_nodes`
 - [x] 3. Task A: companion integration tests
-- [ ] 4. Task B: review-agent integration tests
+- [x] 4. Task B: review-agent integration tests
 - [ ] 5. Task C: test-agent integration tests
 - [ ] 6. Task D: directory-agent integration tests
 - [ ] 7. Task E: system tool integration tests
@@ -25,3 +25,8 @@
 - Verified Task A with:
   - `devenv shell -- pytest tests/integration/test_llm_companion.py -m real_llm -v` (2 passed)
   - `devenv shell -- ruff check tests/integration/test_llm_companion.py` (clean)
+- Added `tests/integration/test_llm_review_agent.py` with two real-LLM tests for list/review/submit and second-pass diff detection.
+- Fixed `review_diff.pym` source lookup from `source_code` to `text` (with fallback) so live graph node data is diffed correctly.
+- Verified Task B with:
+  - `devenv shell -- pytest tests/integration/test_llm_review_agent.py -m real_llm -v` (2 passed)
+  - `devenv shell -- pytest tests/integration/test_virtual_reactive_flow.py -q` (5 passed)

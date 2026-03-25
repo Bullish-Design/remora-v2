@@ -22,7 +22,7 @@ node = await graph_get_node(node_id)
 if not node:
     result = f"Node {node_id} not found."
 else:
-    current_source = node.get("source_code") or ""
+    current_source = node.get("text") or node.get("source_code") or ""
     previous_key = f"review:previous_source:{node_id}"
     previous_source = await kv_get(previous_key)
 
