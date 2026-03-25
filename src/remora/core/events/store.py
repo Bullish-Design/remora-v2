@@ -97,6 +97,7 @@ class EventStore:
             ),
         )
         event_id = int(cursor.lastrowid)
+        event.event_id = event_id
         if self._metrics is not None:
             self._metrics.events_emitted_total += 1
 

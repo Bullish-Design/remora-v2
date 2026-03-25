@@ -92,7 +92,8 @@ async def sse_stream(request: Request) -> StreamingResponse:
                     except StopAsyncIteration:
                         break
                     payload = json.dumps(event.to_envelope(), separators=(",", ":"))
-                    yield f"id: {event.timestamp}\nevent: {event.event_type}\ndata: {payload}\n\n"
+                    sse_id = event.event_id if event.event_id is not None else event.timestamp
+                    yield f"id: {sse_id}\nevent: {event.event_type}\ndata: {payload}\n\n"
             finally:
                 for task in sentinel_tasks:
                     if not task.done():
