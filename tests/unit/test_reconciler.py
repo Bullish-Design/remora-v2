@@ -416,6 +416,37 @@ async def test_file_lock_cache_evicts_unused_entries(reconcile_env, tmp_path: Pa
 
 
 @pytest.mark.asyncio
+async def test_file_lock_cache_caps_size_by_generation(reconcile_env, monkeypatch) -> None:
+    (
+        _node_store,
+        _event_store,
+        _workspace_service,
+        _config,
+        reconciler,
+        _language_registry,
+        _subscription_manager,
+    ) = reconcile_env
+
+    monkeypatch.setattr(reconciler, "_MAX_FILE_LOCKS", 2, raising=False)
+    reconciler._file_locks = {
+        "a.py": asyncio.Lock(),
+        "b.py": asyncio.Lock(),
+        "c.py": asyncio.Lock(),
+    }
+    reconciler._file_lock_generations = {
+        "a.py": 1,
+        "b.py": 2,
+        "c.py": 3,
+    }
+
+    reconciler._evict_stale_file_locks(generation=0)
+
+    assert len(reconciler._file_locks) == 2
+    assert "a.py" not in reconciler._file_locks
+    assert set(reconciler._file_locks) == {"b.py", "c.py"}
+
+
+@pytest.mark.asyncio
 async def test_reconciler_handles_malformed_source(reconcile_env, tmp_path: Path) -> None:
     (
         node_store,

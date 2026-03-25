@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 class FileReconciler:
     """Incremental file reconciler with add/change/delete handling."""
 
+    _MAX_FILE_LOCKS = 500
+
     def __init__(
         self,
         config: Config,
@@ -372,6 +374,21 @@ class FileReconciler:
             and not self._file_locks[file_path].locked()
         ]
         for file_path in stale_paths:
+            self._file_locks.pop(file_path, None)
+            self._file_lock_generations.pop(file_path, None)
+
+        if len(self._file_locks) <= self._MAX_FILE_LOCKS:
+            return
+
+        sorted_paths = sorted(
+            self._file_lock_generations.items(),
+            key=lambda item: item[1],
+        )
+        evict_count = len(self._file_locks) - self._MAX_FILE_LOCKS
+        for file_path, _generation in sorted_paths[:evict_count]:
+            lock = self._file_locks.get(file_path)
+            if lock is None or lock.locked():
+                continue
             self._file_locks.pop(file_path, None)
             self._file_lock_generations.pop(file_path, None)
 
