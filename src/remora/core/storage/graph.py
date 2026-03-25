@@ -287,6 +287,24 @@ class NodeStore:
             for row in rows
         ]
 
+    async def get_importers(self, node_id: str) -> list[str]:
+        """Get node IDs that import the given node."""
+        cursor = await self._db.execute(
+            "SELECT from_id FROM edges WHERE to_id = ? AND edge_type = 'imports'",
+            (node_id,),
+        )
+        rows = await cursor.fetchall()
+        return [row["from_id"] for row in rows]
+
+    async def get_dependencies(self, node_id: str) -> list[str]:
+        """Get node IDs that the given node depends on (imports)."""
+        cursor = await self._db.execute(
+            "SELECT to_id FROM edges WHERE from_id = ? AND edge_type = 'imports'",
+            (node_id,),
+        )
+        rows = await cursor.fetchall()
+        return [row["to_id"] for row in rows]
+
     async def delete_edges(self, node_id: str) -> int:
         """Delete all edges connected to a node and return deleted count."""
         cursor = await self._db.execute(
