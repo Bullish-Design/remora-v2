@@ -84,6 +84,8 @@ Reactive loop:
 
 - Web server (`src/remora/web/server.py`): REST endpoints + SSE stream.
 - LSP server (`src/remora/lsp/server.py`): CodeLens/Hover + content-change event emission.
+- CORS policy: no CORS headers are emitted by default; browser cross-origin mutating
+  requests are intentionally blocked for localhost-only operation.
 
 ## 3. Data Model
 

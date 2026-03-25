@@ -28,4 +28,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+# Note: no CORS headers are intentionally set.
+# Cross-origin browser requests requiring preflight (for example POST/PUT/DELETE)
+# fail by default. Remora is designed for localhost access only. If cross-origin
+# browser access is required, add Starlette CORSMiddleware explicitly.
 __all__ = ["CSRFMiddleware"]
