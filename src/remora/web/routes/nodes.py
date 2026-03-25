@@ -63,6 +63,25 @@ async def api_all_edges(request: Request) -> JSONResponse:
     return JSONResponse(payload)
 
 
+async def api_node_relationships(request: Request) -> JSONResponse:
+    """Get cross-file relationships for a node, optionally filtered by type."""
+    deps = _deps_from_request(request)
+    node_id = request.path_params["node_id"]
+    edge_type = request.query_params.get("type")
+
+    if edge_type:
+        edges = await deps.node_store.get_edges_by_type(node_id, edge_type)
+    else:
+        all_edges = await deps.node_store.get_edges(node_id)
+        edges = [edge for edge in all_edges if edge.edge_type != "contains"]
+
+    payload = [
+        {"from_id": edge.from_id, "to_id": edge.to_id, "edge_type": edge.edge_type}
+        for edge in edges
+    ]
+    return JSONResponse(payload)
+
+
 async def api_conversation(request: Request) -> JSONResponse:
     deps = _deps_from_request(request)
     if deps.actor_pool is None:
@@ -98,6 +117,7 @@ def routes() -> list[Route]:
         Route("/api/nodes", endpoint=api_nodes),
         Route("/api/edges", endpoint=api_all_edges),
         Route("/api/nodes/{node_id:path}/edges", endpoint=api_edges),
+        Route("/api/nodes/{node_id:path}/relationships", endpoint=api_node_relationships),
         Route("/api/nodes/{node_id:path}/conversation", endpoint=api_conversation),
         Route("/api/nodes/{node_id:path}/companion", endpoint=api_node_companion),
         Route("/api/nodes/{node_id:path}", endpoint=api_node),
@@ -110,6 +130,7 @@ __all__ = [
     "api_edges",
     "api_node",
     "api_node_companion",
+    "api_node_relationships",
     "api_nodes",
     "routes",
 ]

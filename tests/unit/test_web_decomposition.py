@@ -17,6 +17,7 @@ def test_route_modules_expose_expected_paths() -> None:
     assert "/api/nodes" in _paths(nodes)
     assert "/api/nodes/{node_id:path}" in _paths(nodes)
     assert "/api/edges" in _paths(nodes)
+    assert "/api/nodes/{node_id:path}/relationships" in _paths(nodes)
     assert "/api/chat" in _paths(chat)
     assert "/api/nodes/{node_id:path}/respond" in _paths(chat)
     assert "/api/events" in _paths(events)

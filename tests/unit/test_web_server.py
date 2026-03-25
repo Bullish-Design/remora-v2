@@ -253,6 +253,57 @@ async def test_api_all_edges(web_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_node_relationships_filters_out_contains_by_default(web_env) -> None:
+    client, node_store, _event_store, source_path = web_env
+    importer = make_node(
+        "src/app.py::importer",
+        file_path=str(source_path),
+        text="def importer():\n    return 1\n",
+    )
+    dependency = make_node(
+        "src/models.py::Config",
+        file_path="src/models.py",
+        text="class Config:\n    pass\n",
+    )
+    await node_store.upsert_node(importer)
+    await node_store.upsert_node(dependency)
+    await node_store.add_edge(importer.node_id, dependency.node_id, "imports")
+    await node_store.add_edge(importer.node_id, dependency.node_id, "contains")
+
+    response = await client.get(f"/api/nodes/{importer.node_id}/relationships")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == [
+        {"from_id": importer.node_id, "to_id": dependency.node_id, "edge_type": "imports"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_api_node_relationships_supports_type_filter(web_env) -> None:
+    client, node_store, _event_store, source_path = web_env
+    importer = make_node(
+        "src/app.py::importer2",
+        file_path=str(source_path),
+        text="def importer2():\n    return 1\n",
+    )
+    dependency = make_node(
+        "src/models.py::Base",
+        file_path="src/models.py",
+        text="class Base:\n    pass\n",
+    )
+    await node_store.upsert_node(importer)
+    await node_store.upsert_node(dependency)
+    await node_store.add_edge(importer.node_id, dependency.node_id, "imports")
+    await node_store.add_edge(importer.node_id, dependency.node_id, "inherits")
+
+    response = await client.get(f"/api/nodes/{importer.node_id}/relationships?type=inherits")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"from_id": importer.node_id, "to_id": dependency.node_id, "edge_type": "inherits"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_api_chat_emits_agent_message_event(web_env) -> None:
     client, _node_store, event_store, _source_path = web_env
     response = await client.post(
