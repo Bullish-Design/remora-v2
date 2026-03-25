@@ -252,6 +252,41 @@ class NodeStore:
             for row in rows
         ]
 
+    async def get_edges_by_type(
+        self,
+        node_id: str,
+        edge_type: str,
+        direction: str = "both",
+    ) -> list[Edge]:
+        """Get edges of a specific type for a node."""
+        if direction == "outgoing":
+            sql = (
+                "SELECT from_id, to_id, edge_type FROM edges "
+                "WHERE from_id = ? AND edge_type = ? ORDER BY id ASC"
+            )
+            params: tuple[Any, ...] = (node_id, edge_type)
+        elif direction == "incoming":
+            sql = (
+                "SELECT from_id, to_id, edge_type FROM edges "
+                "WHERE to_id = ? AND edge_type = ? ORDER BY id ASC"
+            )
+            params = (node_id, edge_type)
+        elif direction == "both":
+            sql = (
+                "SELECT from_id, to_id, edge_type FROM edges "
+                "WHERE (from_id = ? OR to_id = ?) AND edge_type = ? ORDER BY id ASC"
+            )
+            params = (node_id, node_id, edge_type)
+        else:
+            raise ValueError("direction must be one of: outgoing, incoming, both")
+
+        cursor = await self._db.execute(sql, params)
+        rows = await cursor.fetchall()
+        return [
+            Edge(from_id=row["from_id"], to_id=row["to_id"], edge_type=row["edge_type"])
+            for row in rows
+        ]
+
     async def delete_edges(self, node_id: str) -> int:
         """Delete all edges connected to a node and return deleted count."""
         cursor = await self._db.execute(
