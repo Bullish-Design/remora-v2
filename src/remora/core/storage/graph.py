@@ -87,6 +87,7 @@ class NodeStore:
             );
             CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
             CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
+            CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(edge_type);
             """
         )
         await self._db.commit()
