@@ -525,7 +525,7 @@ Imports are the highest-value, most-reliable relationship to extract. They're ex
 
 **Estimated scope**: ~100 lines of new code + ~50 lines of tests.
 
-### Phase 3: Decorator Edges
+### Phase 3: Decorator Edges (IGNORE FOR NOW)
 
 **Steps**:
 1. Write `python_decorators.scm` query file
