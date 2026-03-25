@@ -103,12 +103,12 @@ async def test_bundle_tools_execute_via_grail_runtime() -> None:
     async def my_node_id() -> str:
         return "src/api"
 
-    async def graph_get_node(target_id: str) -> dict:
+    async def graph_get_node(target_id: str) -> dict | None:
         if target_id == "src/api":
             return {"parent_id": "src", "name": "api"}
         if target_id == "src":
             return {"parent_id": ".", "name": "src"}
-        return {}
+        return None
 
     tool_files = _load_bundle_tools(
         [

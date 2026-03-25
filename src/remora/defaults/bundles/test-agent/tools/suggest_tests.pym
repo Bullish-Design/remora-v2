@@ -5,7 +5,7 @@ node_id: str = Input("node_id")
 
 
 @external
-async def graph_get_node(target_id: str) -> dict: ...
+async def graph_get_node(target_id: str) -> dict | None: ...
 
 
 node = await graph_get_node(node_id)

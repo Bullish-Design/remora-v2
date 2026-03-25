@@ -119,9 +119,9 @@ class GraphCapabilities:
         self._node_id = node_id
         self._node_store = node_store
 
-    async def graph_get_node(self, target_id: str) -> dict[str, Any]:
+    async def graph_get_node(self, target_id: str) -> dict[str, Any] | None:
         node = await self._node_store.get_node(target_id)
-        return node.model_dump() if node is not None else {}
+        return node.model_dump() if node is not None else None
 
     async def graph_query_nodes(
         self,

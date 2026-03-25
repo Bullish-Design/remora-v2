@@ -5,7 +5,7 @@ node_id: str = Input("node_id", default="")
 
 
 @external
-async def graph_get_node(target_id: str) -> dict: ...
+async def graph_get_node(target_id: str) -> dict | None: ...
 
 
 @external
@@ -13,8 +13,12 @@ async def write_file(path: str, content: str) -> None: ...
 
 
 node = await graph_get_node(node_id)
-node_type = str(node.get("node_type", "unknown"))
-source_code = str(node.get("source_code", ""))
+if not node:
+    node_type = "unknown"
+    source_code = ""
+else:
+    node_type = str(node.get("node_type", "unknown"))
+    source_code = str(node.get("source_code", ""))
 
 category = "general"
 if "test" in source_code:

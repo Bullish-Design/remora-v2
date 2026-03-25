@@ -190,6 +190,19 @@ async def test_externals_graph_ops(context_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_externals_graph_get_node_returns_none_for_missing(context_env) -> None:
+    node_store, event_store, workspace_service = context_env
+    node = make_node("src/app.py::a")
+    await node_store.upsert_node(node)
+    ws = await workspace_service.get_agent_workspace(node.node_id)
+    context = await _context(node.node_id, ws, node_store, event_store)
+    externals = context.to_capabilities_dict()
+
+    missing = await externals["graph_get_node"]("src/app.py::missing")
+    assert missing is None
+
+
+@pytest.mark.asyncio
 async def test_externals_graph_query_nodes_rejects_invalid_enums(context_env) -> None:
     node_store, event_store, workspace_service = context_env
     node = make_node("src/app.py::a")

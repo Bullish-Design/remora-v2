@@ -3,7 +3,7 @@ from grail import external
 
 
 @external
-async def graph_get_node(target_id: str) -> dict: ...
+async def graph_get_node(target_id: str) -> dict | None: ...
 
 
 @external
