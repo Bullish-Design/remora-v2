@@ -1,0 +1,20 @@
+# Progress
+
+## Step Status
+
+- [x] 1. Environment/baseline setup
+- [ ] 2. Bug fix: review-agent `graph_list_nodes` -> `graph_query_nodes`
+- [ ] 3. Task A: companion integration tests
+- [ ] 4. Task B: review-agent integration tests
+- [ ] 5. Task C: test-agent integration tests
+- [ ] 6. Task D: directory-agent integration tests
+- [ ] 7. Task E: system tool integration tests
+- [ ] 8. Task F: code-agent tool integration tests
+- [ ] 9. Acceptance test additions
+- [ ] 10. Full verification run
+
+## Log
+
+- Initialized project tracking files and implementation plan.
+- Completed dependency sync and verified vLLM model endpoint reachability.
+- Captured reusable helper/test patterns in `BASELINE_NOTES.md`.
