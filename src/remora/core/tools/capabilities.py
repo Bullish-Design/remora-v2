@@ -18,9 +18,9 @@ from remora.core.events import (
 )
 from remora.core.events.store import EventStore
 from remora.core.events.types import Event
-from remora.core.services.broker import HumanInputBroker
 from remora.core.model.node import Node
 from remora.core.model.types import NodeStatus, NodeType, serialize_enum
+from remora.core.services.broker import HumanInputBroker
 from remora.core.services.rate_limit import SlidingWindowRateLimiter
 from remora.core.services.search import SearchServiceProtocol
 from remora.core.storage.graph import NodeStore
@@ -137,7 +137,9 @@ class GraphCapabilities:
         role: str | None = None,
     ) -> list[dict[str, Any]]:
         normalized_node_type: NodeType | None = None
-        normalized_role: str | None = role.strip() if isinstance(role, str) and role.strip() else None
+        normalized_role: str | None = (
+            role.strip() if isinstance(role, str) and role.strip() else None
+        )
         if node_type is not None:
             node_type_name = node_type.strip()
             if node_type_name:
