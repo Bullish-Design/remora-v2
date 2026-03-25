@@ -9,7 +9,7 @@
 - [x] 5. Task C: test-agent integration tests
 - [x] 6. Task D: directory-agent integration tests
 - [x] 7. Task E: system tool integration tests
-- [ ] 8. Task F: code-agent tool integration tests
+- [x] 8. Task F: code-agent tool integration tests
 - [ ] 9. Acceptance test additions
 - [ ] 10. Full verification run
 
@@ -44,3 +44,8 @@
   - `subscribe.pym` no longer depends on optional Input defaults for extra filters.
 - Verified Task E with:
   - `devenv shell -- pytest tests/integration/test_llm_system_tools.py -m real_llm -v` (4 passed)
+- Extended `tests/integration/test_llm_turn.py` with Task F code-agent real-LLM tests:
+  - `test_real_llm_code_agent_reflect_writes_to_workspace`
+  - `test_real_llm_code_agent_subscribe_to_events`
+- Verified Task F with:
+  - `devenv shell -- pytest tests/integration/test_llm_turn.py -k \"code_agent_reflect_writes_to_workspace or code_agent_subscribe_to_events\" -m real_llm -v` (2 passed)

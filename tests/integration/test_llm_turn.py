@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 from pathlib import Path
 
 import aiosqlite
 import pytest
+import yaml
 from tests.factories import write_file
 
 from remora.code.languages import LanguageRegistry
@@ -33,6 +35,7 @@ from remora.core.storage.transaction import TransactionContext
 from remora.core.storage.workspace import CairnWorkspaceService
 
 DEFAULT_TEST_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507-FP8"
+DEFAULTS_BUNDLES = Path("src/remora/defaults/bundles")
 _REAL_LLM_ENV_MISSING = not os.getenv("REMORA_TEST_MODEL_URL")
 _REAL_LLM_SKIP_REASON = "REMORA_TEST_MODEL_URL not set - skipping real LLM integration test"
 pytestmark = pytest.mark.real_llm
@@ -238,6 +241,30 @@ def _write_virtual_agent_bundles(root: Path, model_name: str) -> None:
             "message\n"
         ),
     )
+
+
+def _write_real_code_agent_bundles(root: Path, model_name: str) -> None:
+    for bundle_name in ("system", "code-agent"):
+        shutil.copytree(DEFAULTS_BUNDLES / bundle_name, root / bundle_name)
+
+    system_bundle = root / "system" / "bundle.yaml"
+    system_data = yaml.safe_load(system_bundle.read_text(encoding="utf-8"))
+    system_data["model"] = model_name
+    system_bundle.write_text(yaml.safe_dump(system_data, sort_keys=False), encoding="utf-8")
+
+    code_bundle = root / "code-agent" / "bundle.yaml"
+    code_data = yaml.safe_load(code_bundle.read_text(encoding="utf-8"))
+    code_data["model"] = model_name
+    code_data["system_prompt"] = (
+        "You are a strict integration-test code agent. "
+        "For each turn, follow the user instruction exactly and call only requested tools."
+    )
+    code_data["max_turns"] = 6
+    code_data["self_reflect"] = {"enabled": False}
+    prompts = code_data.get("prompts") or {}
+    prompts["chat"] = "Follow user tool instructions exactly."
+    code_data["prompts"] = prompts
+    code_bundle.write_text(yaml.safe_dump(code_data, sort_keys=False), encoding="utf-8")
 
 
 async def _setup_llm_runtime(
@@ -547,6 +574,123 @@ async def test_real_llm_turn_reload_uses_runtime_bundle_mutation(tmp_path: Path)
         assert not any(entry["event_type"] == "agent_error" for entry in first_turn)
         assert any(entry["event_type"] == "agent_error" for entry in second_turn)
         assert not any(entry["event_type"] == "agent_complete" for entry in second_turn)
+    finally:
+        if workspace_service is not None:
+            await workspace_service.close()
+        if db is not None:
+            await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_real_llm_code_agent_reflect_writes_to_workspace(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+    timeout_s = float(os.getenv("REMORA_TEST_TIMEOUT_S", "90"))
+
+    actor = node = event_store = workspace_service = db = None
+    try:
+        actor, node, event_store, workspace_service, db, _source_path = await _setup_llm_runtime(
+            tmp_path,
+            model_url=model_url,
+            model_name=model_name,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
+            bundle_writer=_write_real_code_agent_bundles,
+        )
+        correlation_id = "corr-code-agent-reflect"
+        outbox = Outbox(
+            actor_id=node.node_id,
+            event_store=event_store,
+            correlation_id=correlation_id,
+        )
+        trigger = Trigger(
+            node_id=node.node_id,
+            correlation_id=correlation_id,
+            event=AgentMessageEvent(
+                from_agent="user",
+                to_agent=node.node_id,
+                content=f"Call reflect with node_id='{node.node_id}' and history_limit=5.",
+                correlation_id=correlation_id,
+            ),
+        )
+        await actor._execute_turn(trigger, outbox)
+
+        events = await event_store.get_events(limit=80)
+        by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
+        assert any(
+            entry["event_type"] == "remora_tool_result"
+            and entry["payload"].get("tool_name") == "reflect"
+            and not entry["payload"].get("is_error")
+            for entry in by_corr
+        )
+
+        workspace = await workspace_service.get_agent_workspace(node.node_id)
+        reflection = await workspace.read("notes/reflection.md")
+        assert "Reviewed recent activity." in reflection
+    finally:
+        if workspace_service is not None:
+            await workspace_service.close()
+        if db is not None:
+            await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(_REAL_LLM_ENV_MISSING, reason=_REAL_LLM_SKIP_REASON)
+async def test_real_llm_code_agent_subscribe_to_events(tmp_path: Path) -> None:
+    model_url = os.environ["REMORA_TEST_MODEL_URL"]
+    model_name = os.getenv("REMORA_TEST_MODEL_NAME", DEFAULT_TEST_MODEL_NAME)
+    model_api_key = os.getenv("REMORA_TEST_MODEL_API_KEY", "EMPTY")
+    timeout_s = float(os.getenv("REMORA_TEST_TIMEOUT_S", "90"))
+
+    actor = node = event_store = workspace_service = db = None
+    try:
+        actor, node, event_store, workspace_service, db, _source_path = await _setup_llm_runtime(
+            tmp_path,
+            model_url=model_url,
+            model_name=model_name,
+            model_api_key=model_api_key,
+            timeout_s=timeout_s,
+            bundle_writer=_write_real_code_agent_bundles,
+        )
+        correlation_id = "corr-code-agent-subscribe"
+        outbox = Outbox(
+            actor_id=node.node_id,
+            event_store=event_store,
+            correlation_id=correlation_id,
+        )
+        trigger = Trigger(
+            node_id=node.node_id,
+            correlation_id=correlation_id,
+            event=AgentMessageEvent(
+                from_agent="user",
+                to_agent=node.node_id,
+                content="Call subscribe with event_types='node_changed'.",
+                correlation_id=correlation_id,
+            ),
+        )
+        await actor._execute_turn(trigger, outbox)
+
+        events = await event_store.get_events(limit=80)
+        by_corr = [entry for entry in events if entry.get("correlation_id") == correlation_id]
+        assert any(entry["event_type"] == "agent_complete" for entry in by_corr)
+        assert not any(entry["event_type"] == "agent_error" for entry in by_corr)
+        assert any(
+            entry["event_type"] == "remora_tool_result"
+            and entry["payload"].get("tool_name") == "subscribe"
+            and not entry["payload"].get("is_error")
+            for entry in by_corr
+        )
+
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM subscriptions WHERE agent_id = ?",
+            (node.node_id,),
+        )
+        row = await cursor.fetchone()
+        assert row is not None and int(row[0]) >= 1
     finally:
         if workspace_service is not None:
             await workspace_service.close()
