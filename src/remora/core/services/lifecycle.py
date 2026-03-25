@@ -224,7 +224,16 @@ class RemoraLifecycle:
         if run_seconds > 0:
             await asyncio.sleep(run_seconds)
         else:
-            await asyncio.gather(*self._tasks)
+            results = await asyncio.gather(*self._tasks, return_exceptions=True)
+            for index, result in enumerate(results):
+                if isinstance(result, BaseException) and not isinstance(
+                    result, asyncio.CancelledError
+                ):
+                    logger.error(
+                        "Runtime task %s exited with exception: %s",
+                        self._tasks[index].get_name(),
+                        result,
+                    )
 
     async def shutdown(self) -> None:
         """Stop tasks and close services in a deterministic order.
