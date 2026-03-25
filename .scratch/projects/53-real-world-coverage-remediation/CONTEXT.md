@@ -18,17 +18,19 @@
 
 ## Validation State
 
-- Real-vLLM reruns passed for updated WS1/WS3 suites:
-  - `tests/integration/test_llm_turn.py -k "rewrite_self_proposes_changes or scaffold_emits_scaffold_request" -m real_llm`
-  - `tests/integration/test_llm_system_tools.py -m real_llm`
-- WS2 unit module passes.
-- WS6 process-level LSP acceptance subset passes.
-- WS4/WS5 modules are present and lint-clean, but runtime execution was skipped in this environment when optional
-  dependencies/services were unavailable.
+- Unit behavior matrix passes (`tests/unit/test_system_companion_tool_behavior.py`, `tests/unit/test_grail.py`, `tests/unit/test_search.py`).
+- Full real-LLM integration matrix passes (`33 passed`) across:
+  - `tests/integration/test_llm_turn.py`
+  - `tests/integration/test_llm_system_tools.py`
+  - `tests/integration/test_llm_companion.py`
+  - `tests/integration/test_llm_review_agent.py`
+  - `tests/integration/test_llm_test_agent.py`
+  - `tests/integration/test_llm_directory_agent.py`
+- Full acceptance matrix passes (`10 passed`, 2 warnings):
+  - `tests/acceptance/test_live_runtime_real_llm.py`
+  - `tests/acceptance/test_web_graph_ui.py`
+- WS4 remote backend integration now executes and passes (`tests/integration/test_search_remote_backend.py`: `4 passed`) with `REMORA_TEST_SEARCH_URL=http://127.0.0.1:18585`.
 
 ## Next Action
 
 - Commit and push the current workstream changes.
-- In an environment with both search backend and Playwright Chromium available, run final gated modules:
-  - `tests/integration/test_search_remote_backend.py`
-  - `tests/acceptance/test_web_graph_ui.py`

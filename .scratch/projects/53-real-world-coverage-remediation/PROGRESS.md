@@ -11,7 +11,7 @@
 - [x] WS4: Real remote search integration tests (env-gated module added)
 - [x] WS5: Web graph browser automation tests (Playwright-gated module added)
 - [x] WS6: Process-level LSP acceptance expansion (`hover`, `codeAction`, `executeCommand`, change cycle)
-- [ ] Final matrix run in an environment with both `REMORA_TEST_SEARCH_URL` and Playwright Chromium
+- [x] Final matrix run in an environment with both `REMORA_TEST_SEARCH_URL` and Playwright Chromium
 - [ ] Commit and push staged project workstream changes
 
 ## Log
@@ -36,5 +36,17 @@
   - `tests/integration/test_llm_system_tools.py -m real_llm`: passed.
   - `tests/unit/test_system_companion_tool_behavior.py`: passed.
   - `tests/acceptance/test_live_runtime_real_llm.py -k "process_lsp"`: passed.
-  - `tests/integration/test_search_remote_backend.py`: skipped when `REMORA_TEST_SEARCH_URL` unavailable.
-  - `tests/acceptance/test_web_graph_ui.py`: skipped when Playwright/Chromium unavailable.
+  - `tests/integration/test_search_remote_backend.py`: passed (`4 passed`) with `REMORA_TEST_SEARCH_URL=http://127.0.0.1:18585`.
+  - `tests/acceptance/test_web_graph_ui.py`: passed (`3 passed`, 2 warnings).
+  - Full real-LLM integration matrix:
+    - `tests/integration/test_llm_turn.py`
+    - `tests/integration/test_llm_system_tools.py`
+    - `tests/integration/test_llm_companion.py`
+    - `tests/integration/test_llm_review_agent.py`
+    - `tests/integration/test_llm_test_agent.py`
+    - `tests/integration/test_llm_directory_agent.py`
+    - Result: `33 passed`.
+  - Full acceptance matrix:
+    - `tests/acceptance/test_live_runtime_real_llm.py`
+    - `tests/acceptance/test_web_graph_ui.py`
+    - Result: `10 passed`, 2 warnings.
