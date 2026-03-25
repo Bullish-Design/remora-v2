@@ -67,6 +67,7 @@ class FileReconciler:
         self._bundle_search_paths = resolve_bundle_search_paths(config, self._project_root)
         self._query_paths = resolve_query_paths(self._config, self._project_root)
         self._file_state: dict[str, tuple[int, set[str]]] = {}
+        self._name_index: dict[str, list[str]] = {}
         self._file_locks: dict[str, asyncio.Lock] = {}
         self._file_lock_generations: dict[str, int] = {}
         self._reconcile_generation = 0
@@ -271,6 +272,8 @@ class FileReconciler:
 
             projected.append(node)
 
+        self._index_node_names(projected)
+
         if self._tx is not None:
             async with self._tx.batch():
                 await self._reconcile_events(projected, old_ids, new_ids, old_hashes, file_path)
@@ -392,12 +395,33 @@ class FileReconciler:
             self._file_locks.pop(file_path, None)
             self._file_lock_generations.pop(file_path, None)
 
+    def _index_node_names(self, nodes: list[Node]) -> None:
+        """Add node names and full names to the name index."""
+        for node in nodes:
+            for key in (node.name, node.full_name):
+                entries = self._name_index.setdefault(key, [])
+                if node.node_id not in entries:
+                    entries.append(node.node_id)
+
+    def _deindex_node_names(self, node_id: str, node: Node) -> None:
+        """Remove a node from the name index."""
+        for key in (node.name, node.full_name):
+            if key in self._name_index:
+                self._name_index[key] = [
+                    indexed_node_id
+                    for indexed_node_id in self._name_index[key]
+                    if indexed_node_id != node_id
+                ]
+                if not self._name_index[key]:
+                    del self._name_index[key]
+
     async def _remove_node(self, node_id: str) -> None:
         node = await self._node_store.get_node(node_id)
         if node is None:
             await self._event_store.subscriptions.unregister_by_agent(node_id)
             return
 
+        self._deindex_node_names(node_id, node)
         await self._event_store.subscriptions.unregister_by_agent(node_id)
         await self._node_store.delete_node(node_id)
         await self._event_store.append(
