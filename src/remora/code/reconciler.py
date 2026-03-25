@@ -441,6 +441,17 @@ class FileReconciler:
         """Immediately reconcile a file reported changed by upstream systems."""
         file_path = event.path
         path = Path(file_path)
+        resolved = path.resolve()
+        discovery_roots = [
+            (
+                Path(discovery_path)
+                if Path(discovery_path).is_absolute()
+                else self._project_root / discovery_path
+            ).resolve()
+            for discovery_path in self._config.project.discovery_paths
+        ]
+        if not any(resolved == root or root in resolved.parents for root in discovery_roots):
+            return
         if path.exists() and path.is_file():
             try:
                 mtime = path.stat().st_mtime_ns

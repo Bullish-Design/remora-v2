@@ -388,6 +388,39 @@ async def test_reconciler_content_changed_event_triggers_reconcile(
 
 
 @pytest.mark.asyncio
+async def test_reconciler_content_changed_ignores_paths_outside_discovery_roots(
+    reconcile_env,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (
+        _node_store,
+        _event_store,
+        _workspace_service,
+        _config,
+        reconciler,
+        _language_registry,
+        _subscription_manager,
+    ) = reconcile_env
+    outside_file = tmp_path / "outside.py"
+    write_file(outside_file, "def outside_fn():\n    return 1\n")
+
+    called = False
+
+    async def fake_reconcile(_file_path: str, _mtime_ns: int, **_kwargs) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(reconciler, "_reconcile_file", fake_reconcile)
+
+    await reconciler._on_content_changed(
+        ContentChangedEvent(path=str(outside_file), change_type="modified")
+    )
+
+    assert called is False
+
+
+@pytest.mark.asyncio
 async def test_file_lock_cache_evicts_unused_entries(reconcile_env, tmp_path: Path) -> None:
     (
         _node_store,
