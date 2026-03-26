@@ -251,12 +251,9 @@ class FileReconciler:
 
             if existing is not None and existing.source_hash == node.source_hash:
                 if sync_existing_bundles:
-                    template_dirs = self._resolve_bundle_template_dirs("system")
                     mapped_bundle = self._config.resolve_bundle(node.node_type, node.name)
                     role = mapped_bundle or existing.role
-                    if role:
-                        template_dirs.extend(self._resolve_bundle_template_dirs(role))
-                    await self._workspace_service.provision_bundle(node.node_id, template_dirs)
+                    await self._provision_bundle(node.node_id, role)
                 projected.append(existing)
                 continue
 
@@ -270,10 +267,7 @@ class FileReconciler:
             await self._node_store.upsert_node(node)
 
             if existing is None:
-                template_dirs = self._resolve_bundle_template_dirs("system")
-                if mapped_bundle:
-                    template_dirs.extend(self._resolve_bundle_template_dirs(mapped_bundle))
-                await self._workspace_service.provision_bundle(node.node_id, template_dirs)
+                await self._provision_bundle(node.node_id, mapped_bundle)
 
             projected.append(node)
 

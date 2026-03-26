@@ -454,9 +454,19 @@ async def test_api_proposal_accept_materializes_workspace_and_emits_events(
     assert source_path.read_text(encoding="utf-8") == "def a():\n    return 2\n"
 
     events = await event_store.get_events(limit=20)
-    types = [event["event_type"] for event in events]
-    assert "rewrite_accepted" in types
-    assert "content_changed" in types
+    rewrite_accepted = next(
+        event
+        for event in events
+        if event["event_type"] == "rewrite_accepted"
+        and event["payload"].get("proposal_id") == "proposal-1"
+    )
+    content_changed = next(
+        event
+        for event in events
+        if event["event_type"] == "content_changed"
+        and event["payload"].get("path") == str(source_path)
+    )
+    assert rewrite_accepted["id"] < content_changed["id"]
 
 
 @pytest.mark.asyncio

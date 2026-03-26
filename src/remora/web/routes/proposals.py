@@ -108,6 +108,7 @@ async def api_proposal_accept(request: Request) -> JSONResponse:
     files = proposal_payload.get("files", [])
     workspace = await deps.workspace_service.get_agent_workspace(node_id)
     materialized: list[str] = []
+    pending_content_changes: list[tuple[str, str, str]] = []
 
     for workspace_path in files:
         if not isinstance(workspace_path, str):
@@ -134,13 +135,11 @@ async def api_proposal_accept(request: Request) -> JSONResponse:
 
         disk_path.parent.mkdir(parents=True, exist_ok=True)
         disk_path.write_bytes(new_bytes)
-        await deps.event_store.append(
-            ContentChangedEvent(
-                path=str(disk_path),
-                change_type=ChangeType.MODIFIED,
-                agent_id=node_id,
-                old_hash=hashlib.sha256(old_bytes).hexdigest(),
-                new_hash=hashlib.sha256(new_bytes).hexdigest(),
+        pending_content_changes.append(
+            (
+                str(disk_path),
+                hashlib.sha256(old_bytes).hexdigest(),
+                hashlib.sha256(new_bytes).hexdigest(),
             )
         )
         materialized.append(str(disk_path))
@@ -152,6 +151,16 @@ async def api_proposal_accept(request: Request) -> JSONResponse:
             proposal_id=proposal_id,
         )
     )
+    for disk_path, old_hash, new_hash in pending_content_changes:
+        await deps.event_store.append(
+            ContentChangedEvent(
+                path=disk_path,
+                change_type=ChangeType.MODIFIED,
+                agent_id=node_id,
+                old_hash=old_hash,
+                new_hash=new_hash,
+            )
+        )
     return JSONResponse(
         {
             "status": "accepted",

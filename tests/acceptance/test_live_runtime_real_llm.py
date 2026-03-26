@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import os
 import shutil
@@ -546,6 +547,50 @@ async def _wait_for_event(
     )
 
 
+async def _wait_for_proposal_accept_event_order(
+    client: httpx.AsyncClient,
+    *,
+    proposal_id: str,
+    path: str,
+    old_hash: str,
+    new_hash: str,
+    timeout_s: float = _EVENT_TIMEOUT_S,
+) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        events = await _fetch_events(client)
+        rewrite_index: int | None = None
+        content_index: int | None = None
+        for index, event in enumerate(events):
+            payload = event.get("payload", {})
+            if (
+                rewrite_index is None
+                and event.get("event_type") == "rewrite_accepted"
+                and payload.get("proposal_id") == proposal_id
+            ):
+                rewrite_index = index
+            if (
+                content_index is None
+                and event.get("event_type") == "content_changed"
+                and payload.get("path") == path
+                and payload.get("old_hash") == old_hash
+                and payload.get("new_hash") == new_hash
+            ):
+                content_index = index
+            if rewrite_index is not None and content_index is not None:
+                if content_index < rewrite_index:
+                    return
+                raise AssertionError(
+                    "accept event order invalid: rewrite_accepted appeared newer than "
+                    "matching content_changed"
+                )
+        await asyncio.sleep(0.2)
+    raise AssertionError(
+        "Timed out waiting for ordered rewrite_accepted/content_changed events "
+        f"for proposal_id={proposal_id}"
+    )
+
+
 async def _wait_for_function_node_id(client: httpx.AsyncClient) -> str:
     deadline = time.monotonic() + _EVENT_TIMEOUT_S
     while time.monotonic() < deadline:
@@ -1058,6 +1103,11 @@ async def test_acceptance_proposal_flow_generates_diff_and_accept_materializes_f
             assert diff_payload["diffs"]
             assert diff_payload["diffs"][0]["new"] == "def alpha():\n    return 99\n"
 
+            expected_old_bytes = runtime_project.source_path.read_bytes()
+            expected_new_bytes = b"def alpha():\n    return 99\n"
+            expected_old_hash = hashlib.sha256(expected_old_bytes).hexdigest()
+            expected_new_hash = hashlib.sha256(expected_new_bytes).hexdigest()
+
             accept_response = await client.post(f"/api/proposals/{node_id}/accept", json={})
             assert accept_response.status_code == 200
             accept_payload = accept_response.json()
@@ -1069,19 +1119,12 @@ async def test_acceptance_proposal_flow_generates_diff_and_accept_materializes_f
             materialized_path = Path(str(materialized_files[0]))
             assert materialized_path.read_text(encoding="utf-8") == "def alpha():\n    return 99\n"
 
-            await _wait_for_event(
+            await _wait_for_proposal_accept_event_order(
                 client,
-                lambda event: (
-                    event.get("event_type") == "rewrite_accepted"
-                    and event.get("payload", {}).get("proposal_id") == proposal_id
-                ),
-            )
-            await _wait_for_event(
-                client,
-                lambda event: (
-                    event.get("event_type") == "content_changed"
-                    and event.get("payload", {}).get("path") == str(materialized_path)
-                ),
+                proposal_id=proposal_id,
+                path=str(materialized_path),
+                old_hash=expected_old_hash,
+                new_hash=expected_new_hash,
             )
 
 
