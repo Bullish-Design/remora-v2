@@ -1,0 +1,67 @@
+-- allium: 3
+-- discovery-reconciliation.allium
+
+-- Scope: File discovery, incremental reconcile, node projection change detection.
+-- Includes: full scan, changed file reconcile, deleted file reconcile, content-change trigger.
+-- Excludes: parser internals, tree-sitter query details, DB DDL.
+
+entity SourceFile {
+    path: String
+    exists_on_disk: Boolean
+    content_hash: String
+    mtime_ns: Integer
+}
+
+entity DiscoveredNode {
+    node_id: String
+    file_path: String
+    source_hash: String
+    parent_id: String?
+    role: String?
+}
+
+entity FileProjectionState {
+    file_path: String
+    known_hash: String
+    known_node_ids: Set<String>
+}
+
+rule FullScanReconcile {
+    when: FullScanRequested
+
+    for file in SourceFiles where file.exists_on_disk:
+        ensures: FileReconcileRequested(file.path, file.mtime_ns)
+}
+
+rule ReconcileChangedFile {
+    when: FileReconcileRequested(file_path, mtime_ns)
+
+    let source = SourceFile{path: file_path}
+    requires: exists source
+    requires: source.exists_on_disk
+
+    ensures: NodesExtracted(file_path)
+    ensures: FileProjectionStateUpdated(file_path)
+    ensures: NodeProjectionDiffRequested(file_path)
+}
+
+rule ReconcileDeletedFile {
+    when: FileRemovedFromWatch(file_path)
+
+    let state = FileProjectionState{file_path}
+    requires: exists state
+
+    ensures:
+        for node in DiscoveredNodes where node.file_path = file_path:
+            not exists node
+    ensures: not exists state
+    ensures: FileDeindexed(file_path)
+}
+
+rule ContentChangeTriggersImmediateReconcile {
+    when: ContentChanged(path)
+
+    requires: IsWithinDiscoveryRoots(path)
+
+    ensures: FileReconcileRequested(path, LatestMtime(path))
+}

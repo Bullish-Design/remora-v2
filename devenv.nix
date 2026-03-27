@@ -22,15 +22,17 @@
   ];
 
   # https://devenv.sh/languages/
-  # languages.rust.enable = true;
   languages = {
-      python = {
-          enable = true;
-          version = "3.13";
-          venv.enable = true;
-          uv.enable = true;
-        };
+    rust = {
+      enable = true;
     };
+    python = {
+      enable = true;
+      version = "3.13";
+      venv.enable = true;
+      uv.enable = true;
+    };
+  };
 
   # https://devenv.sh/processes/
   # processes.cargo-watch.exec = "cargo-watch";
@@ -44,16 +46,34 @@
   '';
 
   enterShell = ''
+    export CARGO_HOME="$DEVENV_STATE/cargo"
+    export CARGO_INSTALL_ROOT="$DEVENV_STATE/cargo"
+    export PATH="$CARGO_INSTALL_ROOT/bin:$PATH"
+
     hello
     git --version
     playwright --version
   '';
 
   # https://devenv.sh/tasks/
-  # tasks = {
-  #   "myproj:setup".exec = "mytool build";
-  #   "devenv:enterShell".after = [ "myproj:setup" ];
-  # };
+  tasks = {
+    "install:allium-cli" = {
+      # Skip install once the allium binary is already present in PATH.
+      status = ''
+        export CARGO_HOME="$DEVENV_STATE/cargo"
+        export CARGO_INSTALL_ROOT="$DEVENV_STATE/cargo"
+        export PATH="$CARGO_INSTALL_ROOT/bin:$PATH"
+        command -v allium >/dev/null 2>&1
+      '';
+      exec = ''
+        export CARGO_HOME="$DEVENV_STATE/cargo"
+        export CARGO_INSTALL_ROOT="$DEVENV_STATE/cargo"
+        export PATH="$CARGO_INSTALL_ROOT/bin:$PATH"
+        cargo install --locked allium-cli
+      '';
+      before = [ "devenv:enterShell" "devenv:enterTest" ];
+    };
+  };
 
   # https://devenv.sh/tests/
   enterTest = ''
