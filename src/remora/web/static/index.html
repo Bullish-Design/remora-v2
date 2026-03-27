@@ -515,6 +515,127 @@
       }
     }
 
+    function measureLabelWidth(text) {
+      labelMeasureContext.font = '500 12px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+      return labelMeasureContext.measureText(String(text)).width + LAYOUT.LABEL_PAD_PX;
+    }
+
+    function layoutNodes(nodes, nodeById) {
+      const depthOf = {};
+      const visiting = new Set();
+      function computeDepth(nodeId) {
+        if (depthOf[nodeId] !== undefined) return depthOf[nodeId];
+        if (visiting.has(nodeId)) return 0;
+        visiting.add(nodeId);
+        const node = nodeById[nodeId];
+        if (!node || !node.parent_id || !nodeById[node.parent_id]) {
+          depthOf[nodeId] = 0;
+        } else {
+          depthOf[nodeId] = computeDepth(node.parent_id) + 1;
+        }
+        visiting.delete(nodeId);
+        return depthOf[nodeId];
+      }
+      for (const n of nodes) computeDepth(n.node_id);
+
+      const directories = [];
+      const fileGroups = {};
+      for (const n of nodes) {
+        if (n.node_type === "directory") {
+          directories.push(n);
+          continue;
+        }
+        const fp = n.file_path || "__unfiled__";
+        (fileGroups[fp] ||= []).push(n);
+      }
+
+      const sortedFilePaths = Object.keys(fileGroups).sort();
+
+      const colWidths = sortedFilePaths.map((fp) => {
+        const groupNodes = fileGroups[fp];
+        let maxPx = 0;
+        for (const n of groupNodes) {
+          const px = measureLabelWidth(n._displayLabel || n.name);
+          if (px > maxPx) maxPx = px;
+        }
+        return Math.max(LAYOUT.MIN_COL_WIDTH, maxPx / LAYOUT.PX_PER_UNIT);
+      });
+
+      const colX = [];
+      const fileToCol = {};
+      let xCursor = 0;
+      for (let i = 0; i < sortedFilePaths.length; i++) {
+        colX.push(xCursor + colWidths[i] / 2);
+        fileToCol[sortedFilePaths[i]] = i;
+        xCursor += colWidths[i] + LAYOUT.COL_PAD;
+      }
+
+      const positions = new Map();
+      for (let ci = 0; ci < sortedFilePaths.length; ci++) {
+        const group = fileGroups[sortedFilePaths[ci]];
+        group.sort((a, b) =>
+          (depthOf[a.node_id] - depthOf[b.node_id]) ||
+          (a.start_line - b.start_line) ||
+          a.name.localeCompare(b.name)
+        );
+
+        let prevDepth = -1;
+        let slotInDepth = 0;
+        for (const n of group) {
+          const d = depthOf[n.node_id];
+          if (d === prevDepth) {
+            slotInDepth++;
+          } else {
+            slotInDepth = 0;
+            prevDepth = d;
+          }
+          const y = d * LAYOUT.ROW_HEIGHT + slotInDepth * LAYOUT.SUB_ROW_HEIGHT;
+          positions.set(n.node_id, { x: colX[ci], y });
+        }
+      }
+
+      directories.sort((a, b) =>
+        (depthOf[b.node_id] - depthOf[a.node_id]) ||
+        a.name.localeCompare(b.name)
+      );
+
+      for (const dir of directories) {
+        const childXValues = [];
+        for (const [nid, pos] of positions.entries()) {
+          const n = nodeById[nid];
+          if (!n) continue;
+          let current = n;
+          while (current) {
+            if (current.parent_id === dir.node_id) {
+              childXValues.push(pos.x);
+              break;
+            }
+            current = current.parent_id ? nodeById[current.parent_id] : null;
+          }
+        }
+        for (const otherDir of directories) {
+          if (otherDir.parent_id === dir.node_id && positions.has(otherDir.node_id)) {
+            childXValues.push(positions.get(otherDir.node_id).x);
+          }
+        }
+
+        if (childXValues.length > 0) {
+          const minX = Math.min(...childXValues);
+          const maxX = Math.max(...childXValues);
+          const x = (minX + maxX) / 2;
+          const y = depthOf[dir.node_id] * LAYOUT.ROW_HEIGHT - LAYOUT.DIR_HEADER_GAP;
+          positions.set(dir.node_id, { x, y });
+        } else {
+          positions.set(dir.node_id, {
+            x: 0,
+            y: depthOf[dir.node_id] * LAYOUT.ROW_HEIGHT,
+          });
+        }
+      }
+
+      return positions;
+    }
+
     function nodeColor(nodeType, status) {
       if (status === "running") {
         return getComputedStyle(document.documentElement)

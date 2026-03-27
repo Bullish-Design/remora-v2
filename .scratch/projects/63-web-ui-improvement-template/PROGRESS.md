@@ -14,7 +14,7 @@
 - [x] Step 4: Replace layout constants
 - [x] Step 5: Add edge style constants
 - [x] Step 6: Add `qualifyLabels`
-- [ ] Step 7: Add `layoutNodes`
+- [x] Step 7: Add `layoutNodes`
 - [ ] Step 8: Rewrite `loadGraph`
 - [ ] Step 9: Rewrite `drawNodeBoxLabel`
 - [ ] Step 10: Update Sigma constructor
