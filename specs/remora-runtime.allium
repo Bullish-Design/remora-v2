@@ -252,6 +252,32 @@ rule UpdateNodeProjection {
     ensures: RuntimeEvent.created(event_type: node_changed, path: projection.file_path)
 }
 
+rule RefreshSemanticRelationshipsForChangedProjectionFile {
+    when: NodeProjectionDiffRequested(file_path)
+
+    ensures: SemanticRelationshipsRefreshRequested(file_path)
+}
+
+rule ScheduleSemanticBackfillFromNodeChangedEvent {
+    when: event: RuntimeEvent.created
+
+    requires: event.event_type = node_changed
+    requires: event.path != null
+
+    ensures: TargetSymbolsChanged(
+        event.path,
+        ExportedSymbols(event.path),
+        ExportedModules(event.path)
+    )
+}
+
+rule BackfillDependentSourceFiles {
+    when: TargetSymbolsChanged(target_file_path, changed_symbols, changed_modules)
+
+    for source_path in DependentSourceFiles(target_file_path, changed_symbols, changed_modules):
+        ensures: SourceFileReconcileRequested(source_path, LatestMtime(source_path))
+}
+
 rule RemoveNodeProjection {
     when: NodeProjectionRemoved(node)
 

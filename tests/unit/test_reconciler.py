@@ -360,6 +360,86 @@ async def test_reconciler_watch_import_error_is_not_suppressed(reconcile_env, mo
 
 
 @pytest.mark.asyncio
+async def test_handle_watch_changes_refreshes_semantic_edges_order_independently(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    (
+        node_store,
+        _event_store,
+        _workspace_service,
+        _config,
+        reconciler,
+        _language_registry,
+        _subscription_manager,
+    ) = reconcile_env
+    importer = tmp_path / "src" / "a.py"
+    target = tmp_path / "src" / "b.py"
+    write_file(importer, "from b import B\n\nclass A(B):\n    pass\n")
+    write_file(target, "class B:\n    pass\n")
+
+    await reconciler._handle_watch_changes({str(importer), str(target)})
+    watch_semantic_edges = {
+        (edge.from_id, edge.to_id, edge.edge_type)
+        for edge in await node_store.list_all_edges()
+        if edge.edge_type in {"imports", "inherits"}
+    }
+
+    assert any("a.py::A" in from_id and "b.py::B" in to_id and edge_type == "imports"
+               for from_id, to_id, edge_type in watch_semantic_edges)
+    assert any("a.py::A" in from_id and "b.py::B" in to_id and edge_type == "inherits"
+               for from_id, to_id, edge_type in watch_semantic_edges)
+
+    await reconciler.reconcile_cycle()
+    cycle_semantic_edges = {
+        (edge.from_id, edge.to_id, edge.edge_type)
+        for edge in await node_store.list_all_edges()
+        if edge.edge_type in {"imports", "inherits"}
+    }
+    assert cycle_semantic_edges == watch_semantic_edges
+
+
+@pytest.mark.asyncio
+async def test_handle_watch_changes_backfills_when_only_target_file_changes(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    (
+        node_store,
+        _event_store,
+        _workspace_service,
+        _config,
+        reconciler,
+        _language_registry,
+        _subscription_manager,
+    ) = reconcile_env
+    importer = tmp_path / "src" / "a.py"
+    target = tmp_path / "src" / "b.py"
+    write_file(importer, "from b import B\n\nclass A(B):\n    pass\n")
+
+    await reconciler._handle_watch_changes({str(importer)})
+    edges_before = await node_store.list_all_edges()
+    assert not any(edge.edge_type == "imports" and "b.py::B" in edge.to_id for edge in edges_before)
+
+    write_file(target, "class B:\n    pass\n")
+    await reconciler._handle_watch_changes({str(target)})
+
+    edges_after = await node_store.list_all_edges()
+    assert any(
+        edge.edge_type == "imports"
+        and "a.py::A" in edge.from_id
+        and "b.py::B" in edge.to_id
+        for edge in edges_after
+    )
+    assert any(
+        edge.edge_type == "inherits"
+        and "a.py::A" in edge.from_id
+        and "b.py::B" in edge.to_id
+        for edge in edges_after
+    )
+
+
+@pytest.mark.asyncio
 async def test_reconciler_content_changed_event_triggers_reconcile(
     reconcile_env,
     tmp_path: Path,
@@ -385,6 +465,45 @@ async def test_reconciler_content_changed_event_triggers_reconcile(
     node = await node_store.get_node(f"{source_file}::event_fn")
     assert node is not None
     assert "return 2" in node.text
+
+
+@pytest.mark.asyncio
+async def test_reconciler_content_changed_event_backfills_target_only_relationships(
+    reconcile_env,
+    tmp_path: Path,
+) -> None:
+    (
+        node_store,
+        _event_store,
+        _workspace_service,
+        _config,
+        reconciler,
+        _language_registry,
+        _subscription_manager,
+    ) = reconcile_env
+    importer = tmp_path / "src" / "a.py"
+    target = tmp_path / "src" / "b.py"
+    write_file(importer, "from b import B\n\nclass A(B):\n    pass\n")
+    await reconciler.full_scan()
+
+    write_file(target, "class B:\n    pass\n")
+    await reconciler._on_content_changed(
+        ContentChangedEvent(path=str(target), change_type="modified")
+    )
+
+    edges = await node_store.list_all_edges()
+    assert any(
+        edge.edge_type == "imports"
+        and "a.py::A" in edge.from_id
+        and "b.py::B" in edge.to_id
+        for edge in edges
+    )
+    assert any(
+        edge.edge_type == "inherits"
+        and "a.py::A" in edge.from_id
+        and "b.py::B" in edge.to_id
+        for edge in edges
+    )
 
 
 @pytest.mark.asyncio

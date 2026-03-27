@@ -43,3 +43,7 @@
 ## 2026-03-27 — Keep Idea #6 launcher script free of nested `devenv` invocation
 - Decision: document `run_idea6_click_demo.py` to execute `remora start` directly; run the script itself via `devenv shell -- ...`.
 - Rationale: avoids nested shell environments and keeps demo launcher behavior deterministic.
+
+## 2026-03-27 — Split Idea #6 implementation by repository ownership
+- Decision: rewrite the implementation guide into two explicit workstreams: `remora-v2` for runtime correctness, `remora-test` for demo packaging/scripts/docs/tests.
+- Rationale: user will implement the demo in `remora-test` while consuming `remora-v2` as a dependency; clear boundaries prevent demo scaffolding from leaking into product runtime.

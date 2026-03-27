@@ -1,188 +1,212 @@
-# IDEA 6 Implementation Guide — Instant Local Knowledge Graph Boot (Click)
+# IDEA 6 Implementation Guide — Two-Repo Plan (`remora-v2` + `remora-test`)
 
 ## Table of Contents
-1. Purpose and Demo Contract
-Description: Define exactly what the intern is implementing and what “done” means for technical-demo quality.
+1. Goal and Repo Boundaries
+Description: Define what Idea #6 delivers and how responsibilities split across the library repo and the demo repo.
 
-2. Current State Snapshot (Do This First)
-Description: Verify the current remora-v2 implementation state before writing any new code or scripts.
+2. Execution Strategy and Branch Model
+Description: Set a safe implementation order so `remora-test` always points to a known-good `remora-v2` revision.
 
-3. Environment and Tooling Setup
-Description: Prepare a reproducible local environment with required dependencies and command conventions.
+3. Workstream A — `remora-v2` Changes
+Description: Required runtime/library checks and conditional implementation tasks needed to guarantee immediate semantic edge availability.
 
-4. Deliverables to Build
-Description: Enumerate concrete artifacts the intern must create (scripts, config templates, runbook, presenter cues).
+4. Workstream B — `remora-test` Changes
+Description: Required demo assets (scripts, configs, cue sheet, tests) that operationalize Idea #6 in the demo repo.
 
-5. Phase A — Demo Scaffold and Setup Automation
-Description: Build executable scripts to clone Click, write config, clean/reset workspace, and run Remora deterministically.
+5. End-to-End Rehearsal Flow
+Description: Exact command sequence to run the Click clone -> boot -> evidence flow from `remora-test`.
 
-6. Phase B — Graph Data Extraction and Hotspot Scripts
-Description: Add reusable commands/scripts for node/edge stats and semantic hotspot extraction (imports/inherits-focused).
+6. Acceptance Criteria
+Description: Repo-specific ship gates for both `remora-v2` and `remora-test`.
 
-7. Phase C — Runtime Reliability Validation
-Description: Validate that cross-file relationships populate immediately and reliably after cold start.
+7. Intern Handoff Format
+Description: Required output for review, including commands run and evidence artifacts.
 
-8. Phase D — Demo Narrative and Stage Flow
-Description: Convert technical steps into a 10-minute live flow with clear claims and evidence checkpoints.
+## 1) Goal and Repo Boundaries
 
-9. Phase E — Hardening and Failure Recovery
-Description: Add deterministic fallback paths for network, startup, or API timing issues.
+### Demo Goal
+Deliver a reliable live demo that does this in one flow:
+1. Clones `pallets/click`.
+2. Starts Remora against that clone.
+3. Shows API-backed graph evidence immediately after startup.
+4. Extracts semantic hotspots from `imports`/`inherits` edges.
 
-10. Acceptance Criteria (Ship Gate)
-Description: Objective pass criteria that must be true before marking Idea #6 implementation complete.
+### Repo Responsibility Split
 
-11. Troubleshooting Playbook
-Description: Common failure modes and exact diagnostic commands.
+`remora-v2` (`/home/andrew/Documents/Projects/remora-v2`):
+- Owns runtime correctness.
+- Owns graph relationship completeness behavior.
+- Owns API behavior (`/api/health`, `/api/nodes`, `/api/edges`, `/api/events`, `/sse`).
+- Owns tests that guarantee semantic edge reliability.
 
-12. Handoff Checklist
-Description: What the intern must provide when requesting review/approval.
+`remora-test` (`/home/andrew/Documents/Projects/remora-test`):
+- Owns demo packaging and operator UX.
+- Owns scripts/config/templates for the Click boot demo.
+- Owns presenter cue sheet and runbook.
+- Owns contract tests that ensure demo assets are present and executable.
 
-## 1) Purpose and Demo Contract
+### Important Constraint
+Do not put Idea #6 demo scaffolding scripts inside `remora-v2` product code. Keep demo automation in `remora-test`.
 
-### Goal
-Implement a production-quality demo flow that takes a fresh clone of `pallets/click` and produces a trustworthy Remora knowledge graph quickly enough for a live technical presentation.
+## 2) Execution Strategy and Branch Model
 
-### Implementation Scope for This Intern Task
-- Primary work is demo scaffolding and validation assets (scripts + docs), not core remora runtime changes.
-- Core runtime behavior needed for this demo already exists in current `main`:
-  - startup full scan before web serves traffic (`src/remora/core/services/lifecycle.py`)
-  - second-pass relationship refresh for changed-file batches (`src/remora/code/reconciler.py`)
-  - semantic edge cleanup helpers in storage (`src/remora/core/storage/graph.py`)
+### Recommended Order
+1. Validate `remora-v2` behavior baseline and apply any required runtime fixes there first.
+2. Pin `remora-test` to that known-good `remora-v2` revision.
+3. Build demo scripts/assets in `remora-test`.
+4. Rehearse full end-to-end flow from `remora-test`.
 
-### Non-Negotiable Demo Claims
-The implementation must support these claims with direct API evidence:
-1. Fresh clone (no prebuilt graph cache) can be scanned and materialized quickly.
-2. Graph data is queryable from APIs (`/api/health`, `/api/nodes`, `/api/edges`, `/api/events`, `/sse`).
-3. Semantic relationships (`imports`, `inherits`) are available immediately after startup and are not order-dependent.
-4. Hotspot outputs are based on semantic edges, not only structural `contains` edges.
+### Branches
+Use two branches, one per repo:
+- `remora-v2`: `feature/idea6-graph-boot-readiness` (name can vary)
+- `remora-test`: `feature/idea6-click-demo-pack`
 
-### Out of Scope
-- Building a new dashboard frontend.
-- Replacing current web graph renderer.
-- Model-quality tuning (this demo is graph-first, not LLM-response-first).
-
-## 2) Current State Snapshot (Do This First)
-
-Run these checks before creating any new files. The objective is to verify baseline behavior in your current checkout.
-
-### 2.1 Verify branch and clean working state
-```bash
-git branch --show-current
-git status --short
+### Dependency Pinning Rule (`remora-test`)
+`/home/andrew/Documents/Projects/remora-test/pyproject.toml` currently uses git `main` for `remora`.
+For active development, switch to local path source:
+```toml
+[tool.uv.sources]
+remora = { path = "../remora-v2", editable = true }
 ```
+After `remora-v2` changes are merged, either:
+1. keep path source for local tandem development, or
+2. pin to a specific commit/tag in git source for reproducible CI.
 
-### 2.2 Confirm dependency sync
+### Baseline Commands
+In both repos before changes:
 ```bash
+# remora-v2
+cd /home/andrew/Documents/Projects/remora-v2
+devenv shell -- uv sync --extra dev
+
+# remora-test
+cd /home/andrew/Documents/Projects/remora-test
 devenv shell -- uv sync --extra dev
 ```
 
-### 2.3 Confirm relevant unit coverage passes
+## 3) Workstream A — `remora-v2` Changes
+
+This workstream is about runtime correctness and reliability guarantees.
+
+### A0. Current Expectation
+For this demo, `remora-v2` should already support:
+- startup full scan before web server start (`src/remora/core/services/lifecycle.py`)
+- two-pass relationship refresh within reconcile cycle (`src/remora/code/reconciler.py`)
+- edge cleanup per relationship type (`src/remora/core/storage/graph.py`)
+
+If all checks pass, no new runtime feature work is required for Idea #6.
+
+### A1. Verify Required Runtime Behavior
+From `remora-v2` root:
 ```bash
+cd /home/andrew/Documents/Projects/remora-v2
+
+git branch --show-current
+git status --short
+
 devenv shell -- pytest \
+  tests/unit/test_reconciler_edges.py \
   tests/unit/test_graph.py \
   tests/unit/test_relationships.py \
-  tests/unit/test_reconciler_edges.py \
-  tests/unit/test_externals.py \
   tests/unit/test_web_server.py \
   -q --tb=short
 ```
 
-Expected: all tests pass.
-
-### 2.4 Confirm relationship reliability behavior exists
-You should be on a revision where cross-file relationships are refreshed in a second pass for changed file batches.
-Check these files for presence:
-- `src/remora/code/reconciler.py`
-- `src/remora/core/storage/graph.py`
-
-Look for:
-- batch reconcile with `refresh_relationships=False` first, then `_refresh_relationships(...)`
-- `delete_outgoing_edges_by_type(...)` in NodeStore
-
-### 2.5 Confirm API payload fields used by demo scripts
-Check route implementations so jq queries use correct keys:
-- `src/remora/web/routes/health.py` (`status`, `version`, `nodes`)
-- `src/remora/web/routes/nodes.py` (`node_id`, `node_type`, `file_path`; edges with `from_id`, `to_id`, `edge_type`)
-- `src/remora/web/routes/events.py` (`event_type`, `timestamp`, `payload`, `limit<=500`)
-
-## 3) Environment and Tooling Setup
-
-### 3.1 Required commands and tools
-- `devenv shell -- ...` for all project code execution.
-- `jq` for API result shaping.
-- `curl` for API calls.
-- `git` for clone/setup steps.
-
-### 3.2 Demo runtime assumptions
-- Remora binds web server on `127.0.0.1:8080` by default.
-- Demo target path: `/tmp/remora-demo-click`
-- Demo workspace root in target repo: `.remora-demo`
-
-### 3.3 One-time sanity check
+Manual code checks:
 ```bash
-devenv shell -- remora --help
+rg -n "refresh_relationships=False|_refresh_relationships\(" src/remora/code/reconciler.py
+rg -n "delete_outgoing_edges_by_type" src/remora/core/storage/graph.py
 ```
 
-## 4) Deliverables to Build
+### A2. Conditional Runtime Fixes (Only If A1 Fails)
+If semantic edges are not reliable on cold start or watch batches, implement/fix:
 
-Create the following files under:
-`.scratch/projects/58-remora-v2-wow-demo-template/`
+1. `src/remora/code/reconciler.py`
+- In reconcile cycle/watch batch flow, perform node upserts first with `refresh_relationships=False`.
+- Perform `_refresh_relationships(file_path)` in a second pass after `_name_index` is complete for the batch.
 
-1. `setup_idea6_click_demo.py`
-Purpose: end-to-end setup automation.
-Responsibilities:
-- clone (or refresh) `pallets/click`
-- write demo config
-- optionally clean previous `.remora-demo`
-- print exact next commands
+2. `src/remora/core/storage/graph.py`
+- Ensure `delete_outgoing_edges_by_type(node_id, edge_type)` is present and used during relationship refresh before re-adding semantic edges.
 
-2. `run_idea6_click_demo.py`
-Purpose: deterministic runtime launcher wrapper.
-Responsibilities:
-- run `remora start` with fixed flags
-- emit startup timestamps and command echo
+3. `tests/unit/test_reconciler_edges.py`
+- Ensure there is a forward-reference coverage case (`a.py` references symbol in `b.py`) that passes on first reconcile cycle.
 
-3. `idea6_queries.sh`
-Purpose: reusable API query pack for stage and rehearsal.
-Responsibilities:
-- node count
-- edge count by type
-- node type distribution
-- semantic hotspots (`imports` + `inherits` only)
-- optional SSE replay sample
+### A3. Optional but Strongly Recommended `remora-v2` Enhancements
+These are not required to run the demo, but improve stage ergonomics:
 
-4. `IDEA_6_PRESENTER_CUE_SHEET.md`
-Purpose: minute-by-minute stage narration with commands and expected outputs.
+1. Add aggregated endpoint(s):
+- `GET /api/graph/stats`
+- `GET /api/graph/hotspots?edge_types=imports,inherits&limit=20`
 
-5. Update existing overview document
-File: `IDEA_6_INSTANT_LOCAL_KNOWLEDGE_GRAPH_BOOT_OVERVIEW.md`
-Required updates:
-- remove `bundle_overlays.file`
-- correct graph UX language to “instant loaded graph” (not “watch fill in”) unless runtime order changes
-- replace hotspot query with semantic-edge-filtered version
+2. Add startup metadata fields in `/api/health` (scan duration, startup phase) for clearer pacing.
 
-## 5) Phase A — Demo Scaffold and Setup Automation
+Only do this if timing permits; keep Idea #6 scope focused.
 
-### Step A1: Create `setup_idea6_click_demo.py`
-Create an executable Python script:
-```bash
-touch .scratch/projects/58-remora-v2-wow-demo-template/setup_idea6_click_demo.py
-chmod +x .scratch/projects/58-remora-v2-wow-demo-template/setup_idea6_click_demo.py
+### A4. Publish/Pin Contract for `remora-test`
+Before implementing demo assets in `remora-test`, produce one of:
+1. merged `remora-v2` commit SHA, or
+2. release tag.
+
+`remora-test` must pin to that revision before rehearsals to avoid drift.
+
+## 4) Workstream B — `remora-test` Changes
+
+This workstream packages the demo and keeps it reproducible.
+
+### B1. Create a Dedicated Idea #6 Asset Folder
+In `remora-test`, create:
+```text
+demo/idea6_click/
+  README.md
+  PRESENTER_CUE_SHEET.md
 ```
 
-### Step A2: Implement setup script behavior
-Implement these CLI flags:
-- `--repo-dir` (default: `/tmp/remora-demo-click`)
-- `--force` (delete existing repo dir and reclone from scratch)
-- `--skip-clone` (reuse existing clone, only rewrite config)
-- `--clean-workspace` (remove `repo_dir/.remora-demo` before next run)
+Keep executable assets in existing `scripts/` convention.
 
-Implementation requirements:
-1. Clone command:
-```bash
-git clone --depth 1 https://github.com/pallets/click.git /tmp/remora-demo-click
-```
-2. Write `/tmp/remora-demo-click/remora.demo.yaml` with this exact baseline:
+### B2. Add New Demo Scripts in `remora-test/scripts`
+Create these executable files:
+
+1. `scripts/setup_idea6_click_demo.py`
+Responsibilities:
+- clone `https://github.com/pallets/click.git` into `${REPO_DIR:-/tmp/remora-demo-click}`
+- support flags:
+  - `--repo-dir`
+  - `--force`
+  - `--skip-clone`
+  - `--clean-workspace`
+- write `${repo_dir}/remora.idea6.yaml`
+- print the exact next command to start runtime
+
+2. `scripts/run_idea6_click_demo.py`
+Responsibilities:
+- run `remora start` (directly, no nested `devenv` inside script)
+- default args:
+  - `--project-root <repo_dir>`
+  - `--config <repo_dir>/remora.idea6.yaml`
+  - `--bind 127.0.0.1`
+  - `--port 8080`
+  - `--log-level INFO`
+  - `--log-events`
+- support flags: `--repo-dir`, `--config`, `--bind`, `--port`
+
+3. `scripts/idea6_queries.sh`
+Responsibilities:
+- API smoke: `/api/health`, node count, edge count
+- edge-type distribution
+- semantic hotspots only (`imports` + `inherits`)
+- optional file-level hotspot table by joining nodes+edges
+- SSE replay sample: `/sse?replay=40&once=true`
+- accept `BASE` env var (default `http://127.0.0.1:8080`)
+
+4. `scripts/rehearse_idea6_click_demo.sh` (recommended)
+Responsibilities:
+- run setup script
+- remind operator to start runtime in separate shell
+- run `idea6_queries.sh` once runtime is healthy
+
+### B3. Config Generated by `setup_idea6_click_demo.py`
+Write this file to `${repo_dir}/remora.idea6.yaml`:
+
 ```yaml
 project_path: "."
 discovery_paths:
@@ -215,328 +239,180 @@ workspace_ignore_patterns:
   - "node_modules"
   - ".remora-demo"
 ```
-3. If `--force`, remove existing `repo_dir` tree before cloning.
-4. If `--clean-workspace`, remove `repo_dir/.remora-demo` only.
-5. Print next-step command block at the end:
-```bash
-devenv shell -- ./.scratch/projects/58-remora-v2-wow-demo-template/run_idea6_click_demo.py
-```
 
-### Step A3: Create `run_idea6_click_demo.py`
-This script should execute `remora start` directly (no nested `devenv shell` call inside script):
-```bash
-remora start \
-  --project-root /tmp/remora-demo-click \
-  --config /tmp/remora-demo-click/remora.demo.yaml \
-  --port 8080 \
-  --bind 127.0.0.1 \
-  --log-level INFO \
-  --log-events
-```
+Notes:
+- Do not include `bundle_overlays.file`.
+- Keep this config local to the cloned Click repo so `project_root` semantics stay simple.
 
-Add options:
-- `--repo-dir` (default `/tmp/remora-demo-click`)
-- `--port` (default `8080`)
-- `--bind` (default `127.0.0.1`)
+### B4. Add Demo Documentation in `remora-test`
+1. `demo/idea6_click/README.md`
+Include:
+- purpose
+- prerequisites
+- command order
+- expected outputs
+- fallback options (`--skip-clone`, alternate port)
 
-Run this script from repo root via:
-```bash
-devenv shell -- ./.scratch/projects/58-remora-v2-wow-demo-template/run_idea6_click_demo.py
-```
+2. `demo/idea6_click/PRESENTER_CUE_SHEET.md`
+Include minute-by-minute 10 minute flow:
+1. frame problem
+2. clone/setup
+3. start runtime
+4. confirm health/counts
+5. semantic hotspots
+6. trust evidence (`/api/events`, `/sse`)
 
-### Step A4: Validate Phase A
+3. Update top-level `README.md`
+Add a section linking to `demo/idea6_click/README.md`.
+
+### B5. Update `remora-test` Contract Tests
+
+1. Update `tests/integration/test_demo_contract.py`
+Add required paths:
+- `scripts/setup_idea6_click_demo.py`
+- `scripts/run_idea6_click_demo.py`
+- `scripts/idea6_queries.sh`
+- `demo/idea6_click/README.md`
+- `demo/idea6_click/PRESENTER_CUE_SHEET.md`
+
+Also assert executability for all new scripts.
+
+2. Add `tests/unit/test_idea6_script_contracts.py`
+Validate script invariants, for example:
+- setup script writes `remora.idea6.yaml`
+- run script invokes `remora start`
+- query script filters to semantic edges (`imports`/`inherits`)
+
+### B6. `remora-test` Validation Commands
+From `/home/andrew/Documents/Projects/remora-test`:
 ```bash
 devenv shell -- python -m py_compile \
-  .scratch/projects/58-remora-v2-wow-demo-template/setup_idea6_click_demo.py \
-  .scratch/projects/58-remora-v2-wow-demo-template/run_idea6_click_demo.py
-```
-Expected: no output, exit code 0.
+  scripts/setup_idea6_click_demo.py \
+  scripts/run_idea6_click_demo.py
 
-## 6) Phase B — Graph Data Extraction and Hotspot Scripts
+bash -n scripts/idea6_queries.sh
 
-### Step B1: Create `idea6_queries.sh`
-Make it executable and include the following commands.
-
-Health and base counts:
-```bash
-curl -sS http://127.0.0.1:8080/api/health | jq
-curl -sS http://127.0.0.1:8080/api/nodes | jq 'length'
-curl -sS http://127.0.0.1:8080/api/edges | jq 'length'
-```
-
-Node type distribution:
-```bash
-curl -sS http://127.0.0.1:8080/api/nodes | \
-  jq 'sort_by(.node_type) | group_by(.node_type) | map({node_type: .[0].node_type, count: length}) | sort_by(-.count)'
-```
-
-Edge type distribution:
-```bash
-curl -sS http://127.0.0.1:8080/api/edges | \
-  jq 'sort_by(.edge_type) | group_by(.edge_type) | map({edge_type: .[0].edge_type, count: length}) | sort_by(-.count)'
-```
-
-Semantic hotspots (critical):
-```bash
-curl -sS http://127.0.0.1:8080/api/edges | \
-  jq '[.[] | select(.edge_type=="imports" or .edge_type=="inherits")] \
-      | sort_by(.from_id) \
-      | group_by(.from_id) \
-      | map({from_id: .[0].from_id, semantic_out_degree: length}) \
-      | sort_by(-.semantic_out_degree)[:20]'
-```
-
-Semantic hotspots by file path (recommended for stage readability):
-```bash
-NODES_JSON="$(mktemp)"
-EDGES_JSON="$(mktemp)"
-curl -sS http://127.0.0.1:8080/api/nodes > "$NODES_JSON"
-curl -sS http://127.0.0.1:8080/api/edges > "$EDGES_JSON"
-
-jq -n --slurpfile nodes "$NODES_JSON" --slurpfile edges "$EDGES_JSON" '
-  ($nodes[0] | map({key: .node_id, value: .}) | from_entries) as $by_id
-  | $edges[0]
-  | map(select(.edge_type=="imports" or .edge_type=="inherits"))
-  | map(select($by_id[.from_id] != null))
-  | map({file_path: $by_id[.from_id].file_path, edge_type: .edge_type})
-  | sort_by(.file_path)
-  | group_by(.file_path)
-  | map({
-      file_path: .[0].file_path,
-      semantic_out_degree: length,
-      imports: (map(select(.edge_type=="imports")) | length),
-      inherits: (map(select(.edge_type=="inherits")) | length)
-    })
-  | sort_by(-.semantic_out_degree)[:20]
-'
-
-rm -f "$NODES_JSON" "$EDGES_JSON"
-```
-
-SSE replay evidence:
-```bash
-curl -sN "http://127.0.0.1:8080/sse?replay=40&once=true"
-```
-
-### Step B2: Add a one-command mode
-Optional but recommended: accept arguments (`health`, `counts`, `hotspots`, `all`) so presenter can run one command quickly.
-
-### Step B3: Validate Phase B
-With Remora running, execute:
-```bash
-bash .scratch/projects/58-remora-v2-wow-demo-template/idea6_queries.sh
-```
-Expected:
-- non-empty node count
-- non-empty edge count
-- edge types include `contains` and ideally `imports`/`inherits`
-
-## 7) Phase C — Runtime Reliability Validation
-
-### Step C1: Cold-start reliability test
-1. Remove old state:
-```bash
-rm -rf /tmp/remora-demo-click/.remora-demo
-```
-2. Start demo runtime.
-3. Query semantic edge types immediately after health returns.
-
-Pass condition:
-- `imports` edges are present without needing extra file edits.
-- `inherits` edges should appear when class hierarchies are present.
-
-### Step C2: Order-independence sanity test
-Create a tiny temporary project where importer filename sorts before import target (`a.py` imports `b.py`).
-
-Expected:
-- After first reconcile/startup, semantic edges from `a.py` to `b.py` exist.
-
-### Step C3: Regression test run
-```bash
 devenv shell -- pytest \
-  tests/unit/test_reconciler_edges.py \
-  tests/unit/test_graph.py \
-  tests/unit/test_relationships.py \
+  tests/integration/test_demo_contract.py \
+  tests/unit/test_idea6_script_contracts.py \
   -q --tb=short
 ```
 
-### Step C4: Lint check
+## 5) End-to-End Rehearsal Flow
+
+Run this from `remora-test` after both workstreams are complete.
+
+### 5.1 Install with Correct `remora-v2` Source
 ```bash
-devenv shell -- ruff check \
-  src/remora/code/reconciler.py \
-  src/remora/core/storage/graph.py \
-  tests/unit/test_reconciler_edges.py \
-  tests/unit/test_graph.py
+cd /home/andrew/Documents/Projects/remora-test
+devenv shell -- uv sync --extra dev
 ```
 
-## 8) Phase D — Demo Narrative and Stage Flow
-
-Create `IDEA_6_PRESENTER_CUE_SHEET.md` with this exact timing structure:
-
-1. Minute 0-1: problem framing
-- Unknown repo
-- Need architecture orientation quickly
-
-2. Minute 1-2: setup
-- run setup script
-- show generated config path
-
-3. Minute 2-4: runtime boot
-- start runtime
-- show `/api/health`, node/edge counts
-
-4. Minute 4-6: structure summary
-- node type distribution
-- edge type distribution
-
-5. Minute 6-8: semantic hotspots
-- run semantic hotspot query
-- pick top 2 targets and explain why
-
-6. Minute 8-10: trust evidence
-- `/api/events?limit=40` sample
-- `/sse?replay=40&once=true`
-
-Important script-language correction:
-- Do not claim “graph is filling in live” unless implementation changes startup order.
-- Preferred phrase: “graph is immediately available after startup scan, with API-verifiable state.”
-
-## 9) Phase E — Hardening and Failure Recovery
-
-### Step E1: Clone fallback
-If internet is unstable, keep a prepared local fallback clone:
-- `/tmp/remora-demo-click` pre-cloned
-- setup script supports `--skip-clone`
-
-### Step E2: Scope fallback
-If startup is slow on demo machine, switch to:
-```yaml
-discovery_paths:
-  - src
-```
-only.
-
-### Step E3: Port fallback
-If `8080` is occupied:
-- start with `--port 8081`
-- run query script with base URL override.
-
-### Step E4: API fallback evidence
-If UI rendering is dense/noisy, stay API-first:
-- `/api/health`
-- `/api/nodes`
-- `/api/edges`
-- `/api/events`
-
-## 10) Acceptance Criteria (Ship Gate)
-
-All criteria below must pass before requesting review:
-
-1. Setup automation works end-to-end
-- `setup_idea6_click_demo.py --force` completes successfully.
-- `remora.demo.yaml` is created in target repo.
-
-2. Runtime starts and serves API
-- `/api/health` returns `status: ok`.
-- `/api/nodes` returns non-empty list.
-- `/api/edges` returns non-empty list.
-
-3. Semantic edge visibility is present after cold start
-- Edge type distribution includes `imports` and/or `inherits`.
-- Semantic hotspot query returns non-empty list.
-
-4. Order-independence confidence
-- Importer-before-target test case resolves correctly on first run.
-- `tests/unit/test_reconciler_edges.py` passes.
-
-5. Demo narrative consistency
-- Presenter cue sheet matches actual runtime behavior.
-- No claims conflict with current startup sequence.
-
-6. Quality gates
-- Targeted tests pass.
-- Ruff checks pass on modified files.
-
-## 11) Troubleshooting Playbook
-
-### Problem: `/api/health` does not respond
-Checks:
+### 5.2 Setup Click Clone + Config
 ```bash
-ps -ef | rg "remora start"
-curl -sS http://127.0.0.1:8080/api/health
+devenv shell -- python scripts/setup_idea6_click_demo.py --force
 ```
-Actions:
-- Confirm correct `--port` and `--bind`.
-- Ensure no other process is occupying port.
 
-### Problem: Node count is zero
-Checks:
+Expected outcome:
+- `/tmp/remora-demo-click` exists
+- `/tmp/remora-demo-click/remora.idea6.yaml` exists
+
+### 5.3 Start Runtime (separate shell)
 ```bash
-cat /tmp/remora-demo-click/remora.demo.yaml
-ls -la /tmp/remora-demo-click/src
+cd /home/andrew/Documents/Projects/remora-test
+devenv shell -- python scripts/run_idea6_click_demo.py
 ```
-Actions:
-- Confirm `discovery_paths` exist.
-- Confirm `.py` language map is present.
 
-### Problem: Only `contains` edges, no semantic edges
-Checks:
+### 5.4 Query Evidence (first shell)
 ```bash
-curl -sS http://127.0.0.1:8080/api/edges | jq 'group_by(.edge_type) | map({t: .[0].edge_type, c:length})'
+cd /home/andrew/Documents/Projects/remora-test
+bash scripts/idea6_queries.sh
 ```
-Actions:
-- Confirm runtime includes current reconciler logic with second-pass relationship refresh.
-- Re-run targeted tests in Phase C.
 
-### Problem: Query script output too large/noisy
-Actions:
-- Reduce output to top 10 entries.
-- Restrict to `src` discovery path for faster, cleaner run.
+Must show:
+- `/api/health` status ok
+- non-zero nodes and edges
+- edge type distribution with semantic edges (`imports` expected; `inherits` when present)
+- hotspot output from semantic edges only
 
-### Problem: Clone fails on stage network
-Actions:
-- Use pre-cloned `/tmp/remora-demo-click`.
-- Run setup with `--skip-clone`.
+### 5.5 Stage Fallbacks
+1. If clone fails on network: rerun setup with `--skip-clone` against pre-cloned path.
+2. If port 8080 is busy: run runtime with `--port 8081`, then `BASE=http://127.0.0.1:8081 bash scripts/idea6_queries.sh`.
+3. If graph is too dense: reduce discovery scope to `src` in generated config.
 
-## 12) Handoff Checklist
+## 6) Acceptance Criteria
 
-Before asking for approval, the intern must provide:
+### `remora-v2` Acceptance
+1. Targeted reliability tests pass:
+- `tests/unit/test_reconciler_edges.py`
+- `tests/unit/test_graph.py`
+- `tests/unit/test_relationships.py`
 
-1. Paths of created/updated files.
-2. Exact commands run for validation.
-3. Test summary output.
-4. Ruff output.
-5. A 1-minute summary of what changed and why.
-6. Known limitations (if any) and recommended next steps.
+2. Reconciler behavior present:
+- batch upsert first
+- second-pass relationship refresh
+- typed edge cleanup before re-add
+
+3. A stable revision is provided for downstream pinning (commit SHA or tag).
+
+### `remora-test` Acceptance
+1. Required assets exist and are executable:
+- `scripts/setup_idea6_click_demo.py`
+- `scripts/run_idea6_click_demo.py`
+- `scripts/idea6_queries.sh`
+- `demo/idea6_click/README.md`
+- `demo/idea6_click/PRESENTER_CUE_SHEET.md`
+
+2. Contract tests pass:
+- `tests/integration/test_demo_contract.py`
+- `tests/unit/test_idea6_script_contracts.py`
+
+3. Live rehearsal passes manually:
+- clone/setup/start/query sequence works without ad-hoc edits
+- semantic hotspot output is non-empty and explainable
+
+## 7) Intern Handoff Format
+
+Intern must submit two grouped summaries: one for each repo.
 
 ### Handoff Message Template
-Use this format:
-
 ```text
-Implemented Idea #6 demo scaffolding and validation pack.
+Implemented Idea #6 two-repo delivery.
 
-Files changed:
-- <file 1>
-- <file 2>
-...
+Repo A: remora-v2
+Branch: <branch>
+Commit(s):
+- <sha1> <message>
+Changes:
+- <file>
+- <file>
+Validation:
+- <command>
+- <result>
 
-Validation run:
-- <command 1>
-- <command 2>
+Repo B: remora-test
+Branch: <branch>
+Commit(s):
+- <sha1> <message>
+Changes:
+- <file>
+- <file>
+Validation:
+- <command>
+- <result>
 
-Results:
-- <tests passed summary>
-- <lint summary>
+Rehearsal evidence:
+- Health payload summary
+- Node/edge counts
+- Semantic edge type counts
+- Top hotspot rows
 
-Notes:
-- <limitation or caveat>
-- <next improvement>
+Known limitations:
+- <item>
 ```
 
----
-
-### Reviewer Notes
-If this guide is used after major remora runtime changes, re-check:
-- startup ordering in lifecycle
-- relationship extraction flow in reconciler
-- edge cleanup semantics in NodeStore
+### Reviewer Quick Checklist
+1. Is `remora-test` pinned to the intended `remora-v2` revision?
+2. Do scripts run from clean checkout with only documented prerequisites?
+3. Do outputs prove semantic relationships, not just structural `contains` edges?
+4. Does presenter cue language match runtime truth (instant loaded graph after startup scan)?

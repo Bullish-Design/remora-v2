@@ -1,6 +1,6 @@
 # Context — 58-remora-v2-wow-demo-template
 
-User request (latest): study Idea #6 overview + remora-v2 implementation and create a detailed intern-ready `IDEA_6_IMPLEMENTATION_GUIDE.md` with step-by-step implementation instructions.
+User request (latest): study `/home/andrew/Documents/Projects/remora-test` and rewrite Idea #6 implementation guidance for a two-repo structure, split into `remora-v2` changes vs `remora-test` changes.
 
 Completed in this pass:
 - Created `.scratch/projects/58-remora-v2-wow-demo-template/`.
@@ -29,6 +29,13 @@ Completed in this pass:
 - Added detailed intern implementation guide:
   - `IDEA_6_IMPLEMENTATION_GUIDE.md`
   - includes phase-based implementation steps, exact commands, script requirements, reliability validation, acceptance criteria, and troubleshooting.
+- Re-studied `remora-test` repo structure and conventions:
+  - existing `scripts/`, `tests/integration/test_demo_contract.py`, `tests/unit/test_scripts_contracts.py`, `README.md`, `pyproject.toml`, `remora.yaml`.
+- Rewrote `IDEA_6_IMPLEMENTATION_GUIDE.md` as a two-repo execution plan:
+  - explicit workstream A (`remora-v2` runtime checks/conditional fixes)
+  - explicit workstream B (`remora-test` demo scripts/docs/tests)
+  - dependency pinning strategy between repos
+  - repo-specific acceptance gates and handoff template.
 - Updated both runbooks to use setup scripts instead of long manual heredoc blocks.
 - Validated scripts:
   - `devenv shell -- python -m py_compile ...` passed
@@ -36,11 +43,11 @@ Completed in this pass:
   - both scripts also executed directly as binaries via `devenv shell -- ./.../setup_*.py --force`.
 
 Current recommendation:
-- For Idea #6 specifically, proceed with intern implementation using `IDEA_6_IMPLEMENTATION_GUIDE.md` as the execution source of truth.
-- Keep narration API-first and semantic-edge-specific (`imports`/`inherits`) for technical credibility.
-- Use a pre-cloned Click fallback (`--skip-clone`) for stage reliability.
+- Use the rewritten two-repo `IDEA_6_IMPLEMENTATION_GUIDE.md` as the implementation source of truth.
+- Implement demo packaging only in `remora-test`; keep `remora-v2` work limited to runtime correctness/verification unless a gap is found.
+- Pin `remora-test` to a known-good `remora-v2` revision before rehearsal.
 
 If resumed later:
-1. Implement the guide deliverables (`setup_idea6_click_demo.py`, `run_idea6_click_demo.py`, `idea6_queries.sh`, `IDEA_6_PRESENTER_CUE_SHEET.md`).
-2. Rehearse and record expected output ranges (node/edge counts, semantic hotspot rows) for cue-sheet confidence.
-3. Optionally add `/api/graph/stats` and `/api/graph/hotspots` for cleaner live narration.
+1. Implement Workstream A and Workstream B items from the rewritten guide.
+2. Run repo-specific validation commands and capture outputs.
+3. Rehearse full clone-to-hotspot flow and lock cue-sheet numbers.

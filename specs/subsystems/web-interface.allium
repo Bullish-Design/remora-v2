@@ -2,7 +2,7 @@
 -- web-interface.allium
 
 -- Scope: Web-facing behavioral contract for chat/events/proposals/search routes.
--- Includes: request validation outcomes and emitted domain events.
+-- Includes: request validation outcomes, graph health/edge visibility checks, and emitted domain events.
 -- Excludes: HTTP framework wiring and transport serialization details.
 
 external entity NodeRef {
@@ -19,6 +19,12 @@ entity ProposalDecision {
     node_id: String
     proposal_id: String
     decision: accepted | rejected
+}
+
+entity GraphHealthSnapshot {
+    status: ok | degraded
+    node_count: Integer
+    semantic_edge_count: Integer
 }
 
 config {
@@ -52,6 +58,25 @@ rule EventsQueryValidated {
     requires: limit <= config.events_limit_max
 
     ensures: EventHistoryReturned(limit)
+}
+
+rule HealthQueryReturnsRuntimeSnapshot {
+    when: HealthApiCalled(request_id)
+
+    ensures: GraphHealthSnapshot.created(
+        status: ok,
+        node_count: CurrentNodeCount(),
+        semantic_edge_count: CurrentEdgeCount(edge_types: {imports, inherits})
+    )
+    ensures: HealthPayloadReturned(status: ok)
+}
+
+rule EdgesQuerySupportsSemanticFiltering {
+    when: EdgesApiCalled(edge_types)
+
+    requires: edge_types = null or AllEdgeTypesSupported(edge_types)
+
+    ensures: EdgeListReturned(edge_types: edge_types)
 }
 
 rule ProposalAccepted {

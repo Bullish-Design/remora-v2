@@ -2,7 +2,8 @@
 -- discovery-reconciliation.allium
 
 -- Scope: File discovery, incremental reconcile, node projection change detection.
--- Includes: full scan, changed file reconcile, deleted file reconcile, content-change trigger.
+-- Includes: full scan, changed file reconcile, deleted file reconcile, content-change trigger,
+--           semantic relationship refresh and ongoing backfill for target-only symbol changes.
 -- Excludes: parser internals, tree-sitter query details, DB DDL.
 
 entity SourceFile {
@@ -26,8 +27,15 @@ entity FileProjectionState {
     known_node_ids: Set<String>
 }
 
+entity PendingRelationshipIntent {
+    source_file_path: String
+    edge_type: imports | inherits
+    target_name: String
+    target_module: String?
+}
+
 rule FullScanReconcile {
-    when: FullScanRequested
+    when: FullScanRequested(reason)
 
     for file in SourceFiles where file.exists_on_disk:
         ensures: FileReconcileRequested(file.path, file.mtime_ns)
@@ -43,6 +51,32 @@ rule ReconcileChangedFile {
     ensures: NodesExtracted(file_path)
     ensures: FileProjectionStateUpdated(file_path)
     ensures: NodeProjectionDiffRequested(file_path)
+    ensures: SemanticRelationshipsRefreshRequested(file_path)
+}
+
+rule RefreshSemanticRelationships {
+    when: SemanticRelationshipsRefreshRequested(file_path)
+
+    ensures: SemanticRelationshipsRefreshed(file_path)
+    ensures: PendingRelationshipIntentsUpdated(file_path)
+}
+
+rule BackfillSourcesWhenTargetSymbolsBecomeResolvable {
+    when: TargetSymbolsChanged(target_file_path, changed_symbols, changed_modules)
+
+    for pending in PendingRelationshipIntents where
+        pending.source_file_path != target_file_path
+        and (
+            pending.target_name in changed_symbols
+            or (
+                pending.target_module != null
+                and pending.target_module in changed_modules
+            )
+        ):
+        ensures: FileReconcileRequested(
+            pending.source_file_path,
+            LatestMtime(pending.source_file_path)
+        )
 }
 
 rule ReconcileDeletedFile {
@@ -64,4 +98,5 @@ rule ContentChangeTriggersImmediateReconcile {
     requires: IsWithinDiscoveryRoots(path)
 
     ensures: FileReconcileRequested(path, LatestMtime(path))
+    ensures: TargetSymbolsChanged(path, ExportedSymbols(path), ExportedModules(path))
 }

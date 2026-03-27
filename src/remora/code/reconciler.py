@@ -144,8 +144,9 @@ class FileReconciler:
             await self._deindex_file_for_search(file_path)
             self._file_state.pop(file_path, None)
 
-        for file_path in changed_paths_sorted:
-            await self._refresh_relationships(file_path)
+        await self._refresh_semantic_relationships_for_paths(
+            set(changed_paths_sorted) | set(deleted_paths)
+        )
 
         self._bundles_bootstrapped = True
         self._evict_stale_file_locks(generation)
@@ -189,26 +190,26 @@ class FileReconciler:
         """Process one watchfiles batch with isolated error handling."""
         generation = self._next_reconcile_generation()
         try:
-            relationship_refresh_paths: list[str] = []
+            relationship_refresh_triggers: set[str] = set()
             for file_path in sorted(changed_files):
                 path = Path(file_path)
+                path_str = str(path)
+                relationship_refresh_triggers.add(path_str)
                 if path.exists() and path.is_file():
                     mtime = path.stat().st_mtime_ns
                     await self._reconcile_file(
-                        str(path),
+                        path_str,
                         mtime,
                         generation=generation,
                         refresh_relationships=False,
                     )
-                    relationship_refresh_paths.append(str(path))
-                elif str(path) in self._file_state:
-                    _mtime, node_ids = self._file_state[str(path)]
+                elif path_str in self._file_state:
+                    _mtime, node_ids = self._file_state[path_str]
                     for node_id in sorted(node_ids):
                         await self._remove_node(node_id)
-                    await self._deindex_file_for_search(str(path))
-                    self._file_state.pop(str(path), None)
-            for file_path in relationship_refresh_paths:
-                await self._refresh_relationships(file_path)
+                    await self._deindex_file_for_search(path_str)
+                    self._file_state.pop(path_str, None)
+            await self._refresh_semantic_relationships_for_paths(relationship_refresh_triggers)
             self._evict_stale_file_locks(generation)
         # Error boundary: one failed watch batch must not stop file watching.
         except (OSError, RemoraError, aiosqlite.Error):
@@ -308,10 +309,8 @@ class FileReconciler:
         *,
         projected_nodes: list[Node] | None = None,
     ) -> None:
-        plugin = self._language_registry.get_by_name(
-            self._config.behavior.language_map.get(Path(file_path).suffix.lower(), "")
-        )
-        if plugin is None or plugin.name != "python":
+        plugin = self._python_plugin_for_path(file_path)
+        if plugin is None:
             return
 
         file_nodes = (
@@ -354,6 +353,30 @@ class FileReconciler:
             await self._node_store.delete_outgoing_edges_by_type(node_id, "inherits")
         for edge in edges:
             await self._node_store.add_edge(edge.from_id, edge.to_id, edge.edge_type)
+
+    async def _refresh_semantic_relationships_for_paths(self, changed_paths: set[str]) -> None:
+        refresh_paths = self._semantic_refresh_paths(changed_paths)
+        for refresh_path in refresh_paths:
+            await self._refresh_relationships(refresh_path)
+
+    def _semantic_refresh_paths(self, changed_paths: set[str]) -> list[str]:
+        changed_python_paths = {
+            path for path in changed_paths if self._python_plugin_for_path(path)
+        }
+        if not changed_python_paths:
+            return sorted(changed_paths)
+
+        known_python_paths = {
+            file_path for file_path in self._file_state if self._python_plugin_for_path(file_path)
+        }
+        return sorted(known_python_paths | changed_python_paths)
+
+    def _python_plugin_for_path(self, file_path: str):  # noqa: ANN202
+        language_name = self._config.behavior.language_map.get(Path(file_path).suffix.lower(), "")
+        plugin = self._language_registry.get_by_name(language_name)
+        if plugin is None or plugin.name != "python":
+            return None
+        return plugin
 
     async def _reconcile_events(
         self,
@@ -552,7 +575,14 @@ class FileReconciler:
             try:
                 mtime = path.stat().st_mtime_ns
                 generation = self._next_reconcile_generation()
-                await self._reconcile_file(str(path), mtime, generation=generation)
+                path_str = str(path)
+                await self._reconcile_file(
+                    path_str,
+                    mtime,
+                    generation=generation,
+                    refresh_relationships=False,
+                )
+                await self._refresh_semantic_relationships_for_paths({path_str})
                 self._evict_stale_file_locks(generation)
             # Error boundary: event-triggered reconcile failures are isolated per event.
             except (OSError, RemoraError, aiosqlite.Error):

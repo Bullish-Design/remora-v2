@@ -14,3 +14,4 @@
 - [x] Audit Idea #6 against remora-v2 implementation and write repository readiness analysis.
 - [x] Validate Idea #6 config shape via local smoke (`devenv shell -- remora discover/start`).
 - [x] Create detailed intern-facing `IDEA_6_IMPLEMENTATION_GUIDE.md` with step-by-step implementation phases and validation gates.
+- [x] Rewrite `IDEA_6_IMPLEMENTATION_GUIDE.md` for two-repo execution (`remora-v2` core + `remora-test` demo harness) with repo-specific change lists.

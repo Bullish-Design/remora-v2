@@ -109,6 +109,76 @@ async def test_reconcile_import_resolution_is_order_independent(reconciler_edges
 
 
 @pytest.mark.asyncio
+async def test_reconcile_backfills_imports_when_target_file_added_later(
+    reconciler_edges_env,
+) -> None:
+    reconciler, node_store, project_root = reconciler_edges_env
+    src_dir = project_root / "src"
+
+    write_file(
+        src_dir / "a.py",
+        "from b import B\n\nclass A(B):\n    pass\n",
+    )
+    await reconciler.reconcile_cycle()
+
+    edges_before = await node_store.list_all_edges()
+    assert not any(
+        edge.edge_type == "imports" and "b.py::B" in edge.to_id for edge in edges_before
+    )
+    assert not any(
+        edge.edge_type == "inherits" and "b.py::B" in edge.to_id for edge in edges_before
+    )
+
+    write_file(src_dir / "b.py", "class B:\n    pass\n")
+    await asyncio.sleep(0.001)
+    await reconciler.reconcile_cycle()
+
+    edges_after = await node_store.list_all_edges()
+    imports = [
+        edge
+        for edge in edges_after
+        if edge.edge_type == "imports" and "a.py::A" in edge.from_id and "b.py::B" in edge.to_id
+    ]
+    inherits = [
+        edge
+        for edge in edges_after
+        if edge.edge_type == "inherits" and "a.py::A" in edge.from_id and "b.py::B" in edge.to_id
+    ]
+    assert len(imports) == 1
+    assert len(inherits) == 1
+
+
+@pytest.mark.asyncio
+async def test_reconcile_removes_semantic_edges_when_target_symbol_removed(
+    reconciler_edges_env,
+) -> None:
+    reconciler, node_store, project_root = reconciler_edges_env
+    src_dir = project_root / "src"
+
+    write_file(src_dir / "a.py", "from b import B\n\nclass A(B):\n    pass\n")
+    target = src_dir / "b.py"
+    write_file(target, "class B:\n    pass\n")
+    await reconciler.reconcile_cycle()
+
+    initial_edges = await node_store.list_all_edges()
+    assert any(edge.edge_type == "imports" and "b.py::B" in edge.to_id for edge in initial_edges)
+    assert any(edge.edge_type == "inherits" and "b.py::B" in edge.to_id for edge in initial_edges)
+
+    write_file(target, "class C:\n    pass\n")
+    await asyncio.sleep(0.001)
+    await reconciler.reconcile_cycle()
+
+    updated_edges = await node_store.list_all_edges()
+    assert not any(
+        edge.edge_type == "imports" and "b.py::B" in edge.to_id for edge in updated_edges
+    )
+    assert not any(
+        edge.edge_type == "inherits" and "b.py::B" in edge.to_id for edge in updated_edges
+    )
+    assert any(edge.edge_type == "contains" for edge in updated_edges)
+
+
+@pytest.mark.asyncio
 async def test_reconcile_creates_inheritance_edges(reconciler_edges_env) -> None:
     reconciler, node_store, project_root = reconciler_edges_env
     src_dir = project_root / "src"
@@ -158,3 +228,40 @@ async def test_reconcile_preserves_contains_edges(reconciler_edges_env) -> None:
     all_edges = await node_store.list_all_edges()
     contains_edges = [edge for edge in all_edges if edge.edge_type == "contains"]
     assert contains_edges
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_duplicate_semantic_edges_across_repeated_cycles(
+    reconciler_edges_env,
+) -> None:
+    reconciler, node_store, project_root = reconciler_edges_env
+    src_dir = project_root / "src"
+
+    write_file(src_dir / "a.py", "from b import B\n\nclass A(B):\n    pass\n")
+    write_file(src_dir / "b.py", "class B:\n    pass\n")
+    await reconciler.reconcile_cycle()
+
+    for _ in range(3):
+        await reconciler.reconcile_cycle()
+
+    semantic_edges = [
+        (edge.from_id, edge.to_id, edge.edge_type)
+        for edge in await node_store.list_all_edges()
+        if edge.edge_type in {"imports", "inherits"}
+    ]
+    assert semantic_edges
+    assert len(semantic_edges) == len(set(semantic_edges))
+    assert semantic_edges.count(
+        next(
+            edge
+            for edge in semantic_edges
+            if "a.py::A" in edge[0] and "b.py::B" in edge[1] and edge[2] == "imports"
+        )
+    ) == 1
+    assert semantic_edges.count(
+        next(
+            edge
+            for edge in semantic_edges
+            if "a.py::A" in edge[0] and "b.py::B" in edge[1] and edge[2] == "inherits"
+        )
+    ) == 1

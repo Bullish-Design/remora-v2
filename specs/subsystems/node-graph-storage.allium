@@ -2,7 +2,8 @@
 -- node-graph-storage.allium
 
 -- Scope: Persistent node/edge projection semantics.
--- Includes: node upsert/get/list, status transitions, edge uniqueness/cascade delete.
+-- Includes: node upsert/get/list, status transitions, edge uniqueness/cascade delete,
+--           typed outgoing-edge replacement semantics for semantic relationship refresh.
 -- Excludes: SQL schema/index details and transaction engine internals.
 
 enum NodeStatus { idle | running | awaiting_input | awaiting_review | error }
@@ -74,4 +75,28 @@ rule AddUniqueEdge {
     requires: not exists EdgeRecord{from_id: from_id, to_id: to_id, edge_type: edge_type}
 
     ensures: EdgeRecord.created(from_id: from_id, to_id: to_id, edge_type: edge_type)
+}
+
+rule DeleteOutgoingEdgesByType {
+    when: DeleteOutgoingEdgesByTypeRequested(node_id, edge_type)
+
+    let node = NodeRecord{node_id}
+    requires: exists node
+
+    ensures:
+        for edge in EdgeRecords where edge.from_id = node_id and edge.edge_type = edge_type:
+            not exists edge
+}
+
+rule ReplaceSemanticOutgoingEdges {
+    when: ReplaceSemanticOutgoingEdgesRequested(node_id, edge_type, target_node_ids)
+
+    let node = NodeRecord{node_id}
+    requires: exists node
+    requires: edge_type in {imports, inherits}
+
+    ensures: DeleteOutgoingEdgesByTypeRequested(node_id, edge_type)
+    ensures:
+        for target_id in target_node_ids:
+            EdgeUpsertRequested(node_id, target_id, edge_type)
 }
