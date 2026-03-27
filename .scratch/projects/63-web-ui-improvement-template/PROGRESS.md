@@ -11,7 +11,7 @@
 - [x] Step 1: Add CSS variables
 - [x] Step 2: Add filter bar + zoom control HTML wrapper (in progress, partial)
 - [x] Step 3: Add filter bar + zoom control CSS
-- [ ] Step 4: Replace layout constants
+- [x] Step 4: Replace layout constants
 - [ ] Step 5: Add edge style constants
 - [ ] Step 6: Add `qualifyLabels`
 - [ ] Step 7: Add `layoutNodes`
