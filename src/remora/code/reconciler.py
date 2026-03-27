@@ -125,14 +125,16 @@ class FileReconciler:
             for file_path, mtime_ns in current_mtimes.items()
             if file_path not in self._file_state or self._file_state[file_path][0] != mtime_ns
         ]
+        changed_paths_sorted = sorted(changed_paths)
         deleted_paths = sorted(set(self._file_state) - set(current_mtimes))
 
-        for file_path in sorted(changed_paths):
+        for file_path in changed_paths_sorted:
             await self._reconcile_file(
                 file_path,
                 current_mtimes[file_path],
                 generation=generation,
                 sync_existing_bundles=sync_existing_bundles,
+                refresh_relationships=False,
             )
 
         for file_path in deleted_paths:
@@ -141,6 +143,9 @@ class FileReconciler:
                 await self._remove_node(node_id)
             await self._deindex_file_for_search(file_path)
             self._file_state.pop(file_path, None)
+
+        for file_path in changed_paths_sorted:
+            await self._refresh_relationships(file_path)
 
         self._bundles_bootstrapped = True
         self._evict_stale_file_locks(generation)
@@ -184,17 +189,26 @@ class FileReconciler:
         """Process one watchfiles batch with isolated error handling."""
         generation = self._next_reconcile_generation()
         try:
+            relationship_refresh_paths: list[str] = []
             for file_path in sorted(changed_files):
                 path = Path(file_path)
                 if path.exists() and path.is_file():
                     mtime = path.stat().st_mtime_ns
-                    await self._reconcile_file(str(path), mtime, generation=generation)
+                    await self._reconcile_file(
+                        str(path),
+                        mtime,
+                        generation=generation,
+                        refresh_relationships=False,
+                    )
+                    relationship_refresh_paths.append(str(path))
                 elif str(path) in self._file_state:
                     _mtime, node_ids = self._file_state[str(path)]
                     for node_id in sorted(node_ids):
                         await self._remove_node(node_id)
                     await self._deindex_file_for_search(str(path))
                     self._file_state.pop(str(path), None)
+            for file_path in relationship_refresh_paths:
+                await self._refresh_relationships(file_path)
             self._evict_stale_file_locks(generation)
         # Error boundary: one failed watch batch must not stop file watching.
         except (OSError, RemoraError, aiosqlite.Error):
@@ -207,6 +221,7 @@ class FileReconciler:
         *,
         generation: int | None = None,
         sync_existing_bundles: bool = False,
+        refresh_relationships: bool = True,
     ) -> None:
         lock_generation = (
             generation if generation is not None else self._next_reconcile_generation()
@@ -216,6 +231,7 @@ class FileReconciler:
                 file_path,
                 mtime_ns,
                 sync_existing_bundles=sync_existing_bundles,
+                refresh_relationships=refresh_relationships,
             )
         if generation is None:
             self._evict_stale_file_locks(lock_generation)
@@ -226,6 +242,7 @@ class FileReconciler:
         mtime_ns: int,
         *,
         sync_existing_bundles: bool = False,
+        refresh_relationships: bool = True,
     ) -> None:
         discovered = discover(
             [Path(file_path)],
@@ -273,40 +290,8 @@ class FileReconciler:
 
         self._index_node_names(projected)
 
-        plugin = self._language_registry.get_by_name(
-            self._config.behavior.language_map.get(Path(file_path).suffix.lower(), "")
-        )
-        if plugin is not None and plugin.name == "python":
-            try:
-                source_bytes = Path(file_path).read_bytes()
-            except OSError:
-                source_bytes = None
-
-            if source_bytes is not None:
-                file_node_ids = [node.node_id for node in projected]
-                nodes_by_name = {node.name: node.node_id for node in projected if node.node_type == "class"}
-                raw_rels = extract_imports(
-                    source_bytes,
-                    plugin,
-                    file_path,
-                    file_node_ids[0] if file_node_ids else file_path,
-                    self._query_paths,
-                )
-                raw_rels.extend(
-                    extract_inheritance(
-                        source_bytes,
-                        plugin,
-                        file_path,
-                        nodes_by_name,
-                        self._query_paths,
-                    )
-                )
-                edges = resolve_relationships(raw_rels, self._name_index)
-                for node_id in file_node_ids:
-                    await self._node_store.delete_edges_by_type(node_id, "imports")
-                    await self._node_store.delete_edges_by_type(node_id, "inherits")
-                for edge in edges:
-                    await self._node_store.add_edge(edge.from_id, edge.to_id, edge.edge_type)
+        if refresh_relationships:
+            await self._refresh_relationships(file_path, projected_nodes=projected)
 
         if self._tx is not None:
             async with self._tx.batch():
@@ -316,6 +301,59 @@ class FileReconciler:
 
         self._file_state[file_path] = (mtime_ns, new_ids)
         await self._index_file_for_search(file_path)
+
+    async def _refresh_relationships(
+        self,
+        file_path: str,
+        *,
+        projected_nodes: list[Node] | None = None,
+    ) -> None:
+        plugin = self._language_registry.get_by_name(
+            self._config.behavior.language_map.get(Path(file_path).suffix.lower(), "")
+        )
+        if plugin is None or plugin.name != "python":
+            return
+
+        file_nodes = (
+            projected_nodes
+            if projected_nodes is not None
+            else await self._node_store.list_nodes(file_path=file_path)
+        )
+        file_node_ids = [node.node_id for node in file_nodes]
+        nodes_by_name = {
+            node.name: node.node_id for node in file_nodes if node.node_type == "class"
+        }
+
+        try:
+            source_bytes = Path(file_path).read_bytes()
+        except OSError:
+            source_bytes = None
+
+        if source_bytes is None:
+            return
+
+        raw_rels = extract_imports(
+            source_bytes,
+            plugin,
+            file_path,
+            file_node_ids[0] if file_node_ids else file_path,
+            self._query_paths,
+        )
+        raw_rels.extend(
+            extract_inheritance(
+                source_bytes,
+                plugin,
+                file_path,
+                nodes_by_name,
+                self._query_paths,
+            )
+        )
+        edges = resolve_relationships(raw_rels, self._name_index)
+        for node_id in file_node_ids:
+            await self._node_store.delete_outgoing_edges_by_type(node_id, "imports")
+            await self._node_store.delete_outgoing_edges_by_type(node_id, "inherits")
+        for edge in edges:
+            await self._node_store.add_edge(edge.from_id, edge.to_id, edge.edge_type)
 
     async def _reconcile_events(
         self,

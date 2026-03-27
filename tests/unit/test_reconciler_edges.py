@@ -85,6 +85,30 @@ async def test_reconcile_creates_import_edges(reconciler_edges_env) -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconcile_import_resolution_is_order_independent(reconciler_edges_env) -> None:
+    reconciler, node_store, project_root = reconciler_edges_env
+    src_dir = project_root / "src"
+
+    # Ensure importer file sorts before import target file.
+    write_file(
+        src_dir / "a.py",
+        "from b import B\n\nclass A(B):\n    pass\n",
+    )
+    write_file(
+        src_dir / "b.py",
+        "class B:\n    pass\n",
+    )
+
+    await reconciler.reconcile_cycle()
+
+    all_edges = await node_store.list_all_edges()
+    import_edges = [edge for edge in all_edges if edge.edge_type == "imports"]
+    inherits_edges = [edge for edge in all_edges if edge.edge_type == "inherits"]
+    assert any("a.py::A" in edge.from_id and "b.py::B" in edge.to_id for edge in import_edges)
+    assert any("a.py::A" in edge.from_id and "b.py::B" in edge.to_id for edge in inherits_edges)
+
+
+@pytest.mark.asyncio
 async def test_reconcile_creates_inheritance_edges(reconciler_edges_env) -> None:
     reconciler, node_store, project_root = reconciler_edges_env
     src_dir = project_root / "src"

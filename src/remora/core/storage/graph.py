@@ -314,6 +314,15 @@ class NodeStore:
         await self._maybe_commit()
         return cursor.rowcount
 
+    async def delete_outgoing_edges_by_type(self, node_id: str, edge_type: str) -> int:
+        """Delete all outgoing edges of a type from a node."""
+        cursor = await self._db.execute(
+            "DELETE FROM edges WHERE from_id = ? AND edge_type = ?",
+            (node_id, edge_type),
+        )
+        await self._maybe_commit()
+        return cursor.rowcount
+
     async def delete_edges(self, node_id: str) -> int:
         """Delete all edges connected to a node and return deleted count."""
         cursor = await self._db.execute(

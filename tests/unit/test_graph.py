@@ -13,9 +13,9 @@ from remora.core.events import (
     SubscriptionRegistry,
     TriggerDispatcher,
 )
+from remora.core.model.types import NodeStatus, NodeType
 from remora.core.storage.graph import NodeStore
 from remora.core.storage.transaction import TransactionContext
-from remora.core.model.types import NodeStatus, NodeType
 
 
 @pytest_asyncio.fixture
@@ -411,3 +411,23 @@ async def test_nodestore_delete_edges_by_type(db, tx) -> None:
     assert remaining[0].edge_type == "contains"
 
     assert await store.get_importers("src/app.py::b") == []
+
+
+@pytest.mark.asyncio
+async def test_nodestore_delete_outgoing_edges_by_type_preserves_incoming(db, tx) -> None:
+    store = NodeStore(db, tx=tx)
+    await store.create_tables()
+    await store.upsert_node(make_node("src/app.py::a"))
+    await store.upsert_node(make_node("src/app.py::b"))
+    await store.upsert_node(make_node("src/app.py::c"))
+    await store.add_edge("src/app.py::a", "src/app.py::b", "imports")
+    await store.add_edge("src/app.py::c", "src/app.py::b", "imports")
+
+    deleted = await store.delete_outgoing_edges_by_type("src/app.py::b", "imports")
+    assert deleted == 0
+
+    deleted = await store.delete_outgoing_edges_by_type("src/app.py::a", "imports")
+    assert deleted == 1
+
+    remaining_importers = await store.get_importers("src/app.py::b")
+    assert remaining_importers == ["src/app.py::c"]
