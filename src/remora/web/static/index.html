@@ -489,6 +489,15 @@
       method: getComputedStyle(document.documentElement).getPropertyValue("--method").trim()
     };
 
+    const EDGE_STYLES = Object.freeze({
+      contains: { color: "#233247", size: 0.5, hidden: true, type: "line" },
+      imports:  { color: "#60a5fa", size: 1.8, hidden: false, type: "arrow" },
+      inherits: { color: "#a78bfa", size: 1.8, hidden: false, type: "arrow" },
+    });
+    const DEFAULT_EDGE_STYLE = Object.freeze({
+      color: "#3a4f6a", size: 1, hidden: false, type: "line",
+    });
+
     function nodeColor(nodeType, status) {
       if (status === "running") {
         return getComputedStyle(document.documentElement)

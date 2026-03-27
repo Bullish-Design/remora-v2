@@ -12,7 +12,7 @@
 - [x] Step 2: Add filter bar + zoom control HTML wrapper (in progress, partial)
 - [x] Step 3: Add filter bar + zoom control CSS
 - [x] Step 4: Replace layout constants
-- [ ] Step 5: Add edge style constants
+- [x] Step 5: Add edge style constants
 - [ ] Step 6: Add `qualifyLabels`
 - [ ] Step 7: Add `layoutNodes`
 - [ ] Step 8: Rewrite `loadGraph`
