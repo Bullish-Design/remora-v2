@@ -1,6 +1,6 @@
 # Context — 58-remora-v2-wow-demo-template
 
-User request (latest): study Idea #6 doc + remora-v2 implementation and determine required changes/improvements for the Click knowledge-graph demo.
+User request (latest): study Idea #6 overview + remora-v2 implementation and create a detailed intern-ready `IDEA_6_IMPLEMENTATION_GUIDE.md` with step-by-step implementation instructions.
 
 Completed in this pass:
 - Created `.scratch/projects/58-remora-v2-wow-demo-template/`.
@@ -26,6 +26,9 @@ Completed in this pass:
 - Added analysis document:
   - `REPO_DEMO_ANALYSIS.md`
   - includes: required changes vs recommended improvements, prioritized implementation plan, and acceptance criteria.
+- Added detailed intern implementation guide:
+  - `IDEA_6_IMPLEMENTATION_GUIDE.md`
+  - includes phase-based implementation steps, exact commands, script requirements, reliability validation, acceptance criteria, and troubleshooting.
 - Updated both runbooks to use setup scripts instead of long manual heredoc blocks.
 - Validated scripts:
   - `devenv shell -- python -m py_compile ...` passed
@@ -33,11 +36,11 @@ Completed in this pass:
   - both scripts also executed directly as binaries via `devenv shell -- ./.../setup_*.py --force`.
 
 Current recommendation:
-- For Idea #6 specifically, baseline demo is viable now for graph boot/orientation.
-- Before presenting hotspot claims to a technical audience, address cross-file relationship completeness (or scope demo claims to structural graph only).
-- Update Idea #6 command/query examples to exclude `contains` edges when computing hotspots.
+- For Idea #6 specifically, proceed with intern implementation using `IDEA_6_IMPLEMENTATION_GUIDE.md` as the execution source of truth.
+- Keep narration API-first and semantic-edge-specific (`imports`/`inherits`) for technical credibility.
+- Use a pre-cloned Click fallback (`--skip-clone`) for stage reliability.
 
 If resumed later:
-1. Decide whether to implement the P0 relationship completeness fix in reconciler.
-2. Revise Idea #6 doc queries to use semantic edges (`imports`, `inherits`) only.
+1. Implement the guide deliverables (`setup_idea6_click_demo.py`, `run_idea6_click_demo.py`, `idea6_queries.sh`, `IDEA_6_PRESENTER_CUE_SHEET.md`).
+2. Rehearse and record expected output ranges (node/edge counts, semantic hotspot rows) for cue-sheet confidence.
 3. Optionally add `/api/graph/stats` and `/api/graph/hotspots` for cleaner live narration.

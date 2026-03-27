@@ -13,3 +13,4 @@
 - [x] Revise Idea #6 overview for Click-clone-first demo flow.
 - [x] Audit Idea #6 against remora-v2 implementation and write repository readiness analysis.
 - [x] Validate Idea #6 config shape via local smoke (`devenv shell -- remora discover/start`).
+- [x] Create detailed intern-facing `IDEA_6_IMPLEMENTATION_GUIDE.md` with step-by-step implementation phases and validation gates.

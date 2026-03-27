@@ -39,3 +39,7 @@
 ## 2026-03-27 — Prefer narrative correction over lifecycle reorder for immediate delivery
 - Decision: for near-term demo readiness, adjust Idea #6 narrative to \"instant loaded graph\" rather than \"watch it fill\".
 - Rationale: current lifecycle performs full scan before web startup; changing startup ordering is a higher-risk runtime behavior change.
+
+## 2026-03-27 — Keep Idea #6 launcher script free of nested `devenv` invocation
+- Decision: document `run_idea6_click_demo.py` to execute `remora start` directly; run the script itself via `devenv shell -- ...`.
+- Rationale: avoids nested shell environments and keeps demo launcher behavior deterministic.
