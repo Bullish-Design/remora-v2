@@ -498,6 +498,23 @@
       color: "#3a4f6a", size: 1, hidden: false, type: "line",
     });
 
+    function qualifyLabels(nodes, nodeById) {
+      const nameCount = {};
+      for (const n of nodes) {
+        nameCount[n.name] = (nameCount[n.name] || 0) + 1;
+      }
+      for (const n of nodes) {
+        if (nameCount[n.name] > 1 && n.parent_id) {
+          const parent = nodeById[n.parent_id];
+          if (parent) {
+            n._displayLabel = parent.name + "/" + n.name;
+            continue;
+          }
+        }
+        n._displayLabel = n.name;
+      }
+    }
+
     function nodeColor(nodeType, status) {
       if (status === "running") {
         return getComputedStyle(document.documentElement)
