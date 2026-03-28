@@ -550,9 +550,13 @@
     const CACHE_LIMIT = 200;
 
     const colorByType = {
+      directory: getComputedStyle(document.documentElement).getPropertyValue("--directory").trim(),
       function: getComputedStyle(document.documentElement).getPropertyValue("--function").trim(),
       class: getComputedStyle(document.documentElement).getPropertyValue("--class").trim(),
-      method: getComputedStyle(document.documentElement).getPropertyValue("--method").trim()
+      method: getComputedStyle(document.documentElement).getPropertyValue("--method").trim(),
+      section: getComputedStyle(document.documentElement).getPropertyValue("--section").trim(),
+      table: getComputedStyle(document.documentElement).getPropertyValue("--table").trim(),
+      virtual: getComputedStyle(document.documentElement).getPropertyValue("--virtual").trim(),
     };
 
     function qualifyLabels(nodes, nodeById) {
@@ -694,21 +698,10 @@
     }
 
     function nodeColor(nodeType, status) {
-      if (status === "running") {
-        return getComputedStyle(document.documentElement)
-          .getPropertyValue("--running")
-          .trim();
-      }
-      if (status === "awaiting_input" || status === "awaiting_review") {
-        return "#fbbf24";
-      }
-      if (status === "error") {
-        return getComputedStyle(document.documentElement)
-          .getPropertyValue("--error")
-          .trim();
-      }
-      if (status === "idle") return colorByType[nodeType] || "#818cf8";
-      return getComputedStyle(document.documentElement).getPropertyValue("--done").trim();
+      if (status === "running") return colorByType.function || "#fb923c";
+      if (status === "awaiting_input" || status === "awaiting_review") return "#fbbf24";
+      if (status === "error") return colorByType.virtual || "#f87171";
+      return colorByType[nodeType] || "#818cf8";
     }
 
     function hashNodeId(nodeId) {
