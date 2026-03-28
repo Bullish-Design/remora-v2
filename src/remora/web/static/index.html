@@ -35,11 +35,16 @@
       min-height: 100vh;
     }
     #sidebar {
-      width: min(440px, 92vw);
+      width: clamp(320px, 30vw, 400px);
       border-left: 1px solid var(--line);
       background: var(--panel);
       padding: 18px;
       overflow-y: auto;
+    }
+    @media (max-width: 1180px) {
+      #sidebar {
+        width: clamp(300px, 36vw, 380px);
+      }
     }
     h1 { margin: 0 0 12px; font-size: 1.1rem; letter-spacing: 0.02em; }
     #connection-status.connected { color: #34d399; }
