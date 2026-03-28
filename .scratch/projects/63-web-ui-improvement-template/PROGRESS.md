@@ -142,11 +142,11 @@
 - [x] Step 3: Add peripheral visual treatment (zone-aware node/edge emphasis).
 - [x] Step 4: Increase hierarchy box/header legibility while keeping nested declutter.
 - [x] Step 5: Add optional context tethers for edge-less nodes.
-- [ ] Step 6: Extend acceptance metrics and finalize verification.
+- [x] Step 6: Extend acceptance metrics and finalize verification.
 
 ### v6 verification (in progress)
 
 - `devenv shell -- pytest tests/unit/test_views.py -q -rs`
   - Result: `6 passed`
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs`
-  - Result: `6 passed`
+  - Result: `4 passed, 2 warnings`

@@ -28,15 +28,38 @@ def _reserve_port() -> int:
 
 
 def _write_graph_ui_project(root: Path) -> Path:
-    source_path = root / "src" / "orders.py"
     write_file(
-        source_path,
+        root / "src" / "pricing.py",
         (
+            "def apply_tax_rate(amount: float, rate: float = 0.07) -> float:\n"
+            "    return amount * (1 + rate)\n"
+        ),
+    )
+    write_file(
+        root / "src" / "orders.py",
+        (
+            "from pricing import apply_tax_rate\n\n"
             "class Order:\n"
-            "    def total(self, subtotal: float, tax: float) -> float:\n"
-            "        return subtotal + tax\n\n"
+            "    def total(self, subtotal: float) -> float:\n"
+            "        taxed = apply_tax_rate(subtotal)\n"
+            "        return round(taxed, 2)\n\n"
             "def apply_tax(amount: float) -> float:\n"
-            "    return amount * 1.07\n"
+            "    return apply_tax_rate(amount)\n"
+        ),
+    )
+    write_file(
+        root / "src" / "legacy_helpers.py",
+        (
+            "def legacy_discount(amount: float) -> float:\n"
+            "    return amount * 0.95\n"
+        ),
+    )
+    write_file(
+        root / "src" / "observers" / "audit.py",
+        (
+            "class AuditObserver:\n"
+            "    def notify(self, event: str) -> str:\n"
+            "        return f\"audit:{event}\"\n"
         ),
     )
 
@@ -249,14 +272,47 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               const nodes = graph.nodes();
               let total = 0;
               let visible = 0;
+              let absoluteLabelCount = 0;
               const labelCounts = new Map();
+              const zoneCounts = { core: 0, peripheral: 0 };
+              const makeBox = () => ({
+                minX: Number.POSITIVE_INFINITY,
+                minY: Number.POSITIVE_INFINITY,
+                maxX: Number.NEGATIVE_INFINITY,
+                maxY: Number.NEGATIVE_INFINITY,
+                count: 0,
+              });
+              const extendBox = (box, point) => {
+                box.minX = Math.min(box.minX, point.x);
+                box.minY = Math.min(box.minY, point.y);
+                box.maxX = Math.max(box.maxX, point.x);
+                box.maxY = Math.max(box.maxY, point.y);
+                box.count += 1;
+              };
+              const boxArea = (box) => {
+                if (!box || box.count <= 0) return 0;
+                const w = Math.max(1, box.maxX - box.minX);
+                const h = Math.max(1, box.maxY - box.minY);
+                return w * h;
+              };
+              const overallBox = makeBox();
+              const zoneBoxes = {
+                core: makeBox(),
+                peripheral: makeBox(),
+              };
+              const absolutePathPattern = /^(\\/|[a-zA-Z]:[\\\\/])/;
               for (const nodeId of nodes) {
                 const attrs = graph.getNodeAttributes(nodeId);
                 if (attrs.hidden) continue;
                 total += 1;
                 const label = String(attrs.label || "");
                 labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
+                if (absolutePathPattern.test(label)) absoluteLabelCount += 1;
                 const p = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
+                extendBox(overallBox, p);
+                const zone = attrs.layout_zone === "peripheral" ? "peripheral" : "core";
+                zoneCounts[zone] += 1;
+                extendBox(zoneBoxes[zone], p);
                 if (p.x >= 0 && p.x <= dims.width && p.y >= 0 && p.y <= dims.height) {
                   visible += 1;
                 }
@@ -290,6 +346,11 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               }
               const overlapRatio = areaSum > 0 ? overlapArea / areaSum : 0;
               const occupancy = areaSum > 0 ? Math.min(1, areaSum / viewportArea) : 0;
+              const overallZoneArea = boxArea(overallBox);
+              const coreZoneArea = boxArea(zoneBoxes.core);
+              const peripheralZoneArea = boxArea(zoneBoxes.peripheral);
+              const coreZoneOccupancy = overallZoneArea > 0 ? coreZoneArea / overallZoneArea : 0;
+              const peripheralZoneFootprint = overallZoneArea > 0 ? peripheralZoneArea / overallZoneArea : 0;
 
               const edges = graph.edges();
               let edgeTotal = 0;
@@ -314,6 +375,11 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 visible,
                 occupancy,
                 duplicate_labels: duplicates,
+                absolute_label_count: absoluteLabelCount,
+                core_zone_nodes: zoneCounts.core,
+                peripheral_zone_nodes: zoneCounts.peripheral,
+                core_zone_occupancy: coreZoneOccupancy,
+                peripheral_zone_footprint: peripheralZoneFootprint,
                 overlap_ratio: overlapRatio,
                 edge_total: edgeTotal,
                 edge_span_visible: edgeSpanVisible,
@@ -327,7 +393,12 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["occupancy"] >= 0.002, visibility
         assert visibility["occupancy"] <= 0.92, visibility
         assert visibility["duplicate_labels"] == 0, visibility
+        assert visibility["absolute_label_count"] == 0, visibility
         assert visibility["overlap_ratio"] < 0.45, visibility
+        assert visibility["core_zone_nodes"] > 0, visibility
+        if visibility["peripheral_zone_nodes"] > 0:
+            assert visibility["core_zone_occupancy"] >= 0.02, visibility
+            assert visibility["peripheral_zone_footprint"] <= 0.95, visibility
         if visibility["edge_total"] > 0:
             assert visibility["edge_span_visible"] > 0, visibility
 

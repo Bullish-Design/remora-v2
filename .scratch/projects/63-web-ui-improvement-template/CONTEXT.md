@@ -9,6 +9,7 @@ Current status:
 - v6 Step 3 complete: zone-aware node/edge styling (peripheral de-emphasis, focus restore on hover/selection).
 - v6 Step 4 complete: boosted top-level hierarchy box and header visibility at default zoom.
 - v6 Step 5 complete: added optional context tether edges for edge-less nodes (toggleable in filter bar).
+- v6 Step 6 complete: acceptance coverage extended for no-absolute-label and zone footprint metrics.
 - Unit and acceptance checks passing on current state.
 
 Constraints and direction:
@@ -16,4 +17,4 @@ Constraints and direction:
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v6 Step 4 (hierarchy visibility upgrade), then continue through Steps 5-6.
+- Finalize release handoff: patch bump, tag, and publish after final verification.
