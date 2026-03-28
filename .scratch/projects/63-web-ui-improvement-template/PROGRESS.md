@@ -2,8 +2,8 @@
 
 - [x] Phase 1 complete: baseline audit
 - [x] Phase 2 complete: UX spec + visual direction
-- [ ] Phase 3 complete: implementation
-- [ ] Phase 4 complete: validation
+- [x] Phase 3 complete: implementation
+- [x] Phase 4 complete: validation
 - [ ] Phase 5 complete: polish + docs
 
 ## Active execution: `WEB_UI_IMPROVEMENT_GUIDE.md`
@@ -24,4 +24,13 @@
 - [x] Step 14: Add hover highlight handlers
 - [x] Step 15: Wire zoom controls
 - [x] Step 16: Remove dead layout code
-- [ ] Step 17: Verification checklist
+- [x] Step 17: Verification checklist
+
+## Verification results (Step 17)
+
+- `devenv shell -- pytest tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q`
+  - Result: `60 passed`
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs`
+  - Result: `3 passed`
+  - Notes: Added pointer-event passthrough on graph overlays so chips/buttons are clickable
+    while still allowing graph click hit-testing under the overlay regions.

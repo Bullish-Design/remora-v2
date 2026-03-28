@@ -212,6 +212,7 @@
       border: 1px solid var(--line);
       border-radius: 10px;
       backdrop-filter: blur(6px);
+      pointer-events: none;
     }
     .filter-group {
       display: flex;
@@ -237,6 +238,7 @@
       color: var(--muted);
       transition: opacity 0.15s, background 0.15s;
       opacity: 0.45;
+      pointer-events: auto;
     }
     .filter-chip.active {
       opacity: 1;
@@ -257,6 +259,7 @@
       display: flex;
       flex-direction: column;
       gap: 4px;
+      pointer-events: none;
     }
     #zoom-controls button {
       width: 32px;
@@ -272,6 +275,7 @@
       color: var(--ink);
       cursor: pointer;
       backdrop-filter: blur(6px);
+      pointer-events: auto;
     }
     #zoom-controls button:hover {
       background: rgba(34, 211, 238, 0.15);

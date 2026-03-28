@@ -1,18 +1,25 @@
 # Context — 63-web-ui-improvement-template
 
 Current focus:
-- Implementing `.scratch/projects/63-web-ui-improvement-template/WEB_UI_IMPROVEMENT_GUIDE.md`
-  directly in `src/remora/web/static/index.html`.
+- Complete graph-view overhaul from
+  `.scratch/projects/63-web-ui-improvement-template/WEB_UI_IMPROVEMENT_GUIDE.md`.
 
 Current status:
-- Guide reviewed in full (steps 1-17).
-- Step 1 and Step 3 CSS updates applied.
-- Body scaffold replacement started (graph container + toolbar controls now being wired).
+- Steps 1-17 implemented in `src/remora/web/static/index.html`.
+- Added node/edge filter bar, zoom controls, deterministic column layout, type-shaped
+  node rendering, hover neighborhood focus, edge style reducers, and filter application.
+- Removed legacy jitter/band layout helpers.
+- Validation executed with unit + acceptance tests.
+
+Validation:
+- `devenv shell -- pytest tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q` -> `60 passed`.
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs` -> `3 passed`.
+- During validation, fixed overlay pointer interception by setting overlay containers
+  to `pointer-events: none` and interactive controls to `pointer-events: auto`.
 
 Constraints and direction:
-- Keep node labels always visible by default.
-- Keep scope graph-focused (no sidebar redesign in this pass).
-- Use this project directory as source-of-truth for progress and implementation notes.
+- Node labels remain always visible by default.
+- Scope remains graph-focused; sidebar behavior preserved.
 
 Next immediate step:
-- Complete HTML scaffold replacement and then apply script-layer steps 4-16 sequentially.
+- Optional: phase 5 docs/polish updates if requested.
