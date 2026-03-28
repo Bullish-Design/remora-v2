@@ -411,6 +411,11 @@
       LABEL_PAD_PX: 24,
       BOX_PAD: 2.5,
       BOX_HEADER: 1.6,
+      COL_WIDTH_BIAS: 2.0,
+      DEPTH_Y_WEIGHT: 1.1,
+      FILE_LINE_SPAN: 14.0,
+      COL_Y_STAGGER: 1.2,
+      FIT_PADDING_PX: 56,
     });
 
     function drawRoundedRect(context, x, y, width, height, radius) {
@@ -521,11 +526,13 @@
 
     const sigmaApi = globalThis.sigma || {};
     const sigmaCtorApi = globalThis.Sigma || {};
+    const sigmaRendering = sigmaApi.rendering || sigmaCtorApi.rendering || Sigma.rendering || {};
     const edgeArrowProgram =
       sigmaApi.EdgeArrowProgram ||
       sigmaApi.programs?.EdgeArrowProgram ||
       sigmaCtorApi.EdgeArrowProgram ||
-      sigmaCtorApi.programs?.EdgeArrowProgram;
+      sigmaCtorApi.programs?.EdgeArrowProgram ||
+      sigmaRendering.EdgeArrowProgram;
     const edgeLineProgram =
       sigmaApi.EdgeLineProgram ||
       sigmaApi.programs?.EdgeLineProgram ||
@@ -534,7 +541,9 @@
       sigmaCtorApi.EdgeLineProgram ||
       sigmaCtorApi.programs?.EdgeLineProgram ||
       sigmaCtorApi.EdgeRectangleProgram ||
-      sigmaCtorApi.programs?.EdgeRectangleProgram;
+      sigmaCtorApi.programs?.EdgeRectangleProgram ||
+      sigmaRendering.EdgeLineProgram ||
+      sigmaRendering.EdgeRectangleProgram;
 
     let selectedNode = null;
     const renderer = new Sigma(graph, document.getElementById("graph"), {
@@ -671,7 +680,10 @@
           const px = measureLabelWidth(n._displayLabel || n.name);
           if (px > maxPx) maxPx = px;
         }
-        return Math.max(LAYOUT.MIN_COL_WIDTH, maxPx / LAYOUT.PX_PER_UNIT);
+        return Math.max(
+          LAYOUT.MIN_COL_WIDTH,
+          maxPx / LAYOUT.PX_PER_UNIT + LAYOUT.COL_WIDTH_BIAS,
+        );
       });
 
       const colX = [];
@@ -690,9 +702,31 @@
           a.name.localeCompare(b.name)
         );
 
+        const parsedLines = group.map((n, idx) => {
+          const raw = Number(n.start_line);
+          return Number.isFinite(raw) && raw > 0 ? raw : idx + 1;
+        });
+        const minLine = Math.min(...parsedLines);
+        const maxLine = Math.max(...parsedLines);
+        const range = Math.max(1, maxLine - minLine);
+        const sameLineCounts = new Map();
+
         for (let slotIndex = 0; slotIndex < group.length; slotIndex++) {
           const n = group[slotIndex];
-          const y = -(slotIndex * LAYOUT.ROW_HEIGHT);
+          const startLine = parsedLines[slotIndex];
+          const lineNorm =
+            range > 0
+              ? (startLine - minLine) / range
+              : (group.length > 1 ? slotIndex / (group.length - 1) : 0);
+          const lineKey = Math.round(lineNorm * 1000);
+          const sameLineIndex = sameLineCounts.get(lineKey) || 0;
+          sameLineCounts.set(lineKey, sameLineIndex + 1);
+
+          const depthOffset = depthOf[n.node_id] * LAYOUT.DEPTH_Y_WEIGHT;
+          const lineOffset = lineNorm * LAYOUT.FILE_LINE_SPAN;
+          const duplicateOffset = sameLineIndex * LAYOUT.SUB_ROW_HEIGHT;
+          const colStagger = (ci % 4) * LAYOUT.COL_Y_STAGGER;
+          const y = -(depthOffset + lineOffset + duplicateOffset + colStagger);
           positions.set(n.node_id, { x: colX[ci], y });
         }
       }
@@ -767,6 +801,73 @@
 
     let boundingBoxes = new Map();
 
+    function computeVisualBounds() {
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+
+      graph.forEachNode((nodeId, attrs) => {
+        if (attrs.hidden) return;
+        const labelWidth = measureLabelWidth(attrs.label || attrs.node_id || nodeId) / LAYOUT.PX_PER_UNIT;
+        const halfW = Math.max(2.6, labelWidth / 2);
+        const halfH = 1.25;
+        minX = Math.min(minX, attrs.x - halfW);
+        maxX = Math.max(maxX, attrs.x + halfW);
+        minY = Math.min(minY, attrs.y - halfH);
+        maxY = Math.max(maxY, attrs.y + halfH);
+      });
+
+      if (filterState.showBoundingBoxes) {
+        for (const [, box] of boundingBoxes) {
+          minX = Math.min(minX, box.x);
+          maxX = Math.max(maxX, box.x + box.w);
+          minY = Math.min(minY, box.y - box.h);
+          maxY = Math.max(maxY, box.y);
+        }
+      }
+
+      if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+        return null;
+      }
+      return { minX, maxX, minY, maxY };
+    }
+
+    function fitCameraToGraph(duration = 300) {
+      const camera = renderer.getCamera();
+      const bounds = computeVisualBounds();
+      if (!bounds) {
+        if (duration > 0) {
+          camera.animatedReset({ duration });
+        } else {
+          camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+          renderer.refresh();
+        }
+        return;
+      }
+
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+      camera.setState({ x: centerX, y: centerY, ratio: 1, angle: 0 });
+      renderer.refresh();
+
+      const tl = renderer.graphToViewport({ x: bounds.minX, y: bounds.maxY });
+      const br = renderer.graphToViewport({ x: bounds.maxX, y: bounds.minY });
+      const spanW = Math.max(1, Math.abs(br.x - tl.x));
+      const spanH = Math.max(1, Math.abs(br.y - tl.y));
+      const dims = renderer.getDimensions();
+      const availW = Math.max(1, dims.width - LAYOUT.FIT_PADDING_PX * 2);
+      const availH = Math.max(1, dims.height - LAYOUT.FIT_PADDING_PX * 2);
+      const fitScale = Math.max(spanW / availW, spanH / availH);
+      const targetRatio = Math.min(4, Math.max(0.4, fitScale * 1.08));
+      if (duration > 0) {
+        camera.animate({ x: centerX, y: centerY, ratio: targetRatio, angle: 0 }, { duration });
+      } else {
+        camera.setState({ x: centerX, y: centerY, ratio: targetRatio, angle: 0 });
+        renderer.refresh();
+      }
+    }
+
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
@@ -833,7 +934,7 @@
 
       applyFilters();
       renderer.refresh();
-      renderer.getCamera().animatedReset({ duration: 300 });
+      fitCameraToGraph(0);
     }
 
     function appendEventLine(text) {
@@ -1133,7 +1234,9 @@ function addTimelineEvent(eventType, payload) {
         context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
         context.textAlign = "left";
         context.textBaseline = "top";
-        context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
+        if (screenW >= 120 && screenH >= 42) {
+          context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
+        }
       }
       context.restore();
     });
@@ -1184,8 +1287,7 @@ function addTimelineEvent(eventType, payload) {
       camera.animatedUnzoom({ duration: 200 });
     });
     document.getElementById("zoom-reset").addEventListener("click", () => {
-      const camera = renderer.getCamera();
-      camera.animatedReset({ duration: 200 });
+      fitCameraToGraph(200);
     });
 
     document.getElementById("send-chat").addEventListener("click", async () => {
