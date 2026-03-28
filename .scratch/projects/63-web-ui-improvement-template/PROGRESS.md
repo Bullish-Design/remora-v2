@@ -38,8 +38,32 @@
 ## Release handoff
 
 - [x] Bump package version to `0.6.0` in runtime and packaging metadata.
-- [ ] Commit, push, and publish tag `v0.6.0`.
+- [x] Commit, push, and publish tag `v0.6.0`.
+- [x] Patch release follow-up completed: version `0.6.1` tagged and pushed.
 
 ## Follow-up utility
 
 - [x] Add local Playwright screenshot helper script in `scripts/playwright_screenshot.py`.
+
+## Post-release polish
+
+- [x] Replace graph canvas background gradient with flat deep-blue fill.
+
+## v2 follow-up (latest)
+
+- [x] Re-read updated `WEB_UI_IMPROVEMENT_GUIDE.md` + `CONCEPT.md` and align implementation.
+- [x] Switch to v2 layout semantics:
+  - Negated Y-axis (top-down hierarchy).
+  - Directory nodes excluded from graph.
+  - `contains` edges excluded from graph rendering.
+  - Directory hierarchy rendered as nested filesystem bounding boxes.
+- [x] Add v2 `qualifyLabels` fallback (avoid `Name/Name`, prefer directory path qualifier).
+- [x] Add camera auto-fit after graph rebuild.
+- [x] Add `filesystem` filter chip wiring (`data-filter-boxes`) to toggle bounding boxes.
+- [x] Fix Sigma `beforeRender` regression by drawing boxes from `renderer.getCanvases().edges`.
+- [x] Compact filter bar footprint to avoid intercepting graph label clicks in acceptance flow.
+
+### v2 verification
+
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
+  - Result: `63 passed, 2 warnings`

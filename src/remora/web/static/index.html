@@ -204,8 +204,10 @@
       left: 10px;
       z-index: 10;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      align-items: flex-start;
       gap: 6px;
+      max-width: 260px;
       padding: 6px 10px;
       background: rgba(16, 24, 38, 0.85);
       border: 1px solid var(--line);
@@ -216,12 +218,13 @@
     .filter-group {
       display: flex;
       gap: 4px;
+      flex-wrap: wrap;
     }
     .filter-separator {
-      width: 1px;
-      height: 20px;
+      width: 100%;
+      height: 1px;
       background: var(--line);
-      margin: 0 4px;
+      margin: 2px 0;
     }
     .filter-chip {
       display: flex;
@@ -1063,11 +1066,13 @@ function addTimelineEvent(eventType, payload) {
       return winner;
     }
 
-    renderer.on("beforeRender", (e) => {
+    renderer.on("beforeRender", () => {
       nodeLabelHitboxes.clear();
       if (!filterState.showBoundingBoxes) return;
 
-      const context = e.context;
+      const context = renderer.getCanvases()?.edges?.getContext("2d");
+      if (!context) return;
+      context.save();
       for (const [dirId, box] of boundingBoxes) {
         const tl = renderer.graphToViewport({ x: box.x, y: box.y });
         const br = renderer.graphToViewport({ x: box.x + box.w, y: box.y - box.h });
@@ -1092,6 +1097,7 @@ function addTimelineEvent(eventType, payload) {
         context.textBaseline = "top";
         context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
       }
+      context.restore();
     });
 
     renderer.on("clickNode", ({ node }) => {

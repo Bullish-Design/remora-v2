@@ -1,27 +1,30 @@
 # Context — 63-web-ui-improvement-template
 
 Current focus:
-- Complete graph-view overhaul from
-  `.scratch/projects/63-web-ui-improvement-template/WEB_UI_IMPROVEMENT_GUIDE.md`.
+- Apply the **v2** graph-overhaul spec from:
+  - `.scratch/projects/63-web-ui-improvement-template/WEB_UI_IMPROVEMENT_GUIDE.md`
+  - `.scratch/projects/63-web-ui-improvement-template/CONCEPT.md`
 
 Current status:
-- Steps 1-17 implemented in `src/remora/web/static/index.html`.
-- Added node/edge filter bar, zoom controls, deterministic column layout, type-shaped
-  node rendering, hover neighborhood focus, edge style reducers, and filter application.
-- Removed legacy jitter/band layout helpers.
-- Validation executed with unit + acceptance tests.
-- Release follow-up requested: bump project version to `0.6.0`, commit, push, tag.
-- Added screenshot utility request: local Playwright capture script for this repo.
+- `src/remora/web/static/index.html` now matches v2 semantics:
+  - Top-down hierarchy via negated Y in deterministic file-column layout.
+  - Directories removed from graph nodes and rendered as nested bounding boxes.
+  - `contains` edges skipped entirely; only `imports` and `inherits` render.
+  - `filesystem` chip toggles box visibility.
+  - `qualifyLabels` fallback avoids self-qualifying duplicates.
+  - Camera auto-fit runs after `loadGraph`.
+- Fixed runtime regression: Sigma `beforeRender` did not pass an event context in this build.
+  - Resolution: draw boxes using `renderer.getCanvases().edges.getContext("2d")`.
+- Fixed acceptance click interception:
+  - Compacted filter bar footprint (`max-width` + wrapped groups + vertical stack) so graph label click targets remain accessible.
 
 Validation:
-- `devenv shell -- pytest tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q` -> `60 passed`.
-- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs` -> `3 passed`.
-- During validation, fixed overlay pointer interception by setting overlay containers
-  to `pointer-events: none` and interactive controls to `pointer-events: auto`.
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
+  - `63 passed, 2 warnings`
 
 Constraints and direction:
 - Node labels remain always visible by default.
-- Scope remains graph-focused; sidebar behavior preserved.
+- Scope remains graph-focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Use `scripts/playwright_screenshot.py` for local graph UI snapshot verification.
+- Capture a fresh Playwright screenshot from the target demo flow to validate visual legibility with live data.
