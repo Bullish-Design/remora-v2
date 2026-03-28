@@ -1,6 +1,6 @@
 [project]
 name = "remora"
-version = "0.7.3"
+version = "0.7.4"
 description = "Reactive agent swarm substrate for code and beyond."
 readme = "README.md"
 requires-python = ">=3.13"
