@@ -150,3 +150,23 @@
   - Result: `6 passed`
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs`
   - Result: `4 passed, 2 warnings`
+
+## v7 implementation execution (CONCEPT_V7)
+
+- [x] Step 1: Sigma settings upgrade.
+- [ ] Step 2: Edge event handlers.
+- [ ] Step 3: Fix peripheral grid layout.
+- [ ] Step 4: Core zone canvas reservation + `setCustomBBox`.
+- [ ] Step 5: Zone separator rendering.
+- [ ] Step 6: Hierarchy box alpha overhaul.
+- [ ] Step 7: Edge narrative emphasis.
+- [ ] Step 8: Peripheral visual de-emphasis.
+- [ ] Step 9: Smooth graph updates with `animateNodes`.
+- [ ] Step 10: Tests and verification.
+
+### v7 verification (in progress)
+
+- `devenv shell -- uv sync --extra dev`
+  - Result: `synced`
+- `devenv shell -- pytest tests/unit/test_views.py -q -rs`
+  - Result: `6 passed`

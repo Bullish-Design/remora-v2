@@ -618,17 +618,31 @@
       sigmaCtorApi.EdgeCurveProgram ||
       sigmaCtorApi.programs?.EdgeCurveProgram ||
       sigmaRendering.EdgeCurveProgram;
+    const drawDiscNodeHover =
+      sigmaRendering.drawDiscNodeHover ||
+      sigmaApi.drawDiscNodeHover ||
+      sigmaCtorApi.drawDiscNodeHover;
 
     let selectedNode = null;
     let hoveredNode = null;
     const renderer = new Sigma(graph, document.getElementById("graph"), {
       labelRenderedSizeThreshold: 0,
       defaultDrawNodeLabel: drawNodeBoxLabel,
+      defaultDrawNodeHover: drawDiscNodeHover || undefined,
       defaultEdgeType: "arrow",
       edgeProgramClasses: edgeCurveProgram ? { curve: edgeCurveProgram } : undefined,
       stagePadding: LAYOUT.FIT_PADDING_PX,
       minCameraRatio: 0.35,
       maxCameraRatio: 3.2,
+      renderEdgeLabels: true,
+      edgeLabelSize: 10,
+      edgeLabelColor: { color: "#9fb2c8" },
+      edgeLabelFont: '"IBM Plex Mono", "IBM Plex Sans", sans-serif',
+      edgeLabelWeight: "500",
+      enableEdgeEvents: true,
+      hideEdgesOnMove: true,
+      hideLabelsOnMove: true,
+      cameraPanBoundaries: true,
       zIndex: true,
       nodeReducer: (node, data) => {
         const result = { ...data };

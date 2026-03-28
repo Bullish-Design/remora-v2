@@ -67,6 +67,12 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "length_norm" in html
     assert "function buildDirectorySet(nodes, nodeById)" in html
     assert "__synthetic_dir__:" in html
+    assert "renderEdgeLabels: true" in html
+    assert "enableEdgeEvents: true" in html
+    assert "hideEdgesOnMove: true" in html
+    assert "hideLabelsOnMove: true" in html
+    assert "cameraPanBoundaries: true" in html
+    assert "defaultDrawNodeHover: drawDiscNodeHover || undefined" in html
     assert "layout_zone" in html
     assert "peripheral_color" in html
     assert "context_tether" in html
