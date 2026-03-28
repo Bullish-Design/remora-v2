@@ -64,6 +64,9 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "function compressPathSegments(path, maxSegments = 4)" in html
     assert "PERIPHERAL_GRID_MIN_CELL_WIDTH" in html
     assert "function peripheralComponentCellWidth(component, nodeById)" in html
+    assert "CORE_ZONE_MIN_VERTICAL_RATIO" in html
+    assert "function computeZoneBounds(positions, zoneByNode, zone, nodeById)" in html
+    assert "coreZoneBounds = layout.coreBounds || null;" in html
     assert "fallback to deterministic hash suffix" in html
     assert "function colorWithAlpha(hex, alpha)" in html
     assert "length_norm" in html

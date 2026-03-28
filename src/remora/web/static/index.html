@@ -447,6 +447,8 @@
       PERIPHERAL_GRID_CELL_PAD: 3.2,
       PERIPHERAL_GRID_GAP_X: 7.4,
       PERIPHERAL_GRID_GAP_Y: 7.8,
+      CORE_ZONE_MIN_VERTICAL_RATIO: 0.60,
+      CORE_ZONE_SCALE_MAX: 2.4,
       PERIPHERAL_NODE_ALPHA: 0.62,
       PERIPHERAL_EDGE_ALPHA_SCALE: 0.58,
       OCCUPANCY_TARGET_MIN: 0.35,
@@ -1082,6 +1084,16 @@
       };
     }
 
+    function computeZoneBounds(positions, zoneByNode, zone, nodeById) {
+      const filtered = new Map();
+      for (const [nodeId, pos] of positions) {
+        if ((zoneByNode.get(nodeId) || "core") === zone) {
+          filtered.set(nodeId, pos);
+        }
+      }
+      return computePositionBounds(filtered, nodeById);
+    }
+
     function normalizeLayoutOccupancy(positions, nodeById) {
       if (!positions || positions.size === 0) return;
       const graphEl = document.getElementById("graph");
@@ -1485,9 +1497,29 @@
         }
       }
 
+      const coreBoundsBeforeScale = computeZoneBounds(positions, zoneByNode, "core", nodeById);
+      const allBoundsBeforeScale = computePositionBounds(positions, nodeById);
+      const coreHeight = coreBoundsBeforeScale.height || 0;
+      const allHeight = allBoundsBeforeScale.height || 0;
+      const currentCoreRatio = allHeight > 0 ? coreHeight / allHeight : 1;
+      if (coreHeight > 0 && allHeight > 0 && currentCoreRatio < LAYOUT.CORE_ZONE_MIN_VERTICAL_RATIO) {
+        const peripheralHeight = Math.max(0, allHeight - coreHeight);
+        const desiredScale =
+          (LAYOUT.CORE_ZONE_MIN_VERTICAL_RATIO * peripheralHeight) /
+          (coreHeight * (1 - LAYOUT.CORE_ZONE_MIN_VERTICAL_RATIO));
+        const yScale = Math.max(1, Math.min(LAYOUT.CORE_ZONE_SCALE_MAX, Number.isFinite(desiredScale) ? desiredScale : 1));
+        if (yScale > 1.01) {
+          for (const [nodeId, pos] of positions) {
+            if ((zoneByNode.get(nodeId) || "core") !== "core") continue;
+            pos.y = coreBoundsBeforeScale.centerY + (pos.y - coreBoundsBeforeScale.centerY) * yScale;
+          }
+        }
+      }
+
       normalizeLayoutOccupancy(positions, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
-      return { positions, boxes, directories, zoneByNode };
+      const coreBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
+      return { positions, boxes, directories, zoneByNode, coreBounds };
     }
 
     function layoutNodes(nodes, nodeById, edges) {
@@ -1579,8 +1611,28 @@
     }
 
     let boundingBoxes = new Map();
+    let coreZoneBounds = null;
 
     function computeFitBBox() {
+      if (
+        coreZoneBounds &&
+        Number.isFinite(coreZoneBounds.minX) &&
+        Number.isFinite(coreZoneBounds.maxX) &&
+        Number.isFinite(coreZoneBounds.minY) &&
+        Number.isFinite(coreZoneBounds.maxY)
+      ) {
+        return {
+          x: [
+            coreZoneBounds.minX - LAYOUT.FIT_MARGIN_LEFT_UNITS,
+            coreZoneBounds.maxX + LAYOUT.FIT_MARGIN_RIGHT_UNITS,
+          ],
+          y: [
+            coreZoneBounds.minY - LAYOUT.FIT_MARGIN_BOTTOM_UNITS,
+            coreZoneBounds.maxY + LAYOUT.FIT_MARGIN_TOP_UNITS,
+          ],
+        };
+      }
+
       let minX = Number.POSITIVE_INFINITY;
       let maxX = Number.NEGATIVE_INFINITY;
       let minY = Number.POSITIVE_INFINITY;
@@ -1680,9 +1732,21 @@
           box.x -= cx;
           box.y -= cy;
         }
+        if (layout.coreBounds) {
+          layout.coreBounds = {
+            ...layout.coreBounds,
+            minX: layout.coreBounds.minX - cx,
+            maxX: layout.coreBounds.maxX - cx,
+            minY: layout.coreBounds.minY - cy,
+            maxY: layout.coreBounds.maxY - cy,
+            centerX: layout.coreBounds.centerX - cx,
+            centerY: layout.coreBounds.centerY - cy,
+          };
+        }
       }
 
       boundingBoxes = layout.boxes;
+      coreZoneBounds = layout.coreBounds || null;
       graph.clear();
 
       for (const node of nodes) {

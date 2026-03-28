@@ -156,7 +156,7 @@
 - [x] Step 1: Sigma settings upgrade.
 - [x] Step 2: Edge event handlers.
 - [x] Step 3: Fix peripheral grid layout.
-- [ ] Step 4: Core zone canvas reservation + `setCustomBBox`.
+- [x] Step 4: Core zone canvas reservation + `setCustomBBox`.
 - [ ] Step 5: Zone separator rendering.
 - [ ] Step 6: Hierarchy box alpha overhaul.
 - [ ] Step 7: Edge narrative emphasis.
