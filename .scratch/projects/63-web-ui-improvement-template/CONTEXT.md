@@ -12,11 +12,12 @@ Current status:
 - v7 Step 5 complete: explicit zone separator rule + "supporting nodes" label in canvas render pass.
 - v7 Step 6 complete: hierarchy box alpha/tint recalibration for dark-background visibility.
 - v7 Step 7 complete: primary-core-edge detection and emphasis rendering in edge reducer.
-- Unit checks passing after Step 7.
+- v7 Step 8 complete: peripheral size/opacity de-emphasis and chip-style label treatment.
+- Unit checks passing after Step 8.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v7 Step 8 (peripheral visual de-emphasis + label chip hierarchy), then continue sequentially through Step 10.
+- Implement v7 Step 9 (animated graph updates via Sigma utils), then finish with Step 10 verification.

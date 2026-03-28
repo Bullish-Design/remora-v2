@@ -160,7 +160,7 @@
 - [x] Step 5: Zone separator rendering.
 - [x] Step 6: Hierarchy box alpha overhaul.
 - [x] Step 7: Edge narrative emphasis.
-- [ ] Step 8: Peripheral visual de-emphasis.
+- [x] Step 8: Peripheral visual de-emphasis.
 - [ ] Step 9: Smooth graph updates with `animateNodes`.
 - [ ] Step 10: Tests and verification.
 

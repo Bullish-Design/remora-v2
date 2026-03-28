@@ -488,11 +488,12 @@
       const hasQualifier = separatorIndex > 0;
       const primaryText = hasQualifier ? text.slice(separatorIndex + 2) : text;
       const qualifierText = hasQualifier ? text.slice(0, separatorIndex) : "";
+      const isPeripheral = data.layout_zone === "peripheral" && data.node_id !== selectedNode;
 
-      const primaryFontSize = 12;
-      const qualifierFontSize = 10;
-      const padX = 10;
-      const padY = 5;
+      const primaryFontSize = isPeripheral ? 11 : 14;
+      const qualifierFontSize = isPeripheral ? 9 : 10;
+      const padX = isPeripheral ? 8 : 10;
+      const padY = isPeripheral ? 4 : 5;
       const lineGap = hasQualifier ? 2 : 0;
 
       context.save();
@@ -525,14 +526,13 @@
         table:     "rgba(52, 211, 153, 0.10)",
         virtual:   "rgba(244, 114, 182, 0.10)",
       };
-      const isPeripheral = data.layout_zone === "peripheral" && data.node_id !== selectedNode;
-      const fillColor = isPeripheral ? "rgba(15, 23, 42, 0.55)" : (fillColors[nodeType] || "rgba(10, 16, 24, 0.9)");
+      const fillColor = isPeripheral ? "rgba(18, 30, 48, 0.72)" : (fillColors[nodeType] || "rgba(10, 16, 24, 0.9)");
 
       drawRoundedRect(context, x, y, boxWidth, boxHeight, borderRadius);
       context.fillStyle = fillColor;
       context.fill();
-      context.strokeStyle = data.color || "#22d3ee";
-      context.lineWidth = 1.4;
+      context.strokeStyle = isPeripheral ? "rgba(148, 163, 184, 0.55)" : (data.color || "#22d3ee");
+      context.lineWidth = isPeripheral ? 1.1 : 1.4;
 
       if (
         nodeType === "method" ||
@@ -564,13 +564,19 @@
         context.textAlign = "center";
         context.textBaseline = "top";
         context.font = "600 " + primaryFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
-        context.fillStyle = data.dimmed ? "rgba(229, 237, 247, 0.22)" : "#f1f5f9";
+        context.fillStyle = data.dimmed
+          ? (isPeripheral ? "rgba(229, 237, 247, 0.18)" : "rgba(229, 237, 247, 0.22)")
+          : (isPeripheral ? "rgba(226, 232, 240, 0.76)" : "#f1f5f9");
         context.fillText(primaryText, data.x, textTop);
         context.font = "500 " + qualifierFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
-        context.fillStyle = data.dimmed ? "rgba(148, 163, 184, 0.25)" : "rgba(203, 213, 225, 0.92)";
+        context.fillStyle = data.dimmed
+          ? "rgba(148, 163, 184, 0.22)"
+          : (isPeripheral ? "rgba(203, 213, 225, 0.66)" : "rgba(203, 213, 225, 0.92)");
         context.fillText(qualifierText, data.x, textTop + primaryFontSize + lineGap);
       } else {
-        context.fillStyle = data.dimmed ? "rgba(229, 237, 247, 0.15)" : "#e5edf7";
+        context.fillStyle = data.dimmed
+          ? "rgba(229, 237, 247, 0.15)"
+          : (isPeripheral ? "rgba(229, 237, 247, 0.72)" : "#e5edf7");
         context.textAlign = "center";
         context.textBaseline = "middle";
         context.font = "500 " + primaryFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
@@ -668,7 +674,7 @@
 
         if (peripheralMuted) {
           result.color = data.peripheral_color || colorWithAlpha(data.color || "#94a3b8", LAYOUT.PERIPHERAL_NODE_ALPHA);
-          result.size = Math.max(1.9, (data.size || 2.4) * 0.9);
+          result.size = Math.max(1.72, (data.size || 2.4) * 0.8);
         }
         if (data.dimmed) {
           result.color = "rgba(100, 116, 139, 0.2)";
@@ -1838,16 +1844,18 @@
         if (node.node_type === "directory") continue;
         const pos = layout.positions.get(node.node_id);
         if (!pos) continue;
+        const layoutZone = layout.zoneByNode.get(node.node_id) || "core";
+        const baseNodeSize = layoutZone === "peripheral" ? 1.92 : 2.4;
         graph.addNode(node.node_id, {
           node_id: node.node_id,
           label: node._displayLabel || node.name,
           forceLabel: true,
-          size: 2.4,
+          size: baseNodeSize,
           x: pos.x,
           y: pos.y,
           color: nodeColor(node.node_type, node.status),
-          peripheral_color: colorWithAlpha(nodeColor(node.node_type, node.status), LAYOUT.PERIPHERAL_NODE_ALPHA),
-          layout_zone: layout.zoneByNode.get(node.node_id) || "core",
+          peripheral_color: colorWithAlpha(nodeColor(node.node_type, node.status), 0.52),
+          layout_zone: layoutZone,
           node_type: node.node_type,
           file_path: node.file_path || "",
           status: node.status,
