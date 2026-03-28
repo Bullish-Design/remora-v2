@@ -1547,6 +1547,14 @@
       const sortedComponents = [...componentLayouts].sort(
         (a, b) => (b.score - a.score) || a.ids[0].localeCompare(b.ids[0]),
       );
+      const adjacency = new Map();
+      for (const edge of edges || []) {
+        if (edge.edge_type === "contains") continue;
+        if (!adjacency.has(edge.from_id)) adjacency.set(edge.from_id, new Set());
+        if (!adjacency.has(edge.to_id)) adjacency.set(edge.to_id, new Set());
+        adjacency.get(edge.from_id).add(edge.to_id);
+        adjacency.get(edge.to_id).add(edge.from_id);
+      }
       const coreComponents = [];
       const peripheralComponents = [];
       for (const component of sortedComponents) {
@@ -1560,6 +1568,42 @@
       if (coreComponents.length === 0 && peripheralComponents.length > 0) {
         coreComponents.push(peripheralComponents.shift());
       }
+      const coreNodeIds = new Set();
+      for (const component of coreComponents) {
+        for (const nodeId of component.ids) coreNodeIds.add(nodeId);
+      }
+      let refinedPeripheral = [...peripheralComponents];
+      let changed = true;
+      let safety = 0;
+      while (changed && safety < 8) {
+        changed = false;
+        safety += 1;
+        const nextPeripheral = [];
+        for (const component of refinedPeripheral) {
+          let promoteToCore = false;
+          for (const nodeId of component.ids) {
+            const neighbors = adjacency.get(nodeId);
+            if (!neighbors || neighbors.size === 0) continue;
+            for (const neighborId of neighbors) {
+              if (coreNodeIds.has(neighborId)) {
+                promoteToCore = true;
+                break;
+              }
+            }
+            if (promoteToCore) break;
+          }
+          if (promoteToCore) {
+            coreComponents.push(component);
+            for (const nodeId of component.ids) coreNodeIds.add(nodeId);
+            changed = true;
+          } else {
+            nextPeripheral.push(component);
+          }
+        }
+        refinedPeripheral = nextPeripheral;
+      }
+      peripheralComponents.length = 0;
+      peripheralComponents.push(...refinedPeripheral);
 
       const graphWidthPx = document.getElementById("graph")?.clientWidth || 1200;
       const inferredPackWidth =
