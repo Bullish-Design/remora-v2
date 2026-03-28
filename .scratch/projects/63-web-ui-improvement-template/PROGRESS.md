@@ -162,7 +162,7 @@
 - [x] Step 7: Edge narrative emphasis.
 - [x] Step 8: Peripheral visual de-emphasis.
 - [x] Step 9: Smooth graph updates with `animateNodes`.
-- [ ] Step 10: Tests and verification.
+- [x] Step 10: Tests and verification.
 
 ### v7 verification (in progress)
 
@@ -170,3 +170,7 @@
   - Result: `synced`
 - `devenv shell -- pytest tests/unit/test_views.py -q -rs`
   - Result: `6 passed`
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs`
+  - Result: `4 passed, 2 warnings`
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_views.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
+  - Result: `70 passed, 2 warnings`

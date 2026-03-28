@@ -14,11 +14,12 @@ Current status:
 - v7 Step 7 complete: primary-core-edge detection and emphasis rendering in edge reducer.
 - v7 Step 8 complete: peripheral size/opacity de-emphasis and chip-style label treatment.
 - v7 Step 9 complete: `Sigma.utils.animateNodes` wired for smooth graph reload transitions.
-- Unit checks passing after Step 9.
+- v7 Step 10 complete: acceptance metrics expanded and full web suite passing.
+- V7 concept plan implemented end-to-end with per-step commits/pushes.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v7 Step 10 acceptance/verification updates and run full web suite.
+- Finalize release handoff for this cycle: patch bump, commit, tag, and push.

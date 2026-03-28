@@ -1601,13 +1601,13 @@
 
       normalizeLayoutOccupancy(positions, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
-      const coreBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
+      const coreZoneBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
       const peripheralBounds = computeZoneBounds(positions, zoneByNode, "peripheral", nodeById);
       const separatorY =
-        peripheralBounds.height > 0 && coreBounds.height > 0
-          ? (coreBounds.minY + peripheralBounds.maxY) / 2
+        peripheralBounds.height > 0 && coreZoneBounds.height > 0
+          ? (coreZoneBounds.minY + peripheralBounds.maxY) / 2
           : null;
-      return { positions, boxes, directories, zoneByNode, coreBounds, peripheralBounds, separatorY };
+      return { positions, boxes, directories, zoneByNode, coreBounds: coreZoneBounds, peripheralBounds, separatorY };
     }
 
     function layoutNodes(nodes, nodeById, edges) {

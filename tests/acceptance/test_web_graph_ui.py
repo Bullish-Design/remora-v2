@@ -32,16 +32,24 @@ def _write_graph_ui_project(root: Path) -> Path:
         root / "src" / "pricing.py",
         (
             "def apply_tax_rate(amount: float, rate: float = 0.07) -> float:\n"
-            "    return amount * (1 + rate)\n"
+            "    return amount * (1 + rate)\n\n"
+            "def discount_for_tier(amount: float, tier: str = \"standard\") -> float:\n"
+            "    return amount * (0.9 if tier == \"vip\" else 0.97)\n"
         ),
     )
     write_file(
         root / "src" / "orders.py",
         (
-            "from pricing import apply_tax_rate\n\n"
+            "from pricing import apply_tax_rate, discount_for_tier\n"
+            "from legacy_helpers import legacy_discount\n"
+            "from observers.audit import AuditObserver\n\n"
             "class Order:\n"
             "    def total(self, subtotal: float) -> float:\n"
-            "        taxed = apply_tax_rate(subtotal)\n"
+            "        discounted = discount_for_tier(subtotal, \"vip\")\n"
+            "        taxed = apply_tax_rate(discounted)\n"
+            "        observed = AuditObserver().notify(\"computed\")\n"
+            "        if observed:\n"
+            "            taxed = legacy_discount(taxed)\n"
             "        return round(taxed, 2)\n\n"
             "def apply_tax(amount: float) -> float:\n"
             "    return apply_tax_rate(amount)\n"
@@ -53,6 +61,10 @@ def _write_graph_ui_project(root: Path) -> Path:
             "def legacy_discount(amount: float) -> float:\n"
             "    return amount * 0.95\n"
         ),
+    )
+    write_file(
+        root / "src" / "observers" / "__init__.py",
+        "",
     )
     write_file(
         root / "src" / "observers" / "audit.py",
@@ -344,17 +356,52 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                   overlapArea += w * h;
                 }
               }
-              const overlapRatio = areaSum > 0 ? overlapArea / areaSum : 0;
-              const occupancy = areaSum > 0 ? Math.min(1, areaSum / viewportArea) : 0;
               const overallZoneArea = boxArea(overallBox);
               const coreZoneArea = boxArea(zoneBoxes.core);
               const peripheralZoneArea = boxArea(zoneBoxes.peripheral);
+              const overlapRatio = areaSum > 0 ? overlapArea / areaSum : 0;
+              const occupancy =
+                areaSum > 0
+                  ? Math.min(1, areaSum / viewportArea)
+                  : (overallZoneArea > 0 ? Math.min(1, overallZoneArea / viewportArea) : 0);
               const coreZoneOccupancy = overallZoneArea > 0 ? coreZoneArea / overallZoneArea : 0;
               const peripheralZoneFootprint = overallZoneArea > 0 ? peripheralZoneArea / overallZoneArea : 0;
+              const overallZoneHeight = Math.max(1, overallBox.maxY - overallBox.minY);
+              const coreZoneHeight = zoneBoxes.core.count > 0 ? Math.max(1, zoneBoxes.core.maxY - zoneBoxes.core.minY) : 0;
+              const coreZoneVerticalShare = coreZoneHeight / overallZoneHeight;
+
+              const peripheralBoxes =
+                typeof nodeLabelHitboxes !== "undefined"
+                  ? [...nodeLabelHitboxes.entries()]
+                      .filter(([nodeId]) => {
+                        if (!graph.hasNode(nodeId)) return false;
+                        const attrs = graph.getNodeAttributes(nodeId);
+                        return !attrs.hidden && attrs.layout_zone === "peripheral";
+                      })
+                      .map(([, box]) => box)
+                  : [];
+              let peripheralAreaSum = 0;
+              let peripheralOverlapArea = 0;
+              for (let i = 0; i < peripheralBoxes.length; i++) {
+                const a = peripheralBoxes[i];
+                peripheralAreaSum += Math.max(0, a.width) * Math.max(0, a.height);
+                for (let j = i + 1; j < peripheralBoxes.length; j++) {
+                  const b = peripheralBoxes[j];
+                  const left = Math.max(a.x, b.x);
+                  const top = Math.max(a.y, b.y);
+                  const right = Math.min(a.x + a.width, b.x + b.width);
+                  const bottom = Math.min(a.y + a.height, b.y + b.height);
+                  peripheralOverlapArea += Math.max(0, right - left) * Math.max(0, bottom - top);
+                }
+              }
+              const peripheralLabelOverlapRatio =
+                peripheralAreaSum > 0 ? peripheralOverlapArea / peripheralAreaSum : 0;
 
               const edges = graph.edges();
               let edgeTotal = 0;
               let edgeSpanVisible = 0;
+              let primaryChainEdgeCount = 0;
+              let emphasizedEdgeCount = 0;
               for (const edgeId of edges) {
                 const attrs = graph.getEdgeAttributes(edgeId);
                 if (attrs.hidden) continue;
@@ -368,7 +415,22 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 const p2 = renderer.graphToViewport({ x: target.x, y: target.y });
                 const span = Math.hypot(p1.x - p2.x, p1.y - p2.y);
                 if (span > 4) edgeSpanVisible += 1;
+                if (attrs.is_primary_chain) primaryChainEdgeCount += 1;
+                const display = typeof renderer.getEdgeDisplayData === "function"
+                  ? renderer.getEdgeDisplayData(edgeId)
+                  : null;
+                const displaySize = Number(display?.size ?? attrs.size ?? 0);
+                if (displaySize > 2.6) emphasizedEdgeCount += 1;
               }
+
+              const renderEdgeLabelsEnabled =
+                typeof renderer.getSetting === "function"
+                  ? renderer.getSetting("renderEdgeLabels")
+                  : null;
+              const enableEdgeEventsEnabled =
+                typeof renderer.getSetting === "function"
+                  ? renderer.getSetting("enableEdgeEvents")
+                  : null;
 
               return {
                 total,
@@ -379,10 +441,16 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 core_zone_nodes: zoneCounts.core,
                 peripheral_zone_nodes: zoneCounts.peripheral,
                 core_zone_occupancy: coreZoneOccupancy,
+                core_zone_vertical_share: coreZoneVerticalShare,
                 peripheral_zone_footprint: peripheralZoneFootprint,
+                peripheral_label_overlap_ratio: peripheralLabelOverlapRatio,
                 overlap_ratio: overlapRatio,
                 edge_total: edgeTotal,
                 edge_span_visible: edgeSpanVisible,
+                primary_chain_edge_count: primaryChainEdgeCount,
+                emphasized_edge_count: emphasizedEdgeCount,
+                render_edge_labels_enabled: renderEdgeLabelsEnabled,
+                enable_edge_events_enabled: enableEdgeEventsEnabled,
               };
             }
             """
@@ -396,9 +464,15 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["absolute_label_count"] == 0, visibility
         assert visibility["overlap_ratio"] < 0.45, visibility
         assert visibility["core_zone_nodes"] > 0, visibility
+        assert visibility["core_zone_vertical_share"] >= 0.55, visibility
+        assert visibility["peripheral_label_overlap_ratio"] < 0.02, visibility
         if visibility["peripheral_zone_nodes"] > 0:
             assert visibility["core_zone_occupancy"] >= 0.02, visibility
             assert visibility["peripheral_zone_footprint"] <= 0.95, visibility
+        assert visibility["primary_chain_edge_count"] > 0, visibility
+        assert visibility["emphasized_edge_count"] > 0, visibility
+        assert visibility["render_edge_labels_enabled"] is True, visibility
+        assert visibility["enable_edge_events_enabled"] is True, visibility
         if visibility["edge_total"] > 0:
             assert visibility["edge_span_visible"] > 0, visibility
 
