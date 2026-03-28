@@ -158,7 +158,7 @@
 - [x] Step 3: Fix peripheral grid layout.
 - [x] Step 4: Core zone canvas reservation + `setCustomBBox`.
 - [x] Step 5: Zone separator rendering.
-- [ ] Step 6: Hierarchy box alpha overhaul.
+- [x] Step 6: Hierarchy box alpha overhaul.
 - [ ] Step 7: Edge narrative emphasis.
 - [ ] Step 8: Peripheral visual de-emphasis.
 - [ ] Step 9: Smooth graph updates with `animateNodes`.

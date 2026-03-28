@@ -2269,27 +2269,27 @@ function addTimelineEvent(eventType, payload) {
         const isTopLevel = depth <= 2;
         const depthFade = depth > 1 ? Math.min(0.65, (depth - 1) * 0.12 * zoomOut) : 0;
         const fillAlpha = isTopLevel
-          ? Math.min(0.34, Math.max(0.16, 0.24 - depthFade * 0.22))
-          : Math.min(0.3, Math.max(0.06, 0.1 + depth * 0.025 - depthFade * 0.25));
+          ? Math.min(0.24, Math.max(0.12, 0.18 - depthFade * 0.08))
+          : Math.min(0.18, Math.max(0.08, 0.11 - depthFade * 0.05));
         const strokeAlpha = isTopLevel
-          ? Math.min(0.98, Math.max(0.62, 0.78 - depthFade * 0.18))
-          : Math.min(0.92, Math.max(0.2, 0.36 + depth * 0.08 - depthFade * 0.6));
+          ? Math.min(0.84, Math.max(0.40, 0.56 - depthFade * 0.12))
+          : Math.min(0.58, Math.max(0.28, 0.38 - depthFade * 0.08));
         const labelAlpha = isTopLevel
-          ? Math.min(1.0, Math.max(0.9, 0.96 - depthFade * 0.1))
-          : Math.min(0.98, Math.max(0.62, 0.78 + depth * 0.08 - depthFade * 0.3));
-        const strokeBaseColor = isTopLevel ? "226, 232, 240" : "203, 213, 225";
-        const fillBaseColor = isTopLevel ? "226, 232, 240" : "203, 213, 225";
+          ? Math.min(0.94, Math.max(0.70, 0.82 - depthFade * 0.08))
+          : Math.min(0.82, Math.max(0.62, 0.68 - depthFade * 0.06));
+        const strokeBaseColor = isTopLevel ? "186, 198, 222" : "154, 168, 196";
+        const fillBaseColor = isTopLevel ? "116, 132, 168" : "98, 114, 148";
         const headerMinWidth = isTopLevel ? 72 : minHeaderWidth;
         const headerMinHeight = isTopLevel ? 24 : minHeaderHeight;
 
         context.fillStyle = "rgba(" + fillBaseColor + ", " + fillAlpha + ")";
         context.strokeStyle = "rgba(" + strokeBaseColor + ", " + strokeAlpha + ")";
-        context.lineWidth = isTopLevel ? 1.6 : 1.2;
+        context.lineWidth = isTopLevel ? 1.5 : 1.0;
         drawRoundedRect(context, tl.x, tl.y, screenW, screenH, 8);
         context.fill();
         context.stroke();
 
-        context.fillStyle = "rgba(226, 232, 240, " + labelAlpha + ")";
+        context.fillStyle = "rgba(214, 222, 238, " + labelAlpha + ")";
         context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
         context.textAlign = "left";
         context.textBaseline = "top";

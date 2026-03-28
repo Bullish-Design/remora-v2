@@ -10,11 +10,12 @@ Current status:
 - v7 Step 3 complete: peripheral dock now uses grid-cell placement with min width + enforced gaps.
 - v7 Step 4 complete: core-zone minimum vertical reservation and core-bounded custom camera fit.
 - v7 Step 5 complete: explicit zone separator rule + "supporting nodes" label in canvas render pass.
-- Unit checks passing after Step 5.
+- v7 Step 6 complete: hierarchy box alpha/tint recalibration for dark-background visibility.
+- Unit checks passing after Step 6.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v7 Step 6 (hierarchy box alpha/tint overhaul), then continue sequentially through Step 10.
+- Implement v7 Step 7 (primary edge narrative emphasis), then continue sequentially through Step 10.

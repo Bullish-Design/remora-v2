@@ -69,6 +69,9 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "coreZoneBounds = layout.coreBounds || null;" in html
     assert "zoneSeparatorY = Number.isFinite(layout.separatorY) ? layout.separatorY : null;" in html
     assert "\"supporting nodes\"" in html
+    assert "Math.max(0.12, 0.18 - depthFade * 0.08)" in html
+    assert "Math.max(0.40, 0.56 - depthFade * 0.12)" in html
+    assert "\"116, 132, 168\"" in html
     assert "fallback to deterministic hash suffix" in html
     assert "function colorWithAlpha(hex, alpha)" in html
     assert "length_norm" in html
