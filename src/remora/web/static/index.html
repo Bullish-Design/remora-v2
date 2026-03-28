@@ -448,7 +448,7 @@
       PERIPHERAL_DOCK_GAP_X: 4.5,
       PERIPHERAL_DOCK_GAP_Y: 3.8,
       PERIPHERAL_DOCK_MAX_WIDTH: 132.0,
-      PERIPHERAL_GRID_MIN_CELL_WIDTH: 16.0,
+      PERIPHERAL_GRID_MIN_CELL_WIDTH: 19.5,
       PERIPHERAL_GRID_CELL_PAD: 3.2,
       PERIPHERAL_GRID_GAP_X: 7.4,
       PERIPHERAL_GRID_GAP_Y: 5.2,
@@ -724,15 +724,23 @@
         if (data.is_context_tether) {
           const sourceDimmed = graph.getNodeAttribute(sourceId, "dimmed");
           const targetDimmed = graph.getNodeAttribute(targetId, "dimmed");
+          const sourceZone = graph.getNodeAttribute(sourceId, "layout_zone") || "core";
+          const targetZone = graph.getNodeAttribute(targetId, "layout_zone") || "core";
+          const bothPeripheral = sourceZone === "peripheral" && targetZone === "peripheral";
           const inHoverFocus =
             !!hoveredNode &&
             (sourceId === hoveredNode || targetId === hoveredNode || (sourceDimmed === false && targetDimmed === false));
-          const alpha = touchesSelected || inHoverFocus ? 0.7 : 0.32;
-          const edgeAlpha = isSelectedEdge || isHoveredEdge ? 0.82 : alpha;
+          const baseAlpha = bothPeripheral ? 0.16 : 0.32;
+          const focusAlpha = bothPeripheral ? 0.5 : 0.7;
+          const alpha = touchesSelected || inHoverFocus ? focusAlpha : baseAlpha;
+          const edgeAlpha = isSelectedEdge || isHoveredEdge ? (bothPeripheral ? 0.62 : 0.82) : alpha;
+          const baseSize = bothPeripheral ? 0.72 : 0.86;
+          const focusSize = bothPeripheral ? 0.94 : 1.2;
+          const selectedSize = bothPeripheral ? 1.06 : 1.35;
           return {
             ...data,
             color: colorWithAlpha("#94a3b8", edgeAlpha),
-            size: isSelectedEdge || isHoveredEdge ? 1.35 : (touchesSelected || inHoverFocus ? 1.2 : 0.86),
+            size: isSelectedEdge || isHoveredEdge ? selectedSize : (touchesSelected || inHoverFocus ? focusSize : baseSize),
             type: "line",
           };
         }
