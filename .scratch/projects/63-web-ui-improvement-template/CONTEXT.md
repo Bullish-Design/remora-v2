@@ -11,6 +11,7 @@ Current status:
 - Removed legacy jitter/band layout helpers.
 - Validation executed with unit + acceptance tests.
 - Release follow-up requested: bump project version to `0.6.0`, commit, push, tag.
+- Added screenshot utility request: local Playwright capture script for this repo.
 
 Validation:
 - `devenv shell -- pytest tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q` -> `60 passed`.
@@ -23,4 +24,4 @@ Constraints and direction:
 - Scope remains graph-focused; sidebar behavior preserved.
 
 Next immediate step:
-- Finalize release update (`0.6.0`) with commit/push/tag.
+- Use `scripts/playwright_screenshot.py` for local graph UI snapshot verification.

@@ -39,3 +39,7 @@
 
 - [x] Bump package version to `0.6.0` in runtime and packaging metadata.
 - [ ] Commit, push, and publish tag `v0.6.0`.
+
+## Follow-up utility
+
+- [x] Add local Playwright screenshot helper script in `scripts/playwright_screenshot.py`.

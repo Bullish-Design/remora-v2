@@ -402,11 +402,13 @@
     const labelMeasureCanvas = document.createElement("canvas");
     const labelMeasureContext = labelMeasureCanvas.getContext("2d");
     const LAYOUT = Object.freeze({
-      COL_PAD: 3.0,
-      ROW_HEIGHT: 2.2,
-      SUB_ROW_HEIGHT: 1.6,
-      DIR_HEADER_GAP: 1.2,
-      MIN_COL_WIDTH: 4.0,
+      COL_PAD: 1.8,
+      ROW_HEIGHT: 6.0,
+      SUB_ROW_HEIGHT: 3.4,
+      DIR_HEADER_GAP: 2.0,
+      MIN_COL_WIDTH: 3.4,
+      MAX_COL_WIDTH: 10.5,
+      COL_Y_STAGGER: 1.3,
       PX_PER_UNIT: 14,
       LABEL_PAD_PX: 20,
     });
@@ -642,7 +644,8 @@
           const px = measureLabelWidth(n._displayLabel || n.name);
           if (px > maxPx) maxPx = px;
         }
-        return Math.max(LAYOUT.MIN_COL_WIDTH, maxPx / LAYOUT.PX_PER_UNIT);
+        const width = Math.max(LAYOUT.MIN_COL_WIDTH, maxPx / LAYOUT.PX_PER_UNIT);
+        return Math.min(LAYOUT.MAX_COL_WIDTH, width);
       });
 
       const colX = [];
@@ -661,18 +664,19 @@
           a.name.localeCompare(b.name)
         );
 
-        let prevDepth = -1;
-        let slotInDepth = 0;
+        const slotsByDepth = {};
+        let rowIndex = 0;
         for (const n of group) {
           const d = depthOf[n.node_id];
-          if (d === prevDepth) {
-            slotInDepth++;
-          } else {
-            slotInDepth = 0;
-            prevDepth = d;
-          }
-          const y = d * LAYOUT.ROW_HEIGHT + slotInDepth * LAYOUT.SUB_ROW_HEIGHT;
+          const slotInDepth = slotsByDepth[d] || 0;
+          slotsByDepth[d] = slotInDepth + 1;
+          const y =
+            d * LAYOUT.ROW_HEIGHT +
+            rowIndex * LAYOUT.SUB_ROW_HEIGHT +
+            slotInDepth * 0.6 +
+            ((ci % 2 === 0) ? 0 : LAYOUT.COL_Y_STAGGER);
           positions.set(n.node_id, { x: colX[ci], y });
+          rowIndex += 1;
         }
       }
 
