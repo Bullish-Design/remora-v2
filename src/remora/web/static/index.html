@@ -887,15 +887,77 @@
       return parts[0] || "__root__";
     }
 
-    function layoutNodesV4FileWrap(nodes, nodeById, depthOf = computeNodeDepths(nodes, nodeById)) {
+    function normalizePath(value) {
+      return String(value || "")
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "")
+        .replace(/\/+$/, "");
+    }
 
+    function directoryPrefixFromFilePath(filePath) {
+      const normalized = normalizePath(filePath);
+      if (!normalized) return "";
+      const parts = normalized.split("/").filter(Boolean);
+      if (parts.length <= 1) return "";
+      return parts.slice(0, -1).join("/");
+    }
+
+    function buildDirectorySet(nodes, nodeById) {
+      const directoryByPrefix = new Map();
       const directories = [];
+
+      for (const node of nodes) {
+        if (node.node_type !== "directory") continue;
+        const prefix = normalizePath(node.file_path) || normalizePath(node.name);
+        const enriched = { ...node, _path_prefix: prefix };
+        nodeById[node.node_id] = enriched;
+        directories.push(enriched);
+        if (prefix && !directoryByPrefix.has(prefix)) {
+          directoryByPrefix.set(prefix, enriched);
+        }
+      }
+
+      const requiredPrefixes = new Set();
+      for (const node of nodes) {
+        if (node.node_type === "directory") continue;
+        const directoryPrefix = directoryPrefixFromFilePath(node.file_path);
+        if (!directoryPrefix) continue;
+        const parts = directoryPrefix.split("/");
+        for (let i = 1; i <= parts.length; i++) {
+          requiredPrefixes.add(parts.slice(0, i).join("/"));
+        }
+      }
+
+      const sortedPrefixes = [...requiredPrefixes].sort(
+        (a, b) => (a.split("/").length - b.split("/").length) || a.localeCompare(b),
+      );
+      for (const prefix of sortedPrefixes) {
+        if (directoryByPrefix.has(prefix)) continue;
+        const parts = prefix.split("/");
+        const parentPrefix = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+        const parentId = parentPrefix ? (directoryByPrefix.get(parentPrefix)?.node_id || null) : null;
+        const syntheticId = "__synthetic_dir__:" + prefix;
+        const synthetic = {
+          node_id: syntheticId,
+          parent_id: parentId,
+          name: parts[parts.length - 1],
+          node_type: "directory",
+          file_path: prefix,
+          _path_prefix: prefix,
+        };
+        nodeById[syntheticId] = synthetic;
+        directories.push(synthetic);
+        directoryByPrefix.set(prefix, synthetic);
+      }
+
+      return directories;
+    }
+
+    function layoutNodesV4FileWrap(nodes, nodeById, depthOf = computeNodeDepths(nodes, nodeById)) {
+      const directories = buildDirectorySet(nodes, nodeById);
       const fileGroups = {};
       for (const n of nodes) {
-        if (n.node_type === "directory") {
-          directories.push(n);
-          continue;
-        }
+        if (n.node_type === "directory") continue;
         const fp = n.file_path || "__unfiled__";
         (fileGroups[fp] ||= []).push(n);
       }
@@ -1038,7 +1100,7 @@
 
     function layoutNodesV5Component(nodes, nodeById, edges) {
       const depthOf = computeNodeDepths(nodes, nodeById);
-      const directories = nodes.filter((node) => node.node_type === "directory");
+      const directories = buildDirectorySet(nodes, nodeById);
       const contentNodes = nodes.filter((node) => node.node_type !== "directory");
 
       const { components } = computeConnectedComponents(contentNodes, edges || []);
@@ -1170,9 +1232,26 @@
       return false;
     }
 
+    function directoryDepth(dir, depthOf) {
+      const explicit = depthOf[dir.node_id];
+      if (Number.isFinite(explicit)) return explicit;
+      const prefix = normalizePath(dir._path_prefix || dir.file_path || "");
+      return prefix ? prefix.split("/").length : 0;
+    }
+
+    function nodeBelongsToDirectory(nodeId, dir, nodeById) {
+      if (isDescendantOf(nodeId, dir.node_id, nodeById)) return true;
+      const node = nodeById[nodeId];
+      if (!node) return false;
+      const nodePath = normalizePath(node.file_path || "");
+      const dirPath = normalizePath(dir._path_prefix || dir.file_path || "");
+      if (!nodePath || !dirPath) return false;
+      return nodePath.startsWith(dirPath + "/");
+    }
+
     function computeBoundingBoxes(directories, positions, nodeById, depthOf) {
       const sorted = [...directories].sort((a, b) =>
-        (depthOf[b.node_id] - depthOf[a.node_id]) || a.name.localeCompare(b.name)
+        (directoryDepth(b, depthOf) - directoryDepth(a, depthOf)) || a.name.localeCompare(b.name)
       );
 
       const boxes = new Map();
@@ -1181,7 +1260,7 @@
         const ys = [];
 
         for (const [nid, pos] of positions) {
-          if (isDescendantOf(nid, dir.node_id, nodeById)) {
+          if (nodeBelongsToDirectory(nid, dir, nodeById)) {
             xs.push(pos.x);
             ys.push(pos.y);
           }
@@ -1209,7 +1288,7 @@
           w: (maxX - minX) + LAYOUT.BOX_PAD * 2,
           h: (maxY - minY) + LAYOUT.BOX_PAD * 2 + LAYOUT.BOX_HEADER,
           label: dir.name,
-          depth: depthOf[dir.node_id],
+          depth: directoryDepth(dir, depthOf),
         });
       }
 
