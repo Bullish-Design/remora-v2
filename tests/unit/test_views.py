@@ -58,6 +58,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
     assert "function ensureUniqueDisplayLabels(nodes, nodeById)" in html
     assert "fallback to deterministic hash suffix" in html
+    assert "function colorWithAlpha(hex, alpha)" in html
+    assert "length_norm" in html
     assert "const rows = [];" in html
     assert 'data-filter-edge-emphasis="cross-file"' in html
     assert "edgeEmphasisCrossFileOnly" in html
