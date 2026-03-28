@@ -141,7 +141,7 @@
 - [x] Step 2: Add core/peripheral component zoning and peripheral docking.
 - [x] Step 3: Add peripheral visual treatment (zone-aware node/edge emphasis).
 - [x] Step 4: Increase hierarchy box/header legibility while keeping nested declutter.
-- [ ] Step 5: Add optional context tethers for edge-less nodes.
+- [x] Step 5: Add optional context tethers for edge-less nodes.
 - [ ] Step 6: Extend acceptance metrics and finalize verification.
 
 ### v6 verification (in progress)

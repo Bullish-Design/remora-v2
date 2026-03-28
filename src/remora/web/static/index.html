@@ -323,6 +323,10 @@
           <span class="chip-swatch" style="background: #7cc4ff;"></span>
           cross-file
         </button>
+        <button class="filter-chip active" data-filter-tethers="context">
+          <span class="chip-swatch" style="background: #94a3b8;"></span>
+          context tethers
+        </button>
       </div>
       <div class="filter-separator"></div>
       <div class="filter-group">
@@ -660,6 +664,20 @@
         const sourceId = graph.source(edge);
         const targetId = graph.target(edge);
         const touchesSelected = !!selectedNode && (sourceId === selectedNode || targetId === selectedNode);
+        if (data.is_context_tether) {
+          const sourceDimmed = graph.getNodeAttribute(sourceId, "dimmed");
+          const targetDimmed = graph.getNodeAttribute(targetId, "dimmed");
+          const inHoverFocus =
+            !!hoveredNode &&
+            (sourceId === hoveredNode || targetId === hoveredNode || (sourceDimmed === false && targetDimmed === false));
+          const alpha = touchesSelected || inHoverFocus ? 0.7 : 0.32;
+          return {
+            ...data,
+            color: colorWithAlpha("#94a3b8", alpha),
+            size: touchesSelected || inHoverFocus ? 1.2 : 0.86,
+            type: "line",
+          };
+        }
         const sourceDimmed = graph.getNodeAttribute(sourceId, "dimmed");
         const targetDimmed = graph.getNodeAttribute(targetId, "dimmed");
         const touchesHoverFocus =
@@ -697,6 +715,7 @@
       hiddenNodeTypes: new Set(),
       hiddenEdgeTypes: new Set(),
       edgeEmphasisCrossFileOnly: false,
+      showContextTethers: true,
       showBoundingBoxes: true,
     };
 
@@ -708,7 +727,8 @@
       graph.forEachEdge((edge, attrs) => {
         const hiddenByType = filterState.hiddenEdgeTypes.has(attrs.label);
         const hiddenByEmphasis = filterState.edgeEmphasisCrossFileOnly && !attrs.is_cross_file;
-        graph.setEdgeAttribute(edge, "hidden", hiddenByType || hiddenByEmphasis);
+        const hiddenByTether = !filterState.showContextTethers && !!attrs.is_context_tether;
+        graph.setEdgeAttribute(edge, "hidden", hiddenByType || hiddenByEmphasis || hiddenByTether);
       });
       renderer.refresh();
     }
@@ -1633,6 +1653,11 @@
         preparedEdges.push({ edge, distance });
       }
 
+      const degreeByNode = new Map();
+      graph.forEachNode((nodeId) => {
+        degreeByNode.set(nodeId, 0);
+      });
+
       for (const item of preparedEdges) {
         const edge = item.edge;
         const key = edge.from_id + "->" + edge.to_id + ":" + edge.edge_type;
@@ -1658,6 +1683,67 @@
           length_norm: item.distance / maxEdgeDistance,
           visual_type:
             edge.edge_type === "imports" && isCrossFile && edgeCurveProgram ? "curve" : "arrow",
+        });
+        degreeByNode.set(edge.from_id, (degreeByNode.get(edge.from_id) || 0) + 1);
+        degreeByNode.set(edge.to_id, (degreeByNode.get(edge.to_id) || 0) + 1);
+      }
+
+      const fileRepresentative = new Map();
+      graph.forEachNode((nodeId, attrs) => {
+        const filePath = attrs.file_path || "";
+        if (!filePath) return;
+        const degree = degreeByNode.get(nodeId) || 0;
+        const existing = fileRepresentative.get(filePath);
+        if (!existing || degree > existing.degree) {
+          fileRepresentative.set(filePath, { nodeId, degree });
+        }
+      });
+
+      const rootCandidates = new Map();
+      graph.forEachNode((nodeId, attrs) => {
+        const degree = degreeByNode.get(nodeId) || 0;
+        if (degree <= 0) return;
+        const root = nodePathRoot({ file_path: attrs.file_path || "" });
+        const existing = rootCandidates.get(root);
+        if (!existing || degree > existing.degree) {
+          rootCandidates.set(root, { nodeId, degree });
+        }
+      });
+
+      for (const [nodeId, degree] of degreeByNode.entries()) {
+        if (degree > 0) continue;
+        if (!graph.hasNode(nodeId)) continue;
+        const filePath = graph.getNodeAttribute(nodeId, "file_path") || "";
+        let anchorId = fileRepresentative.get(filePath)?.nodeId || null;
+        if (anchorId === nodeId) anchorId = null;
+        if (!anchorId) {
+          const root = nodePathRoot({ file_path: filePath });
+          const fallback = rootCandidates.get(root)?.nodeId || null;
+          if (fallback && fallback !== nodeId) anchorId = fallback;
+        }
+        if (!anchorId || !graph.hasNode(anchorId)) continue;
+        const key = "__context_tether__:" + anchorId + "->" + nodeId;
+        if (graph.hasEdge(key)) continue;
+        const sourcePath = graph.getNodeAttribute(anchorId, "file_path") || "";
+        const targetPath = filePath;
+        const sourceZone = graph.getNodeAttribute(anchorId, "layout_zone") || "core";
+        const targetZone = graph.getNodeAttribute(nodeId, "layout_zone") || "core";
+        const layoutZone =
+          sourceZone === "peripheral" && targetZone === "peripheral"
+            ? "peripheral"
+            : (sourceZone === targetZone ? sourceZone : "cross-zone");
+        graph.addEdgeWithKey(key, anchorId, nodeId, {
+          label: "context_tether",
+          size: 1,
+          source_file_path: sourcePath,
+          target_file_path: targetPath,
+          is_cross_file: !!sourcePath && !!targetPath && sourcePath !== targetPath,
+          source_zone: sourceZone,
+          target_zone: targetZone,
+          layout_zone: layoutZone,
+          is_context_tether: true,
+          length_norm: 0.5,
+          visual_type: "line",
         });
       }
 
@@ -2107,6 +2193,7 @@ function addTimelineEvent(eventType, payload) {
       const nodeType = chip.dataset.filterNode;
       const edgeType = chip.dataset.filterEdge;
       const edgeEmphasis = chip.dataset.filterEdgeEmphasis;
+      const tetherToggle = chip.dataset.filterTethers;
       const boxToggle = chip.dataset.filterBoxes;
 
       if (nodeType) {
@@ -2130,6 +2217,11 @@ function addTimelineEvent(eventType, payload) {
       if (edgeEmphasis === "cross-file") {
         filterState.edgeEmphasisCrossFileOnly = !filterState.edgeEmphasisCrossFileOnly;
         chip.classList.toggle("active", filterState.edgeEmphasisCrossFileOnly);
+      }
+
+      if (tetherToggle === "context") {
+        filterState.showContextTethers = !filterState.showContextTethers;
+        chip.classList.toggle("active", filterState.showContextTethers);
       }
 
       if (boxToggle) {
