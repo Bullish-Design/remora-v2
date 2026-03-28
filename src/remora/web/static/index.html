@@ -637,99 +637,117 @@
         (fileGroups[fp] ||= []).push(n);
       }
 
-      const sortedFilePaths = Object.keys(fileGroups).sort();
+      const sortedFiles = Object.keys(fileGroups).sort();
 
-      const colWidths = sortedFilePaths.map((fp) => {
-        const groupNodes = fileGroups[fp];
+      const colWidths = sortedFiles.map((fp) => {
         let maxPx = 0;
-        for (const n of groupNodes) {
+        for (const n of fileGroups[fp]) {
           const px = measureLabelWidth(n._displayLabel || n.name);
           if (px > maxPx) maxPx = px;
         }
-        const width = Math.max(LAYOUT.MIN_COL_WIDTH, maxPx / LAYOUT.PX_PER_UNIT);
-        return Math.min(LAYOUT.MAX_COL_WIDTH, width);
+        return Math.max(LAYOUT.MIN_COL_WIDTH, maxPx / LAYOUT.PX_PER_UNIT);
       });
 
       const colX = [];
       let xCursor = 0;
-      for (let i = 0; i < sortedFilePaths.length; i++) {
+      for (let i = 0; i < sortedFiles.length; i++) {
         colX.push(xCursor + colWidths[i] / 2);
         xCursor += colWidths[i] + LAYOUT.COL_PAD;
       }
 
       const positions = new Map();
-      for (let ci = 0; ci < sortedFilePaths.length; ci++) {
-        const group = fileGroups[sortedFilePaths[ci]];
+      for (let ci = 0; ci < sortedFiles.length; ci++) {
+        const group = fileGroups[sortedFiles[ci]];
         group.sort((a, b) =>
           (depthOf[a.node_id] - depthOf[b.node_id]) ||
           (a.start_line - b.start_line) ||
           a.name.localeCompare(b.name)
         );
 
-        const slotsByDepth = {};
-        let rowIndex = 0;
+        let prevDepth = -1;
+        let slotInDepth = 0;
         for (const n of group) {
           const d = depthOf[n.node_id];
-          const slotInDepth = slotsByDepth[d] || 0;
-          slotsByDepth[d] = slotInDepth + 1;
-          const y =
-            d * LAYOUT.ROW_HEIGHT +
-            rowIndex * LAYOUT.SUB_ROW_HEIGHT +
-            slotInDepth * 0.6 +
-            ((ci % 2 === 0) ? 0 : LAYOUT.COL_Y_STAGGER);
+          if (d === prevDepth) {
+            slotInDepth++;
+          } else {
+            slotInDepth = 0;
+            prevDepth = d;
+          }
+          const y = -(d * LAYOUT.ROW_HEIGHT + slotInDepth * LAYOUT.SUB_ROW_HEIGHT);
           positions.set(n.node_id, { x: colX[ci], y });
-          rowIndex += 1;
         }
       }
 
-      directories.sort((a, b) =>
-        (depthOf[b.node_id] - depthOf[a.node_id]) ||
-        a.name.localeCompare(b.name)
+      const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
+      return { positions, boxes, directories };
+    }
+
+    function isDescendantOf(nodeId, ancestorId, nodeById) {
+      let current = nodeById[nodeId];
+      let steps = 0;
+      while (current && steps < 50) {
+        if (current.parent_id === ancestorId) return true;
+        current = current.parent_id ? nodeById[current.parent_id] : null;
+        steps++;
+      }
+      return false;
+    }
+
+    function computeBoundingBoxes(directories, positions, nodeById, depthOf) {
+      const sorted = [...directories].sort((a, b) =>
+        (depthOf[b.node_id] - depthOf[a.node_id]) || a.name.localeCompare(b.name)
       );
 
-      for (const dir of directories) {
-        const childXValues = [];
-        for (const [nid, pos] of positions.entries()) {
-          const n = nodeById[nid];
-          if (!n) continue;
-          let current = n;
-          while (current) {
-            if (current.parent_id === dir.node_id) {
-              childXValues.push(pos.x);
-              break;
-            }
-            current = current.parent_id ? nodeById[current.parent_id] : null;
-          }
-        }
-        for (const otherDir of directories) {
-          if (otherDir.parent_id === dir.node_id && positions.has(otherDir.node_id)) {
-            childXValues.push(positions.get(otherDir.node_id).x);
+      const boxes = new Map();
+      for (const dir of sorted) {
+        const xs = [];
+        const ys = [];
+
+        for (const [nid, pos] of positions) {
+          if (isDescendantOf(nid, dir.node_id, nodeById)) {
+            xs.push(pos.x);
+            ys.push(pos.y);
           }
         }
 
-        if (childXValues.length > 0) {
-          const minX = Math.min(...childXValues);
-          const maxX = Math.max(...childXValues);
-          const x = (minX + maxX) / 2;
-          const y = depthOf[dir.node_id] * LAYOUT.ROW_HEIGHT - LAYOUT.DIR_HEADER_GAP;
-          positions.set(dir.node_id, { x, y });
-        } else {
-          positions.set(dir.node_id, {
-            x: 0,
-            y: depthOf[dir.node_id] * LAYOUT.ROW_HEIGHT,
-          });
+        for (const [did, box] of boxes) {
+          if (nodeById[did]?.parent_id === dir.node_id) {
+            xs.push(box.x);
+            xs.push(box.x + box.w);
+            ys.push(box.y);
+            ys.push(box.y - box.h);
+          }
         }
+
+        if (xs.length === 0) continue;
+
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const maxY = Math.max(...ys);
+        const minY = Math.min(...ys);
+
+        boxes.set(dir.node_id, {
+          x: minX - LAYOUT.BOX_PAD,
+          y: maxY + LAYOUT.BOX_PAD + LAYOUT.BOX_HEADER,
+          w: (maxX - minX) + LAYOUT.BOX_PAD * 2,
+          h: (maxY - minY) + LAYOUT.BOX_PAD * 2 + LAYOUT.BOX_HEADER,
+          label: dir.name,
+          depth: depthOf[dir.node_id],
+        });
       }
 
-      return positions;
+      return boxes;
     }
 
     function nodeColor(nodeType, status) {
-      if (status === "running") return colorByType.function || "#fb923c";
+      if (status === "running") return "#fb923c";
       if (status === "awaiting_input" || status === "awaiting_review") return "#fbbf24";
-      if (status === "error") return colorByType.virtual || "#f87171";
+      if (status === "error") return "#f87171";
       return colorByType[nodeType] || "#818cf8";
     }
+
+    let boundingBoxes = new Map();
 
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
@@ -737,18 +755,19 @@
       const nodeById = Object.fromEntries(nodes.map((n) => [n.node_id, n]));
 
       qualifyLabels(nodes, nodeById);
-      const positions = layoutNodes(nodes, nodeById);
+      const layout = layoutNodes(nodes, nodeById);
+      boundingBoxes = layout.boxes;
       graph.clear();
 
       for (const node of nodes) {
-        const pos = positions.get(node.node_id);
+        if (node.node_type === "directory") continue;
+        const pos = layout.positions.get(node.node_id);
         if (!pos) continue;
-        const label = node._displayLabel || node.name;
         graph.addNode(node.node_id, {
           node_id: node.node_id,
-          label,
+          label: node._displayLabel || node.name,
           forceLabel: true,
-          size: node.node_type === "directory" ? 3.0 : 2.4,
+          size: 2.4,
           x: pos.x,
           y: pos.y,
           color: nodeColor(node.node_type, node.status),
@@ -761,6 +780,7 @@
       const edgeResp = await fetch("/api/edges");
       const edges = await edgeResp.json();
       for (const edge of edges) {
+        if (edge.edge_type === "contains") continue;
         const key = edge.from_id + "->" + edge.to_id + ":" + edge.edge_type;
         if (!graph.hasNode(edge.from_id) || !graph.hasNode(edge.to_id)) continue;
         if (!graph.hasEdge(key)) {
@@ -773,6 +793,7 @@
 
       applyFilters();
       renderer.refresh();
+      renderer.getCamera().animatedReset({ duration: 300 });
     }
 
     function appendEventLine(text) {
@@ -1042,8 +1063,35 @@ function addTimelineEvent(eventType, payload) {
       return winner;
     }
 
-    renderer.on("beforeRender", () => {
+    renderer.on("beforeRender", (e) => {
       nodeLabelHitboxes.clear();
+      if (!filterState.showBoundingBoxes) return;
+
+      const context = e.context;
+      for (const [dirId, box] of boundingBoxes) {
+        const tl = renderer.graphToViewport({ x: box.x, y: box.y });
+        const br = renderer.graphToViewport({ x: box.x + box.w, y: box.y - box.h });
+        const screenW = br.x - tl.x;
+        const screenH = br.y - tl.y;
+        if (screenW < 2 || screenH < 2) continue;
+
+        const depth = box.depth || 0;
+        const fillAlpha = 0.03 + depth * 0.015;
+        const strokeAlpha = 0.12 + depth * 0.04;
+
+        context.fillStyle = "rgba(148, 163, 184, " + fillAlpha + ")";
+        context.strokeStyle = "rgba(148, 163, 184, " + strokeAlpha + ")";
+        context.lineWidth = 1;
+        drawRoundedRect(context, tl.x, tl.y, screenW, screenH, 8);
+        context.fill();
+        context.stroke();
+
+        context.fillStyle = "rgba(148, 163, 184, " + (0.45 + depth * 0.1) + ")";
+        context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        context.textAlign = "left";
+        context.textBaseline = "top";
+        context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
+      }
     });
 
     renderer.on("clickNode", ({ node }) => {
@@ -1169,6 +1217,7 @@ function addTimelineEvent(eventType, payload) {
 
       const nodeType = chip.dataset.filterNode;
       const edgeType = chip.dataset.filterEdge;
+      const boxToggle = chip.dataset.filterBoxes;
 
       if (nodeType) {
         chip.classList.toggle("active");
@@ -1186,6 +1235,11 @@ function addTimelineEvent(eventType, payload) {
         } else {
           filterState.hiddenEdgeTypes.add(edgeType);
         }
+      }
+
+      if (boxToggle) {
+        chip.classList.toggle("active");
+        filterState.showBoundingBoxes = !filterState.showBoundingBoxes;
       }
 
       applyFilters();
