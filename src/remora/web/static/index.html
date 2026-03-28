@@ -446,12 +446,15 @@
       SATELLITE_ROW_GAP: 4.0,
       CORE_COMPONENT_MIN_SCORE: 18,
       PERIPHERAL_DOCK_GAP_X: 4.5,
-      PERIPHERAL_DOCK_GAP_Y: 6.2,
+      PERIPHERAL_DOCK_GAP_Y: 3.8,
       PERIPHERAL_DOCK_MAX_WIDTH: 132.0,
       PERIPHERAL_GRID_MIN_CELL_WIDTH: 16.0,
       PERIPHERAL_GRID_CELL_PAD: 3.2,
       PERIPHERAL_GRID_GAP_X: 7.4,
-      PERIPHERAL_GRID_GAP_Y: 7.8,
+      PERIPHERAL_GRID_GAP_Y: 5.2,
+      ZONE_GAP_MIN_UNITS: 2.8,
+      ZONE_GAP_TARGET_UNITS: 3.6,
+      ZONE_GAP_MAX_UNITS: 5.0,
       CORE_ZONE_MIN_VERTICAL_RATIO: 0.60,
       CORE_ZONE_SCALE_MAX: 2.4,
       CORE_ASPECT_MAX: 1.9,
@@ -1234,6 +1237,25 @@
       }
     }
 
+    function enforceZoneGap(positions, zoneByNode, nodeById) {
+      if (!positions || positions.size === 0) return;
+      const coreBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
+      const peripheralBounds = computeZoneBounds(positions, zoneByNode, "peripheral", nodeById);
+      if (!coreBounds || !peripheralBounds || coreBounds.height <= 0 || peripheralBounds.height <= 0) return;
+      const currentGap = coreBounds.minY - peripheralBounds.maxY;
+      if (!Number.isFinite(currentGap)) return;
+      const targetGap = Math.max(
+        LAYOUT.ZONE_GAP_MIN_UNITS,
+        Math.min(LAYOUT.ZONE_GAP_MAX_UNITS, LAYOUT.ZONE_GAP_TARGET_UNITS),
+      );
+      if (Math.abs(currentGap - targetGap) < 0.08) return;
+      const delta = targetGap - currentGap;
+      for (const [nodeId, pos] of positions) {
+        if ((zoneByNode.get(nodeId) || "core") !== "peripheral") continue;
+        pos.y -= delta;
+      }
+    }
+
     function nodePathRoot(node) {
       const parts = (node?.file_path || "")
         .replace(/\\/g, "/")
@@ -1570,7 +1592,13 @@
           LAYOUT.PERIPHERAL_DOCK_MAX_WIDTH,
           Math.max(targetPackWidth * 0.9, coreBounds.width),
         );
-        const dockOriginY = coreBounds.minY - LAYOUT.PERIPHERAL_DOCK_GAP_Y;
+        const densityPenalty = Math.min(1.2, peripheralComponents.length / 8);
+        const adaptiveGap = LAYOUT.PERIPHERAL_DOCK_GAP_Y + coreBounds.height * 0.02 - densityPenalty * 0.45;
+        const dockGapY = Math.max(
+          LAYOUT.ZONE_GAP_MIN_UNITS,
+          Math.min(LAYOUT.ZONE_GAP_MAX_UNITS, adaptiveGap),
+        );
+        const dockOriginY = coreBounds.minY - dockGapY;
         const dockAnchorX = coreBounds.centerX - dockWidth / 2;
         let xCursor = 0;
         let rowTop = dockOriginY;
@@ -1627,7 +1655,9 @@
       }
 
       normalizeCoreAspect(positions, zoneByNode, nodeById);
+      enforceZoneGap(positions, zoneByNode, nodeById);
       normalizeLayoutOccupancy(positions, nodeById);
+      enforceZoneGap(positions, zoneByNode, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
       const coreZoneBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
       const peripheralBounds = computeZoneBounds(positions, zoneByNode, "peripheral", nodeById);
