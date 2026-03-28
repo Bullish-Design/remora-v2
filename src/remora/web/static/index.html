@@ -549,6 +549,25 @@
     const agentEventCache = new Map();
     const CACHE_LIMIT = 200;
 
+    const filterState = {
+      hiddenNodeTypes: new Set(),
+      hiddenEdgeTypes: new Set(["contains"]),
+    };
+
+    function applyFilters() {
+      graph.forEachNode((id, attrs) => {
+        const shouldHide = filterState.hiddenNodeTypes.has(attrs.node_type);
+        graph.setNodeAttribute(id, "hidden", shouldHide);
+      });
+      graph.forEachEdge((edge, attrs) => {
+        const edgeType = attrs.label;
+        const baseHidden = EDGE_STYLES[edgeType]?.hidden ?? false;
+        const filterHidden = filterState.hiddenEdgeTypes.has(edgeType);
+        graph.setEdgeAttribute(edge, "hidden", baseHidden || filterHidden);
+      });
+      renderer.refresh();
+    }
+
     const colorByType = {
       directory: getComputedStyle(document.documentElement).getPropertyValue("--directory").trim(),
       function: getComputedStyle(document.documentElement).getPropertyValue("--function").trim(),
