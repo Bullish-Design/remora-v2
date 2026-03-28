@@ -836,19 +836,14 @@
     function fitCameraToGraph(duration = 300) {
       const camera = renderer.getCamera();
       const bounds = computeVisualBounds();
+      const baselineState = { x: 0.5, y: 0.5, ratio: 1, angle: 0 };
       if (!bounds) {
-        if (duration > 0) {
-          camera.animatedReset({ duration });
-        } else {
-          camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
-          renderer.refresh();
-        }
+        camera.animatedReset({ duration: Math.max(120, duration || 200) });
         return;
       }
 
-      const centerX = (bounds.minX + bounds.maxX) / 2;
-      const centerY = (bounds.minY + bounds.maxY) / 2;
-      camera.setState({ x: centerX, y: centerY, ratio: 1, angle: 0 });
+      // Start from known-good framed camera coordinates before fit math.
+      camera.setState(baselineState);
       renderer.refresh();
 
       const tl = renderer.graphToViewport({ x: bounds.minX, y: bounds.maxY });
@@ -859,11 +854,15 @@
       const availW = Math.max(1, dims.width - LAYOUT.FIT_PADDING_PX * 2);
       const availH = Math.max(1, dims.height - LAYOUT.FIT_PADDING_PX * 2);
       const fitScale = Math.max(spanW / availW, spanH / availH);
+      if (!Number.isFinite(fitScale) || fitScale <= 0) {
+        camera.animatedReset({ duration: Math.max(120, duration || 200) });
+        return;
+      }
       const targetRatio = Math.min(4, Math.max(0.4, fitScale * 1.08));
       if (duration > 0) {
-        camera.animate({ x: centerX, y: centerY, ratio: targetRatio, angle: 0 }, { duration });
+        camera.animate({ ...baselineState, ratio: targetRatio }, { duration });
       } else {
-        camera.setState({ x: centerX, y: centerY, ratio: targetRatio, angle: 0 });
+        camera.setState({ ...baselineState, ratio: targetRatio });
         renderer.refresh();
       }
     }

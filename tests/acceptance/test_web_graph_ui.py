@@ -218,6 +218,57 @@ async def test_web_graph_clicking_label_hitbox_selects_node_and_updates_sidebar(
 
 @pytest.mark.asyncio
 @pytest.mark.acceptance
+async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
+    tmp_path: Path,
+    chromium_page,
+) -> None:
+    config_path = _write_graph_ui_project(tmp_path)
+    port = _reserve_port()
+
+    async with _running_runtime(
+        project_root=tmp_path,
+        config_path=config_path,
+        port=port,
+    ) as base_url:
+        await _wait_for_nodes(base_url)
+        page = chromium_page
+        await page.goto(base_url, wait_until="domcontentloaded")
+        await page.wait_for_selector("#graph canvas")
+        await page.wait_for_function(
+            "() => typeof graph !== 'undefined' && graph.order > 0",
+            timeout=20000,
+        )
+
+        visibility = await page.evaluate(
+            """
+            () => {
+              if (typeof graph === "undefined" || typeof renderer === "undefined") {
+                return { total: 0, visible: 0, reason: "missing_runtime" };
+              }
+              const dims = renderer.getDimensions();
+              const nodes = graph.nodes();
+              let total = 0;
+              let visible = 0;
+              for (const nodeId of nodes) {
+                const attrs = graph.getNodeAttributes(nodeId);
+                if (attrs.hidden) continue;
+                total += 1;
+                const p = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
+                if (p.x >= 0 && p.x <= dims.width && p.y >= 0 && p.y <= dims.height) {
+                  visible += 1;
+                }
+              }
+              return { total, visible };
+            }
+            """
+        )
+
+        assert visibility["total"] > 0, visibility
+        assert visibility["visible"] > 0, visibility
+
+
+@pytest.mark.asyncio
+@pytest.mark.acceptance
 async def test_web_graph_sidebar_send_updates_events_and_timeline(
     tmp_path: Path,
     chromium_page,
