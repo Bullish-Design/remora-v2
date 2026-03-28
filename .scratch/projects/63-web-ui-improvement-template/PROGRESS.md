@@ -23,5 +23,5 @@
 - [x] Step 13: Wire filter chip handlers
 - [x] Step 14: Add hover highlight handlers
 - [x] Step 15: Wire zoom controls
-- [ ] Step 16: Remove dead layout code
+- [x] Step 16: Remove dead layout code
 - [ ] Step 17: Verification checklist

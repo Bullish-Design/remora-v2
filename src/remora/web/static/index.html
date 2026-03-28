@@ -642,11 +642,9 @@
       });
 
       const colX = [];
-      const fileToCol = {};
       let xCursor = 0;
       for (let i = 0; i < sortedFilePaths.length; i++) {
         colX.push(xCursor + colWidths[i] / 2);
-        fileToCol[sortedFilePaths[i]] = i;
         xCursor += colWidths[i] + LAYOUT.COL_PAD;
       }
 
@@ -721,51 +719,6 @@
       if (status === "awaiting_input" || status === "awaiting_review") return "#fbbf24";
       if (status === "error") return colorByType.virtual || "#f87171";
       return colorByType[nodeType] || "#818cf8";
-    }
-
-    function hashNodeId(nodeId) {
-      let hash = 5381;
-      for (let i = 0; i < nodeId.length; i++) {
-        hash = (hash * 33) ^ nodeId.charCodeAt(i);
-      }
-      return hash >>> 0;
-    }
-
-    function deterministicOffset(nodeId, scale) {
-      const unit = (hashNodeId(nodeId) % 1000) / 1000;
-      return (unit - 0.5) * scale;
-    }
-
-    function fileBandKeyFromPath(filePath) {
-      if (!filePath || filePath === ".") return "__unfiled__";
-      const normalized = String(filePath).replace(/\\/g, "/");
-      if (normalized.startsWith("src/")) {
-        const relative = normalized.slice(4);
-        const parts = relative.split("/").filter(Boolean);
-        return parts[0] || "src";
-      }
-      const srcMarker = "/src/";
-      const srcIndex = normalized.lastIndexOf(srcMarker);
-      if (srcIndex >= 0) {
-        const relative = normalized.slice(srcIndex + srcMarker.length);
-        const parts = relative.split("/").filter(Boolean);
-        return parts[0] || "src";
-      }
-      const parts = normalized.split("/").filter(Boolean);
-      if (parts.length >= 2) return parts[parts.length - 2];
-      return parts[0] || "__unfiled__";
-    }
-
-    function buildFileBands(nodes) {
-      const keys = [...new Set(nodes.map((node) => fileBandKeyFromPath(node.file_path)))].sort();
-      const center = (keys.length - 1) / 2;
-      return new Map(keys.map((key, index) => [key, (index - center) * FILE_BAND_SPACING]));
-    }
-
-    function bandYForNode(fileBands, filePath) {
-      const key = fileBandKeyFromPath(filePath);
-      if (!filePath) return UNFILED_BAND_Y;
-      return fileBands.get(key) ?? UNFILED_BAND_Y;
     }
 
     async function loadGraph() {
