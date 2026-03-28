@@ -85,3 +85,20 @@
 
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
   - Result: `63 passed, 2 warnings`
+
+## v4 sigma-first follow-up
+
+- [x] Add sigma-first implementation strategy docs:
+  - `CONCEPT_V4.md`
+  - `SIGMA_FIRST_IMPLEMENTATION_STRATEGY.md`
+- [x] Implement Step 1 sigma-native fit + edge metadata/styling.
+- [x] Implement Step 2 readability updates:
+  - Wrapped lane layout in `layoutNodes` using deterministic row packing.
+  - Cross-file edge emphasis filter chip (`data-filter-edge-emphasis="cross-file"`).
+  - Zoom-aware filesystem box declutter in `beforeRender`.
+- [x] Update static view coverage for new graph implementation markers.
+
+### v4 verification (Step 2)
+
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_views.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
+  - Result: `70 passed, 2 warnings`

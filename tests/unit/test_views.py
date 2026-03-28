@@ -43,14 +43,14 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     html = _index_html()
     assert "function drawNodeBoxLabel(" in html
     assert "defaultDrawNodeLabel: drawNodeBoxLabel" in html
-    assert "const FILE_BAND_SPACING =" in html
-    assert "const DEPTH_ROW_SPACING =" in html
-    assert "const TYPE_TRACK_OFFSETS =" in html
-    assert "function buildFileBands(nodes)" in html
-    assert "const HASH_X_SPREAD =" in html
-    assert "const DEPTH_WAVE_AMPLITUDE =" in html
-    assert "const DEPTH_X_FANOUT =" in html
-    assert "const DEPTH_ZIGZAG_SPREAD =" in html
+    assert "const LAYOUT = Object.freeze({" in html
+    assert "WRAP_TARGET_WIDTH" in html
+    assert "ROW_BAND_GAP" in html
+    assert "function layoutNodes(nodes, nodeById)" in html
+    assert "const rows = [];" in html
+    assert 'data-filter-edge-emphasis="cross-file"' in html
+    assert "edgeEmphasisCrossFileOnly" in html
+    assert "renderer.setCustomBBox(bbox || null);" in html
     assert "const nodeLabelHitboxes = new Map();" in html
     assert 'renderer.on("clickStage"' in html
     assert "event.x * pixelRatio" in html

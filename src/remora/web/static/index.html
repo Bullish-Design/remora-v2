@@ -319,6 +319,10 @@
           <span class="chip-swatch" style="background: var(--class);"></span>
           inherits
         </button>
+        <button class="filter-chip" data-filter-edge-emphasis="cross-file">
+          <span class="chip-swatch" style="background: #7cc4ff;"></span>
+          cross-file
+        </button>
       </div>
       <div class="filter-separator"></div>
       <div class="filter-group">
@@ -415,6 +419,14 @@
       DEPTH_Y_WEIGHT: 1.1,
       FILE_LINE_SPAN: 14.0,
       COL_Y_STAGGER: 1.2,
+      WRAP_TARGET_WIDTH: 86.0,
+      WRAP_TARGET_MIN_WIDTH: 56.0,
+      WRAP_TARGET_MAX_WIDTH: 128.0,
+      WRAP_FILL_RATIO: 0.88,
+      ROW_BAND_GAP: 24.0,
+      ROW_BASE_PAD: 6.0,
+      MIN_COLUMN_SEPARATION: 2.6,
+      MIN_NODE_GAP_Y: 1.8,
       FIT_PADDING_PX: 56,
     });
 
@@ -579,6 +591,7 @@
     const filterState = {
       hiddenNodeTypes: new Set(),
       hiddenEdgeTypes: new Set(),
+      edgeEmphasisCrossFileOnly: false,
       showBoundingBoxes: true,
     };
 
@@ -588,7 +601,9 @@
         graph.setNodeAttribute(id, "hidden", shouldHide);
       });
       graph.forEachEdge((edge, attrs) => {
-        graph.setEdgeAttribute(edge, "hidden", filterState.hiddenEdgeTypes.has(attrs.label));
+        const hiddenByType = filterState.hiddenEdgeTypes.has(attrs.label);
+        const hiddenByEmphasis = filterState.edgeEmphasisCrossFileOnly && !attrs.is_cross_file;
+        graph.setEdgeAttribute(edge, "hidden", hiddenByType || hiddenByEmphasis);
       });
       renderer.refresh();
     }
@@ -664,33 +679,33 @@
       }
 
       const sortedFiles = Object.keys(fileGroups).sort();
+      const graphWidthPx = document.getElementById("graph")?.clientWidth || 1200;
+      const inferredRowWidth =
+        (graphWidthPx / LAYOUT.PX_PER_UNIT) * LAYOUT.WRAP_FILL_RATIO;
+      const targetRowWidth = Math.max(
+        LAYOUT.WRAP_TARGET_MIN_WIDTH,
+        Math.min(
+          LAYOUT.WRAP_TARGET_MAX_WIDTH,
+          Math.max(LAYOUT.WRAP_TARGET_WIDTH, inferredRowWidth),
+        ),
+      );
 
-      const colWidths = sortedFiles.map((fp) => {
-        let maxPx = 0;
-        for (const n of fileGroups[fp]) {
-          const px = measureLabelWidth(n._displayLabel || n.name);
-          if (px > maxPx) maxPx = px;
-        }
-        return Math.max(
-          LAYOUT.MIN_COL_WIDTH,
-          maxPx / LAYOUT.PX_PER_UNIT + LAYOUT.COL_WIDTH_BIAS,
-        );
-      });
-
-      const colX = [];
-      let xCursor = 0;
-      for (let i = 0; i < sortedFiles.length; i++) {
-        colX.push(xCursor + colWidths[i] / 2);
-        xCursor += colWidths[i] + LAYOUT.COL_PAD;
-      }
-
-      const positions = new Map();
-      for (let ci = 0; ci < sortedFiles.length; ci++) {
-        const group = fileGroups[sortedFiles[ci]];
+      const fileColumns = sortedFiles.map((fp, fileIndex) => {
+        const group = fileGroups[fp];
         group.sort((a, b) =>
           (depthOf[a.node_id] - depthOf[b.node_id]) ||
           (a.start_line - b.start_line) ||
           a.name.localeCompare(b.name)
+        );
+
+        let maxPx = 0;
+        for (const n of group) {
+          const px = measureLabelWidth(n._displayLabel || n.name);
+          if (px > maxPx) maxPx = px;
+        }
+        const width = Math.max(
+          LAYOUT.MIN_COL_WIDTH,
+          maxPx / LAYOUT.PX_PER_UNIT + LAYOUT.COL_WIDTH_BIAS,
         );
 
         const parsedLines = group.map((n, idx) => {
@@ -701,6 +716,8 @@
         const maxLine = Math.max(...parsedLines);
         const range = Math.max(1, maxLine - minLine);
         const sameLineCounts = new Map();
+        const localOffsets = new Map();
+        let maxLocalOffset = 0;
 
         for (let slotIndex = 0; slotIndex < group.length; slotIndex++) {
           const n = group[slotIndex];
@@ -716,9 +733,80 @@
           const depthOffset = depthOf[n.node_id] * LAYOUT.DEPTH_Y_WEIGHT;
           const lineOffset = lineNorm * LAYOUT.FILE_LINE_SPAN;
           const duplicateOffset = sameLineIndex * LAYOUT.SUB_ROW_HEIGHT;
-          const colStagger = (ci % 4) * LAYOUT.COL_Y_STAGGER;
-          const y = -(depthOffset + lineOffset + duplicateOffset + colStagger);
-          positions.set(n.node_id, { x: colX[ci], y });
+          const slotOffset = slotIndex * LAYOUT.MIN_NODE_GAP_Y;
+          const colStagger = (fileIndex % 4) * LAYOUT.COL_Y_STAGGER;
+          const localOffset = depthOffset + lineOffset + duplicateOffset + slotOffset + colStagger;
+          localOffsets.set(n.node_id, localOffset);
+          if (localOffset > maxLocalOffset) maxLocalOffset = localOffset;
+        }
+
+        return {
+          filePath: fp,
+          nodes: group,
+          width,
+          height: maxLocalOffset + LAYOUT.ROW_BASE_PAD,
+          localOffsets,
+          rowIndex: -1,
+          x: 0,
+        };
+      });
+
+      const rows = [];
+      let activeRow = { columns: [], width: 0, height: 0 };
+      for (const column of fileColumns) {
+        const projectedWidth =
+          activeRow.columns.length === 0
+            ? column.width
+            : activeRow.width + LAYOUT.COL_PAD + column.width;
+        if (activeRow.columns.length > 0 && projectedWidth > targetRowWidth) {
+          rows.push(activeRow);
+          activeRow = { columns: [], width: 0, height: 0 };
+        }
+        if (activeRow.columns.length > 0) {
+          activeRow.width += LAYOUT.COL_PAD;
+        }
+        activeRow.columns.push(column);
+        activeRow.width += column.width;
+        activeRow.height = Math.max(activeRow.height, column.height);
+      }
+      if (activeRow.columns.length > 0) rows.push(activeRow);
+
+      const positions = new Map();
+      let rowOffset = 0;
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const row = rows[rowIndex];
+        const rowBaseY = -rowOffset;
+        let xCursor = -(row.width / 2);
+        for (const column of row.columns) {
+          xCursor += column.width / 2;
+          column.x = xCursor;
+          column.rowIndex = rowIndex;
+          for (const node of column.nodes) {
+            const localOffset = column.localOffsets.get(node.node_id) || 0;
+            positions.set(node.node_id, { x: column.x, y: rowBaseY - localOffset });
+          }
+          xCursor += column.width / 2 + LAYOUT.COL_PAD;
+        }
+        rowOffset += row.height + LAYOUT.ROW_BAND_GAP;
+      }
+
+      for (const row of rows) {
+        let previousRight = Number.NEGATIVE_INFINITY;
+        for (const column of row.columns) {
+          const left = column.x - column.width / 2;
+          const minLeft =
+            previousRight === Number.NEGATIVE_INFINITY
+              ? left
+              : previousRight + LAYOUT.MIN_COLUMN_SEPARATION;
+          if (left < minLeft) {
+            const delta = minLeft - left;
+            column.x += delta;
+            for (const node of column.nodes) {
+              const pos = positions.get(node.node_id);
+              if (pos) pos.x += delta;
+            }
+          }
+          previousRight = column.x + column.width / 2;
         }
       }
 
@@ -1186,6 +1274,10 @@ function addTimelineEvent(eventType, payload) {
 
       const context = renderer.getCanvases()?.edges?.getContext("2d");
       if (!context) return;
+      const cameraRatio = renderer.getCamera().getState().ratio || 1;
+      const zoomOut = Math.max(1, cameraRatio);
+      const minHeaderWidth = 120 * Math.min(2.6, zoomOut);
+      const minHeaderHeight = 42 * Math.min(2.2, zoomOut);
       context.save();
       for (const [dirId, box] of boundingBoxes) {
         const tl = renderer.graphToViewport({ x: box.x, y: box.y });
@@ -1195,8 +1287,9 @@ function addTimelineEvent(eventType, payload) {
         if (screenW < 2 || screenH < 2) continue;
 
         const depth = box.depth || 0;
-        const fillAlpha = 0.07 + depth * 0.02;
-        const strokeAlpha = 0.22 + depth * 0.06;
+        const depthFade = depth > 1 ? Math.min(0.65, (depth - 1) * 0.12 * zoomOut) : 0;
+        const fillAlpha = Math.max(0.03, 0.07 + depth * 0.02 - depthFade * 0.4);
+        const strokeAlpha = Math.max(0.08, 0.22 + depth * 0.06 - depthFade);
         const labelAlpha = 0.55 + depth * 0.1;
 
         context.fillStyle = "rgba(148, 163, 184, " + fillAlpha + ")";
@@ -1210,7 +1303,7 @@ function addTimelineEvent(eventType, payload) {
         context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
         context.textAlign = "left";
         context.textBaseline = "top";
-        if (screenW >= 120 && screenH >= 42) {
+        if (depth <= 2 && screenW >= minHeaderWidth && screenH >= minHeaderHeight) {
           context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
         }
       }
@@ -1339,6 +1432,7 @@ function addTimelineEvent(eventType, payload) {
 
       const nodeType = chip.dataset.filterNode;
       const edgeType = chip.dataset.filterEdge;
+      const edgeEmphasis = chip.dataset.filterEdgeEmphasis;
       const boxToggle = chip.dataset.filterBoxes;
 
       if (nodeType) {
@@ -1357,6 +1451,11 @@ function addTimelineEvent(eventType, payload) {
         } else {
           filterState.hiddenEdgeTypes.add(edgeType);
         }
+      }
+
+      if (edgeEmphasis === "cross-file") {
+        filterState.edgeEmphasisCrossFileOnly = !filterState.edgeEmphasisCrossFileOnly;
+        chip.classList.toggle("active", filterState.edgeEmphasisCrossFileOnly);
       }
 
       if (boxToggle) {
