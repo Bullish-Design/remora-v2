@@ -21,7 +21,7 @@
 - [x] Step 11: Update `nodeColor` palette
 - [x] Step 12: Add `filterState` + `applyFilters`
 - [x] Step 13: Wire filter chip handlers
-- [ ] Step 14: Add hover highlight handlers
+- [x] Step 14: Add hover highlight handlers
 - [ ] Step 15: Wire zoom controls
 - [ ] Step 16: Remove dead layout code
 - [ ] Step 17: Verification checklist

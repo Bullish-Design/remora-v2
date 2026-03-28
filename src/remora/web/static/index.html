@@ -1094,6 +1094,32 @@ function addTimelineEvent(eventType, payload) {
       selectNode(hitNode);
     });
 
+    let hoveredNode = null;
+
+    renderer.on("enterNode", ({ node }) => {
+      hoveredNode = node;
+      const neighbors = new Set(graph.neighbors(node));
+      neighbors.add(node);
+
+      graph.forEachNode((id) => {
+        graph.setNodeAttribute(id, "dimmed", !neighbors.has(id));
+      });
+      graph.forEachEdge((edge, attrs, src, tgt) => {
+        if (!neighbors.has(src) || !neighbors.has(tgt)) {
+          graph.setEdgeAttribute(edge, "hidden", true);
+        }
+      });
+      renderer.refresh();
+    });
+
+    renderer.on("leaveNode", () => {
+      hoveredNode = null;
+      graph.forEachNode((id) => {
+        graph.removeNodeAttribute(id, "dimmed");
+      });
+      applyFilters();
+    });
+
     document.getElementById("send-chat").addEventListener("click", async () => {
       const message = document.getElementById("chat-input").value.trim();
       if (!selectedNode || !message) return;
