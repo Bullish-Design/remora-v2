@@ -4,7 +4,7 @@
 - [x] Phase 2 complete: UX spec + visual direction
 - [x] Phase 3 complete: implementation
 - [x] Phase 4 complete: validation
-- [ ] Phase 5 complete: polish + docs
+- [x] Phase 5 complete: polish + docs
 
 ## Active execution: `WEB_UI_IMPROVEMENT_GUIDE.md`
 
@@ -34,3 +34,8 @@
   - Result: `3 passed`
   - Notes: Added pointer-event passthrough on graph overlays so chips/buttons are clickable
     while still allowing graph click hit-testing under the overlay regions.
+
+## Release handoff
+
+- [x] Bump package version to `0.6.0` in runtime and packaging metadata.
+- [ ] Commit, push, and publish tag `v0.6.0`.

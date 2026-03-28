@@ -10,6 +10,7 @@ Current status:
   node rendering, hover neighborhood focus, edge style reducers, and filter application.
 - Removed legacy jitter/band layout helpers.
 - Validation executed with unit + acceptance tests.
+- Release follow-up requested: bump project version to `0.6.0`, commit, push, tag.
 
 Validation:
 - `devenv shell -- pytest tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q` -> `60 passed`.
@@ -22,4 +23,4 @@ Constraints and direction:
 - Scope remains graph-focused; sidebar behavior preserved.
 
 Next immediate step:
-- Optional: phase 5 docs/polish updates if requested.
+- Finalize release update (`0.6.0`) with commit/push/tag.
