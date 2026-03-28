@@ -134,3 +134,19 @@
 - [x] Identify remaining gaps against desired demo UI goals.
 - [x] Create v6 corrective design + implementation guide:
   - `.scratch/projects/63-web-ui-improvement-template/CONCEPT_V6.md`
+
+## v6 implementation execution
+
+- [x] Step 1: Refine label pipeline to enforce concise workspace-relative qualifiers.
+- [x] Step 2: Add core/peripheral component zoning and peripheral docking.
+- [x] Step 3: Add peripheral visual treatment (zone-aware node/edge emphasis).
+- [ ] Step 4: Increase hierarchy box/header legibility while keeping nested declutter.
+- [ ] Step 5: Add optional context tethers for edge-less nodes.
+- [ ] Step 6: Extend acceptance metrics and finalize verification.
+
+### v6 verification (in progress)
+
+- `devenv shell -- pytest tests/unit/test_views.py -q -rs`
+  - Result: `6 passed`
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py -q -rs`
+  - Result: `6 passed`

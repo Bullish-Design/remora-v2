@@ -67,6 +67,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "length_norm" in html
     assert "function buildDirectorySet(nodes, nodeById)" in html
     assert "__synthetic_dir__:" in html
+    assert "layout_zone" in html
+    assert "peripheral_color" in html
     assert "const rows = [];" in html
     assert 'data-filter-edge-emphasis="cross-file"' in html
     assert "edgeEmphasisCrossFileOnly" in html

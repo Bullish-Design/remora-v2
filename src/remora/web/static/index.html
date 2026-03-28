@@ -439,6 +439,8 @@
       PERIPHERAL_DOCK_GAP_X: 4.5,
       PERIPHERAL_DOCK_GAP_Y: 6.2,
       PERIPHERAL_DOCK_MAX_WIDTH: 132.0,
+      PERIPHERAL_NODE_ALPHA: 0.62,
+      PERIPHERAL_EDGE_ALPHA_SCALE: 0.58,
       OCCUPANCY_TARGET_MIN: 0.35,
       OCCUPANCY_TARGET_MAX: 0.82,
       OCCUPANCY_SCALE_MIN: 0.88,
@@ -513,7 +515,8 @@
         table:     "rgba(52, 211, 153, 0.10)",
         virtual:   "rgba(244, 114, 182, 0.10)",
       };
-      const fillColor = fillColors[nodeType] || "rgba(10, 16, 24, 0.9)";
+      const isPeripheral = data.layout_zone === "peripheral" && data.node_id !== selectedNode;
+      const fillColor = isPeripheral ? "rgba(15, 23, 42, 0.55)" : (fillColors[nodeType] || "rgba(10, 16, 24, 0.9)");
 
       drawRoundedRect(context, x, y, boxWidth, boxHeight, borderRadius);
       context.fillStyle = fillColor;
@@ -613,6 +616,7 @@
       sigmaRendering.EdgeCurveProgram;
 
     let selectedNode = null;
+    let hoveredNode = null;
     const renderer = new Sigma(graph, document.getElementById("graph"), {
       labelRenderedSizeThreshold: 0,
       defaultDrawNodeLabel: drawNodeBoxLabel,
@@ -624,12 +628,24 @@
       zIndex: true,
       nodeReducer: (node, data) => {
         const result = { ...data };
+        const inHoverFocus = !!hoveredNode && data.dimmed === false;
+        const inSelectedFocus = node === selectedNode;
+        const peripheralMuted =
+          data.layout_zone === "peripheral" &&
+          !inSelectedFocus &&
+          !inHoverFocus &&
+          !data.dimmed;
+
+        if (peripheralMuted) {
+          result.color = data.peripheral_color || colorWithAlpha(data.color || "#94a3b8", LAYOUT.PERIPHERAL_NODE_ALPHA);
+          result.size = Math.max(1.9, (data.size || 2.4) * 0.9);
+        }
         if (data.dimmed) {
           result.color = "rgba(100, 116, 139, 0.2)";
           result.label = data.label;
           result.forceLabel = true;
         }
-        if (node === selectedNode) {
+        if (inSelectedFocus) {
           result.size = (data.size || 2.4) * 1.3;
           result.zIndex = 10;
         }
@@ -644,17 +660,26 @@
         const sourceId = graph.source(edge);
         const targetId = graph.target(edge);
         const touchesSelected = !!selectedNode && (sourceId === selectedNode || targetId === selectedNode);
+        const sourceDimmed = graph.getNodeAttribute(sourceId, "dimmed");
+        const targetDimmed = graph.getNodeAttribute(targetId, "dimmed");
+        const touchesHoverFocus =
+          !!hoveredNode &&
+          (sourceId === hoveredNode || targetId === hoveredNode || (sourceDimmed === false && targetDimmed === false));
+        const inFocus = touchesSelected || touchesHoverFocus;
         const lengthNorm = Math.max(0, Math.min(1, Number(data.length_norm) || 0));
-        const baseAlpha = data.is_cross_file ? 0.82 : 0.34;
+        const edgeZone = data.layout_zone || "core";
+        const zoneAlphaScale = edgeZone === "peripheral" ? LAYOUT.PERIPHERAL_EDGE_ALPHA_SCALE : 1;
+        const baseAlpha = (data.is_cross_file ? 0.82 : 0.34) * zoneAlphaScale;
         const fadedAlpha = baseAlpha * (1 - lengthNorm * 0.35);
         const alpha = Math.max(
-          data.is_cross_file ? 0.42 : 0.16,
-          Math.min(0.98, fadedAlpha + (touchesSelected ? 0.18 : 0)),
+          (data.is_cross_file ? 0.42 : 0.16) * zoneAlphaScale,
+          Math.min(0.98, fadedAlpha + (inFocus ? 0.18 : 0)),
         );
+        const zoneSizePenalty = edgeZone === "peripheral" ? 0.22 : 0;
         const sizeBoost = data.is_cross_file ? 0.95 : 0.15;
-        const selectedBoost = touchesSelected ? 0.45 : 0;
+        const selectedBoost = inFocus ? 0.45 : 0;
         const lengthPenalty = lengthNorm * 0.2;
-        const edgeSize = Math.max(1.0, style.size + sizeBoost + selectedBoost - lengthPenalty);
+        const edgeSize = Math.max(0.86, style.size + sizeBoost + selectedBoost - lengthPenalty - zoneSizePenalty);
         return {
           ...data,
           color: colorWithAlpha(crossFileColor, alpha),
@@ -1586,6 +1611,8 @@
           x: pos.x,
           y: pos.y,
           color: nodeColor(node.node_type, node.status),
+          peripheral_color: colorWithAlpha(nodeColor(node.node_type, node.status), LAYOUT.PERIPHERAL_NODE_ALPHA),
+          layout_zone: layout.zoneByNode.get(node.node_id) || "core",
           node_type: node.node_type,
           file_path: node.file_path || "",
           status: node.status,
@@ -1613,12 +1640,21 @@
         const sourcePath = graph.getNodeAttribute(edge.from_id, "file_path") || "";
         const targetPath = graph.getNodeAttribute(edge.to_id, "file_path") || "";
         const isCrossFile = !!sourcePath && !!targetPath && sourcePath !== targetPath;
+        const sourceZone = layout.zoneByNode.get(edge.from_id) || "core";
+        const targetZone = layout.zoneByNode.get(edge.to_id) || "core";
+        const layoutZone =
+          sourceZone === "peripheral" && targetZone === "peripheral"
+            ? "peripheral"
+            : (sourceZone === targetZone ? sourceZone : "cross-zone");
         graph.addEdgeWithKey(key, edge.from_id, edge.to_id, {
           label: edge.edge_type,
           size: 1,
           source_file_path: sourcePath,
           target_file_path: targetPath,
           is_cross_file: isCrossFile,
+          source_zone: sourceZone,
+          target_zone: targetZone,
+          layout_zone: layoutZone,
           length_norm: item.distance / maxEdgeDistance,
           visual_type:
             edge.edge_type === "imports" && isCrossFile && edgeCurveProgram ? "curve" : "arrow",
@@ -1949,8 +1985,6 @@ function addTimelineEvent(eventType, payload) {
       if (!hitNode) return;
       selectNode(hitNode);
     });
-
-    let hoveredNode = null;
 
     renderer.on("enterNode", ({ node }) => {
       hoveredNode = node;
