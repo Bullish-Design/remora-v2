@@ -625,6 +625,10 @@
 
     let selectedNode = null;
     let hoveredNode = null;
+    let selectedEdge = null;
+    let hoveredEdge = null;
+    let selectedEdgeNodes = new Set();
+    let hoveredEdgeNodes = new Set();
     const renderer = new Sigma(graph, document.getElementById("graph"), {
       labelRenderedSizeThreshold: 0,
       defaultDrawNodeLabel: drawNodeBoxLabel,
@@ -646,6 +650,8 @@
       zIndex: true,
       nodeReducer: (node, data) => {
         const result = { ...data };
+        const inEdgeFocus =
+          selectedEdgeNodes.has(node) || hoveredEdgeNodes.has(node);
         const inHoverFocus = !!hoveredNode && data.dimmed === false;
         const inSelectedFocus = node === selectedNode;
         const peripheralMuted =
@@ -667,6 +673,10 @@
           result.size = (data.size || 2.4) * 1.3;
           result.zIndex = 10;
         }
+        if (inEdgeFocus && !inSelectedFocus) {
+          result.size = Math.max(result.size || data.size || 2.4, (data.size || 2.4) * 1.14);
+          result.zIndex = Math.max(result.zIndex || 0, 9);
+        }
         return result;
       },
       edgeReducer: (edge, data) => {
@@ -678,6 +688,8 @@
         const sourceId = graph.source(edge);
         const targetId = graph.target(edge);
         const touchesSelected = !!selectedNode && (sourceId === selectedNode || targetId === selectedNode);
+        const isSelectedEdge = selectedEdge === edge;
+        const isHoveredEdge = hoveredEdge === edge;
         if (data.is_context_tether) {
           const sourceDimmed = graph.getNodeAttribute(sourceId, "dimmed");
           const targetDimmed = graph.getNodeAttribute(targetId, "dimmed");
@@ -685,10 +697,11 @@
             !!hoveredNode &&
             (sourceId === hoveredNode || targetId === hoveredNode || (sourceDimmed === false && targetDimmed === false));
           const alpha = touchesSelected || inHoverFocus ? 0.7 : 0.32;
+          const edgeAlpha = isSelectedEdge || isHoveredEdge ? 0.82 : alpha;
           return {
             ...data,
-            color: colorWithAlpha("#94a3b8", alpha),
-            size: touchesSelected || inHoverFocus ? 1.2 : 0.86,
+            color: colorWithAlpha("#94a3b8", edgeAlpha),
+            size: isSelectedEdge || isHoveredEdge ? 1.35 : (touchesSelected || inHoverFocus ? 1.2 : 0.86),
             type: "line",
           };
         }
@@ -707,14 +720,20 @@
           (data.is_cross_file ? 0.42 : 0.16) * zoneAlphaScale,
           Math.min(0.98, fadedAlpha + (inFocus ? 0.18 : 0)),
         );
+        const relatedToHoveredEdge =
+          hoveredEdgeNodes.size === 0 ||
+          (hoveredEdgeNodes.has(sourceId) && hoveredEdgeNodes.has(targetId));
         const zoneSizePenalty = edgeZone === "peripheral" ? 0.22 : 0;
         const sizeBoost = data.is_cross_file ? 0.95 : 0.15;
         const selectedBoost = inFocus ? 0.45 : 0;
         const lengthPenalty = lengthNorm * 0.2;
-        const edgeSize = Math.max(0.86, style.size + sizeBoost + selectedBoost - lengthPenalty - zoneSizePenalty);
+        const emphasisBoost = isSelectedEdge || isHoveredEdge ? 0.75 : 0;
+        const edgeSize = Math.max(0.86, style.size + sizeBoost + selectedBoost + emphasisBoost - lengthPenalty - zoneSizePenalty);
+        const deEmphasis = hoveredEdgeNodes.size > 0 && !relatedToHoveredEdge && !isSelectedEdge && !isHoveredEdge;
+        const finalAlpha = deEmphasis ? alpha * 0.32 : (isSelectedEdge || isHoveredEdge ? Math.min(1, alpha + 0.22) : alpha);
         return {
           ...data,
-          color: colorWithAlpha(crossFileColor, alpha),
+          color: colorWithAlpha(crossFileColor, finalAlpha),
           size: edgeSize,
           type: visualType,
         };
@@ -1947,10 +1966,74 @@ function addTimelineEvent(eventType, payload) {
       selectedNode = node.node_id;
     }
 
+    function showEdge(edgeId) {
+      if (!graph.hasEdge(edgeId)) return;
+      const [sourceId, targetId] = graph.extremities(edgeId);
+      const attrs = graph.getEdgeAttributes(edgeId);
+      const sourceLabel = graph.getNodeAttribute(sourceId, "label") || sourceId;
+      const targetLabel = graph.getNodeAttribute(targetId, "label") || targetId;
+      document.getElementById("node-name").textContent = `${attrs.label || "edge"}: ${sourceLabel} -> ${targetLabel}`;
+      const details = document.getElementById("node-details");
+      details.innerHTML = "";
+
+      const typeDiv = document.createElement("div");
+      typeDiv.textContent = `Type: ${attrs.label || "unknown"}`;
+      details.appendChild(typeDiv);
+
+      const srcDiv = document.createElement("div");
+      srcDiv.textContent = `Source: ${sourceLabel}`;
+      details.appendChild(srcDiv);
+
+      const tgtDiv = document.createElement("div");
+      tgtDiv.textContent = `Target: ${targetLabel}`;
+      details.appendChild(tgtDiv);
+
+      const crossFileDiv = document.createElement("div");
+      crossFileDiv.textContent = `Cross-file: ${attrs.is_cross_file ? "yes" : "no"}`;
+      details.appendChild(crossFileDiv);
+    }
+
     function selectNode(nodeId) {
+      selectedEdge = null;
+      selectedEdgeNodes.clear();
       selectedNode = nodeId;
       showNode(nodeId);
       renderAgentPanel(nodeId);
+      renderer.refresh();
+    }
+
+    function selectEdge(edgeId) {
+      selectedNode = null;
+      selectedEdge = edgeId;
+      selectedEdgeNodes = graph.hasEdge(edgeId) ? new Set(graph.extremities(edgeId)) : new Set();
+      showEdge(edgeId);
+      renderAgentPanel(null);
+      renderer.refresh();
+    }
+
+    function applyNodeHoverFocus(nodeId) {
+      const neighbors = new Set(graph.neighbors(nodeId));
+      neighbors.add(nodeId);
+      graph.forEachNode((id) => {
+        graph.setNodeAttribute(id, "dimmed", !neighbors.has(id));
+      });
+      graph.forEachEdge((edge, attrs, src, tgt) => {
+        if (!neighbors.has(src) || !neighbors.has(tgt)) {
+          graph.setEdgeAttribute(edge, "hidden", true);
+        }
+      });
+      renderer.refresh();
+    }
+
+    function applyEdgeHoverFocus(edgeId) {
+      if (!graph.hasEdge(edgeId)) return;
+      const [sourceId, targetId] = graph.extremities(edgeId);
+      const focusNodes = new Set([sourceId, targetId]);
+      graph.forEachNode((id) => {
+        graph.setNodeAttribute(id, "dimmed", !focusNodes.has(id));
+      });
+      applyFilters();
+      renderer.refresh();
     }
 
     function hitTestLabeledNode(event) {
@@ -2091,6 +2174,14 @@ function addTimelineEvent(eventType, payload) {
       selectNode(node);
     });
 
+    renderer.on("clickEdge", ({ edge }) => {
+      selectEdge(edge);
+      const attrs = graph.getEdgeAttributes(edge) || {};
+      appendEventLine(
+        `edge_click: ${attrs.label || "edge"} ${graph.source(edge)} -> ${graph.target(edge)}${attrs.is_cross_file ? " (cross-file)" : ""}`,
+      );
+    });
+
     renderer.on("clickStage", ({ event }) => {
       const hitNode = hitTestLabeledNode(event);
       if (!hitNode) return;
@@ -2098,23 +2189,30 @@ function addTimelineEvent(eventType, payload) {
     });
 
     renderer.on("enterNode", ({ node }) => {
+      hoveredEdge = null;
+      hoveredEdgeNodes.clear();
       hoveredNode = node;
-      const neighbors = new Set(graph.neighbors(node));
-      neighbors.add(node);
-
-      graph.forEachNode((id) => {
-        graph.setNodeAttribute(id, "dimmed", !neighbors.has(id));
-      });
-      graph.forEachEdge((edge, attrs, src, tgt) => {
-        if (!neighbors.has(src) || !neighbors.has(tgt)) {
-          graph.setEdgeAttribute(edge, "hidden", true);
-        }
-      });
-      renderer.refresh();
+      applyNodeHoverFocus(node);
     });
 
     renderer.on("leaveNode", () => {
       hoveredNode = null;
+      graph.forEachNode((id) => {
+        graph.removeNodeAttribute(id, "dimmed");
+      });
+      applyFilters();
+    });
+
+    renderer.on("enterEdge", ({ edge }) => {
+      hoveredNode = null;
+      hoveredEdge = edge;
+      hoveredEdgeNodes = graph.hasEdge(edge) ? new Set(graph.extremities(edge)) : new Set();
+      applyEdgeHoverFocus(edge);
+    });
+
+    renderer.on("leaveEdge", () => {
+      hoveredEdge = null;
+      hoveredEdgeNodes.clear();
       graph.forEachNode((id) => {
         graph.removeNodeAttribute(id, "dimmed");
       });

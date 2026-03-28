@@ -73,6 +73,10 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "hideLabelsOnMove: true" in html
     assert "cameraPanBoundaries: true" in html
     assert "defaultDrawNodeHover: drawDiscNodeHover || undefined" in html
+    assert 'renderer.on("enterEdge"' in html
+    assert 'renderer.on("leaveEdge"' in html
+    assert 'renderer.on("clickEdge"' in html
+    assert "function showEdge(edgeId)" in html
     assert "layout_zone" in html
     assert "peripheral_color" in html
     assert "context_tether" in html

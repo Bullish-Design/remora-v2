@@ -154,7 +154,7 @@
 ## v7 implementation execution (CONCEPT_V7)
 
 - [x] Step 1: Sigma settings upgrade.
-- [ ] Step 2: Edge event handlers.
+- [x] Step 2: Edge event handlers.
 - [ ] Step 3: Fix peripheral grid layout.
 - [ ] Step 4: Core zone canvas reservation + `setCustomBBox`.
 - [ ] Step 5: Zone separator rendering.
