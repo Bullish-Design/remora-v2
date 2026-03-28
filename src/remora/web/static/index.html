@@ -702,138 +702,44 @@
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
-      const nodeById = Object.fromEntries(nodes.map((node) => [node.node_id, node]));
-      const fileBands = buildFileBands(nodes);
-      const hasUnfiled = nodes.some((node) => !node.file_path);
-      const depthCache = {};
-      const visiting = new Set();
-      const parentToChildren = {};
-      const nodesByDepth = {};
+      const nodeById = Object.fromEntries(nodes.map((n) => [n.node_id, n]));
 
-      function nodeDepth(nodeId) {
-        if (depthCache[nodeId] !== undefined) return depthCache[nodeId];
-        if (visiting.has(nodeId)) return 0;
-        visiting.add(nodeId);
-        const node = nodeById[nodeId];
-        if (!node || !node.parent_id || !nodeById[node.parent_id]) {
-          depthCache[nodeId] = 0;
-        } else {
-          depthCache[nodeId] = nodeDepth(node.parent_id) + 1;
-        }
-        visiting.delete(nodeId);
-        return depthCache[nodeId];
-      }
+      qualifyLabels(nodes, nodeById);
+      const positions = layoutNodes(nodes, nodeById);
+      graph.clear();
 
       for (const node of nodes) {
-        const parentKey = node.parent_id || "__root__";
-        parentToChildren[parentKey] ||= [];
-        parentToChildren[parentKey].push(node.node_id);
-      }
-
-      for (const parentKey of Object.keys(parentToChildren)) {
-        parentToChildren[parentKey].sort((left, right) => {
-          const leftName = nodeById[left]?.name || left;
-          const rightName = nodeById[right]?.name || right;
-          return leftName.localeCompare(rightName) || left.localeCompare(right);
-        });
-      }
-
-      for (const node of nodes) {
-        const depth = nodeDepth(node.node_id);
-        nodesByDepth[depth] ||= [];
-        nodesByDepth[depth].push(node.node_id);
-      }
-      for (const depthKey of Object.keys(nodesByDepth)) {
-        nodesByDepth[depthKey].sort((left, right) => {
-          const leftNode = nodeById[left];
-          const rightNode = nodeById[right];
-          const leftPath = leftNode?.file_path || "";
-          const rightPath = rightNode?.file_path || "";
-          const leftName = leftNode?.name || left;
-          const rightName = rightNode?.name || right;
-          return leftPath.localeCompare(rightPath) || leftName.localeCompare(rightName) || left.localeCompare(right);
-        });
-      }
-
-      for (const node of nodes) {
-        if (!graph.hasNode(node.node_id)) {
-          const filePath = node.file_path || "";
-          const baseBandY = bandYForNode(fileBands, filePath);
-          const typeTrackX = TYPE_TRACK_OFFSETS[node.node_type] ?? 0;
-          const depth = nodeDepth(node.node_id);
-          const siblings = parentToChildren[node.parent_id || "__root__"] || [node.node_id];
-          const siblingIndex = siblings.indexOf(node.node_id);
-          const spread =
-            siblings.length > 1
-              ? (siblingIndex - (siblings.length - 1) / 2) * SIBLING_SPREAD
-              : 0;
-          const levelNodes = nodesByDepth[depth] || [node.node_id];
-          const levelIndex = levelNodes.indexOf(node.node_id);
-          const levelSpread =
-            levelNodes.length > 1
-              ? (levelIndex - (levelNodes.length - 1) / 2) * LEVEL_SPREAD
-              : 0;
-          const hash = hashNodeId(node.node_id);
-          const side = (hash & 1) === 0 ? -1 : 1;
-          const depthFanout = side * depth * DEPTH_X_FANOUT;
-          const depthZigzag = ((depth % 2 === 0) ? -1 : 1) * Math.floor(depth / 2) * DEPTH_ZIGZAG_SPREAD;
-          const waveAmplitude = DEPTH_WAVE_AMPLITUDE + depth * 0.18;
-          const depthWave = Math.sin(depth * 0.85 + (hash % 7)) * waveAmplitude;
-          const x = typeTrackX + spread + levelSpread + depthFanout + depthZigzag + depthWave + deterministicOffset(node.node_id, HASH_X_SPREAD);
-          const y = baseBandY + depth * DEPTH_ROW_SPACING + deterministicOffset(`${node.node_id}:y`, 0.22);
-          graph.addNode(node.node_id, {
-            node_id: node.node_id,
-            label: node.name,
-            forceLabel: true,
-            size: 2.4,
-            x,
-            y,
-            color: nodeColor(node.node_type, node.status),
-            node_type: node.node_type,
-            file_path: filePath,
-          });
-        }
-      }
-
-      for (const [bandKey, bandY] of fileBands.entries()) {
-        const labelId = `__label__${bandKey}`;
-        if (graph.hasNode(labelId)) continue;
-        graph.addNode(labelId, {
-          node_id: labelId,
-          label: bandKey,
+        const pos = positions.get(node.node_id);
+        if (!pos) continue;
+        const label = node._displayLabel || node.name;
+        graph.addNode(node.node_id, {
+          node_id: node.node_id,
+          label,
           forceLabel: true,
-          size: 1.7,
-          x: FILE_HEADER_X,
-          y: bandY + FILE_HEADER_OFFSET_Y,
-          color: "#9fb2c8",
-          node_type: "__label__",
-          file_path: bandKey,
-        });
-      }
-
-      if (hasUnfiled && !graph.hasNode("__label____unfiled__")) {
-        graph.addNode("__label____unfiled__", {
-          node_id: "__label____unfiled__",
-          label: "(unfiled)",
-          forceLabel: true,
-          size: 1.5,
-          x: FILE_HEADER_X,
-          y: UNFILED_BAND_Y + FILE_HEADER_OFFSET_Y,
-          color: "#9fb2c8",
-          node_type: "__label__",
-          file_path: "",
+          size: node.node_type === "directory" ? 3.0 : 2.4,
+          x: pos.x,
+          y: pos.y,
+          color: nodeColor(node.node_type, node.status),
+          node_type: node.node_type,
+          file_path: node.file_path || "",
+          status: node.status,
         });
       }
 
       const edgeResp = await fetch("/api/edges");
       const edges = await edgeResp.json();
       for (const edge of edges) {
-        const key = `${edge.from_id}->${edge.to_id}:${edge.edge_type}`;
+        const key = edge.from_id + "->" + edge.to_id + ":" + edge.edge_type;
         if (!graph.hasNode(edge.from_id) || !graph.hasNode(edge.to_id)) continue;
         if (!graph.hasEdge(key)) {
-          graph.addEdgeWithKey(key, edge.from_id, edge.to_id, { label: edge.edge_type, size: 1 });
+          graph.addEdgeWithKey(key, edge.from_id, edge.to_id, {
+            label: edge.edge_type,
+            size: 1,
+          });
         }
       }
+
+      applyFilters();
       renderer.refresh();
     }
 
