@@ -429,6 +429,7 @@
       MIN_NODE_GAP_Y: 1.8,
       FIT_PADDING_PX: 56,
     });
+    const LAYOUT_MODE = "v5_component";
 
     function drawRoundedRect(context, x, y, width, height, radius) {
       const r = Math.min(radius, width / 2, height / 2);
@@ -649,7 +650,7 @@
       return labelMeasureContext.measureText(String(text)).width + LAYOUT.LABEL_PAD_PX;
     }
 
-    function layoutNodes(nodes, nodeById) {
+    function layoutNodesV4FileWrap(nodes, nodeById) {
       const depthOf = {};
       const visiting = new Set();
       function computeDepth(nodeId) {
@@ -812,6 +813,17 @@
 
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
       return { positions, boxes, directories };
+    }
+
+    function layoutNodesV5Component(nodes, nodeById) {
+      return layoutNodesV4FileWrap(nodes, nodeById);
+    }
+
+    function layoutNodes(nodes, nodeById) {
+      if (LAYOUT_MODE === "v4_file_wrap") {
+        return layoutNodesV4FileWrap(nodes, nodeById);
+      }
+      return layoutNodesV5Component(nodes, nodeById);
     }
 
     function isDescendantOf(nodeId, ancestorId, nodeById) {
