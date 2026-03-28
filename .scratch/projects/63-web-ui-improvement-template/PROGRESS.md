@@ -67,3 +67,21 @@
 
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
   - Result: `63 passed, 2 warnings`
+
+## v3 implementation (CONCEPT_V3)
+
+- [x] Apply v3 layout constants:
+  - `COL_PAD 6.0`, `MIN_COL_WIDTH 6.0`, `PX_PER_UNIT 10`, `LABEL_PAD_PX 24`,
+    `BOX_PAD 2.5`, `BOX_HEADER 1.6`.
+- [x] Update within-column y placement to slot-index spacing (`y = -(slotIndex * ROW_HEIGHT)`).
+- [x] Add load-time data centering (shift nodes + bounding boxes by centroid) before rendering.
+- [x] Increase bounding-box visibility alpha values for dark background:
+  - fill `0.07 + depth*0.02`, stroke `0.22 + depth*0.06`, label `0.55 + depth*0.1`.
+- [x] Add explicit Sigma edge program wiring with safe fallback:
+  - use arrow program when available, otherwise default to line.
+- [x] Fix v3 regression: avoid direct `sigma` global reference; use `globalThis.sigma`.
+
+### v3 verification
+
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
+  - Result: `63 passed, 2 warnings`

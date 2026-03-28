@@ -403,14 +403,14 @@
     const labelMeasureCanvas = document.createElement("canvas");
     const labelMeasureContext = labelMeasureCanvas.getContext("2d");
     const LAYOUT = Object.freeze({
-      COL_PAD: 3.0,
+      COL_PAD: 6.0,
       ROW_HEIGHT: 2.2,
       SUB_ROW_HEIGHT: 1.6,
-      MIN_COL_WIDTH: 4.0,
-      PX_PER_UNIT: 14,
-      LABEL_PAD_PX: 20,
-      BOX_PAD: 2.0,
-      BOX_HEADER: 1.4,
+      MIN_COL_WIDTH: 6.0,
+      PX_PER_UNIT: 10,
+      LABEL_PAD_PX: 24,
+      BOX_PAD: 2.5,
+      BOX_HEADER: 1.6,
     });
 
     function drawRoundedRect(context, x, y, width, height, radius) {
@@ -519,11 +519,34 @@
       color: "#3a4f6a", size: 1, type: "line",
     });
 
+    const sigmaApi = globalThis.sigma || {};
+    const sigmaCtorApi = globalThis.Sigma || {};
+    const edgeArrowProgram =
+      sigmaApi.EdgeArrowProgram ||
+      sigmaApi.programs?.EdgeArrowProgram ||
+      sigmaCtorApi.EdgeArrowProgram ||
+      sigmaCtorApi.programs?.EdgeArrowProgram;
+    const edgeLineProgram =
+      sigmaApi.EdgeLineProgram ||
+      sigmaApi.programs?.EdgeLineProgram ||
+      sigmaApi.EdgeRectangleProgram ||
+      sigmaApi.programs?.EdgeRectangleProgram ||
+      sigmaCtorApi.EdgeLineProgram ||
+      sigmaCtorApi.programs?.EdgeLineProgram ||
+      sigmaCtorApi.EdgeRectangleProgram ||
+      sigmaCtorApi.programs?.EdgeRectangleProgram;
+
     let selectedNode = null;
     const renderer = new Sigma(graph, document.getElementById("graph"), {
       labelRenderedSizeThreshold: 0,
       defaultDrawNodeLabel: drawNodeBoxLabel,
-      defaultEdgeType: "arrow",
+      defaultEdgeType: edgeArrowProgram ? "arrow" : "line",
+      edgeProgramClasses: edgeArrowProgram
+        ? {
+            arrow: edgeArrowProgram,
+            ...(edgeLineProgram ? { line: edgeLineProgram } : {}),
+          }
+        : undefined,
       zIndex: true,
       nodeReducer: (node, data) => {
         const result = { ...data };
@@ -667,17 +690,9 @@
           a.name.localeCompare(b.name)
         );
 
-        let prevDepth = -1;
-        let slotInDepth = 0;
-        for (const n of group) {
-          const d = depthOf[n.node_id];
-          if (d === prevDepth) {
-            slotInDepth++;
-          } else {
-            slotInDepth = 0;
-            prevDepth = d;
-          }
-          const y = -(d * LAYOUT.ROW_HEIGHT + slotInDepth * LAYOUT.SUB_ROW_HEIGHT);
+        for (let slotIndex = 0; slotIndex < group.length; slotIndex++) {
+          const n = group[slotIndex];
+          const y = -(slotIndex * LAYOUT.ROW_HEIGHT);
           positions.set(n.node_id, { x: colX[ci], y });
         }
       }
@@ -759,6 +774,28 @@
 
       qualifyLabels(nodes, nodeById);
       const layout = layoutNodes(nodes, nodeById);
+
+      const allPositions = [...layout.positions.values()];
+      if (allPositions.length > 0) {
+        let sumX = 0;
+        let sumY = 0;
+        for (const pos of allPositions) {
+          sumX += pos.x;
+          sumY += pos.y;
+        }
+        const cx = sumX / allPositions.length;
+        const cy = sumY / allPositions.length;
+
+        for (const [, pos] of layout.positions) {
+          pos.x -= cx;
+          pos.y -= cy;
+        }
+        for (const [, box] of layout.boxes) {
+          box.x -= cx;
+          box.y -= cy;
+        }
+      }
+
       boundingBoxes = layout.boxes;
       graph.clear();
 
@@ -1081,8 +1118,9 @@ function addTimelineEvent(eventType, payload) {
         if (screenW < 2 || screenH < 2) continue;
 
         const depth = box.depth || 0;
-        const fillAlpha = 0.03 + depth * 0.015;
-        const strokeAlpha = 0.12 + depth * 0.04;
+        const fillAlpha = 0.07 + depth * 0.02;
+        const strokeAlpha = 0.22 + depth * 0.06;
+        const labelAlpha = 0.55 + depth * 0.1;
 
         context.fillStyle = "rgba(148, 163, 184, " + fillAlpha + ")";
         context.strokeStyle = "rgba(148, 163, 184, " + strokeAlpha + ")";
@@ -1091,7 +1129,7 @@ function addTimelineEvent(eventType, payload) {
         context.fill();
         context.stroke();
 
-        context.fillStyle = "rgba(148, 163, 184, " + (0.45 + depth * 0.1) + ")";
+        context.fillStyle = "rgba(148, 163, 184, " + labelAlpha + ")";
         context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
         context.textAlign = "left";
         context.textBaseline = "top";

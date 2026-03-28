@@ -1,22 +1,19 @@
 # Context — 63-web-ui-improvement-template
 
 Current focus:
-- Apply the **v2** graph-overhaul spec from:
-  - `.scratch/projects/63-web-ui-improvement-template/WEB_UI_IMPROVEMENT_GUIDE.md`
-  - `.scratch/projects/63-web-ui-improvement-template/CONCEPT.md`
+- Apply the **v3** graph-overhaul deltas from:
+  - `.scratch/projects/63-web-ui-improvement-template/CONCEPT_V3.md`
 
 Current status:
-- `src/remora/web/static/index.html` now matches v2 semantics:
-  - Top-down hierarchy via negated Y in deterministic file-column layout.
-  - Directories removed from graph nodes and rendered as nested bounding boxes.
-  - `contains` edges skipped entirely; only `imports` and `inherits` render.
-  - `filesystem` chip toggles box visibility.
-  - `qualifyLabels` fallback avoids self-qualifying duplicates.
-  - Camera auto-fit runs after `loadGraph`.
-- Fixed runtime regression: Sigma `beforeRender` did not pass an event context in this build.
-  - Resolution: draw boxes using `renderer.getCanvases().edges.getContext("2d")`.
-- Fixed acceptance click interception:
-  - Compacted filter bar footprint (`max-width` + wrapped groups + vertical stack) so graph label click targets remain accessible.
+- `src/remora/web/static/index.html` now includes v3 updates on top of v2:
+  - Wider deterministic spacing constants (`COL_PAD`, `MIN_COL_WIDTH`, `PX_PER_UNIT`, padding constants) to reduce label overlap.
+  - Vertical placement now uses slot index per file column (`y = -(slotIndex * ROW_HEIGHT)`) for consistent spread.
+  - Load-time centroid centering shifts all node positions and bounding boxes before graph add.
+  - Bounding boxes are materially more visible on dark background via higher fill/stroke/label alpha.
+  - Sigma edge program configuration now safely attempts arrow registration and falls back to line when unavailable.
+- Fixed v3 boot regression:
+  - Root cause: direct `sigma` global reference caused `ReferenceError` in this bundle.
+  - Resolution: use `globalThis.sigma` guarded lookup for optional program exports.
 
 Validation:
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
@@ -27,4 +24,4 @@ Constraints and direction:
 - Scope remains graph-focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Capture a fresh Playwright screenshot from the target demo flow to validate visual legibility with live data.
+- Capture a fresh Playwright screenshot from the demo flow and compare legibility/edge visibility against the prior v2 screenshot.
