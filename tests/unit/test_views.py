@@ -50,12 +50,16 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "OCCUPANCY_TARGET_MAX" in html
     assert "FIT_MIN_MEDIAN_LABEL_PX" in html
     assert "FIT_MARGIN_LEFT_UNITS" in html
+    assert "FIT_SAFE_LEFT_PX" in html
+    assert "FIT_SAFE_TOP_PX" in html
     assert 'const LAYOUT_MODE = "v6_core_peripheral";' in html
     assert "function layoutNodes(nodes, nodeById, edges)" in html
     assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
     assert "function computeConnectedComponents(nodes, edges)" in html
     assert "function componentScore(component, componentStats)" in html
     assert "function normalizeLayoutOccupancy(positions, nodeById)" in html
+    assert "function normalizeCoreAspect(positions, zoneByNode, nodeById)" in html
+    assert "function enforceZoneGap(positions, zoneByNode, nodeById)" in html
     assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
     assert "const coreComponents = [];" in html
     assert "function ensureUniqueDisplayLabels(nodes, nodeById)" in html
@@ -103,6 +107,7 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert 'data-filter-edge-emphasis="cross-file"' in html
     assert "edgeEmphasisCrossFileOnly" in html
     assert "renderer.setCustomBBox(bbox || null);" in html
+    assert "width: clamp(320px, 30vw, 400px);" in html
     assert "camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });" not in html
     assert "const nodeLabelHitboxes = new Map();" in html
     assert 'renderer.on("clickStage"' in html

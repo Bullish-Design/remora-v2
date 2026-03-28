@@ -472,10 +472,10 @@
       FIT_MARGIN_TOP_UNITS: 5.5,
       FIT_MARGIN_BOTTOM_UNITS: 3.2,
       FIT_PADDING_PX: 56,
-      FIT_SAFE_LEFT_PX: 288,
-      FIT_SAFE_TOP_PX: 124,
+      FIT_SAFE_LEFT_PX: 264,
+      FIT_SAFE_TOP_PX: 72,
       FIT_SAFE_RIGHT_PX: 24,
-      FIT_SAFE_BOTTOM_PX: 64,
+      FIT_SAFE_BOTTOM_PX: 48,
     });
     const LAYOUT_MODE = "v6_core_peripheral";
 
@@ -1846,16 +1846,26 @@
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const pad = 12;
+        const leftCandidate = rect.right - graphRect.left + pad;
+        const rightCandidate = graphRect.right - rect.left + pad;
+        const topCandidate =
+          centerX <= graphMidX
+            ? rect.height * 0.58 + 16
+            : rect.bottom - graphRect.top + pad;
+        const bottomCandidate =
+          centerX <= graphMidX
+            ? rect.height * 0.45 + 14
+            : graphRect.bottom - rect.top + pad;
 
         if (centerX <= graphMidX) {
-          safe.left = Math.max(safe.left, rect.right - graphRect.left + pad);
+          safe.left = Math.max(safe.left, leftCandidate);
         } else {
-          safe.right = Math.max(safe.right, graphRect.right - rect.left + pad);
+          safe.right = Math.max(safe.right, rightCandidate);
         }
         if (centerY <= graphMidY) {
-          safe.top = Math.max(safe.top, rect.bottom - graphRect.top + pad);
+          safe.top = Math.max(safe.top, topCandidate);
         } else {
-          safe.bottom = Math.max(safe.bottom, graphRect.bottom - rect.top + pad);
+          safe.bottom = Math.max(safe.bottom, bottomCandidate);
         }
       }
 

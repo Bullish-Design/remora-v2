@@ -369,6 +369,21 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               const overallZoneHeight = Math.max(1, overallBox.maxY - overallBox.minY);
               const coreZoneHeight = zoneBoxes.core.count > 0 ? Math.max(1, zoneBoxes.core.maxY - zoneBoxes.core.minY) : 0;
               const coreZoneVerticalShare = coreZoneHeight / overallZoneHeight;
+              const coreCentroidX =
+                zoneBoxes.core.count > 0
+                  ? (zoneBoxes.core.minX + zoneBoxes.core.maxX) / 2
+                  : dims.width / 2;
+              const coreCentroidY =
+                zoneBoxes.core.count > 0
+                  ? (zoneBoxes.core.minY + zoneBoxes.core.maxY) / 2
+                  : dims.height / 2;
+              const coreCentroidXRatio = dims.width > 0 ? coreCentroidX / dims.width : 0.5;
+              const coreCentroidYRatio = dims.height > 0 ? coreCentroidY / dims.height : 0.5;
+              const zoneGapPx =
+                zoneBoxes.core.count > 0 && zoneBoxes.peripheral.count > 0
+                  ? zoneBoxes.peripheral.minY - zoneBoxes.core.maxY
+                  : 0;
+              const zoneGapRatio = overallZoneHeight > 0 ? zoneGapPx / overallZoneHeight : 0;
 
               const peripheralBoxes =
                 typeof nodeLabelHitboxes !== "undefined"
@@ -431,6 +446,36 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 typeof renderer.getSetting === "function"
                   ? renderer.getSetting("enableEdgeEvents")
                   : null;
+              const pixelRatio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
+              const filterBar = document.getElementById("filter-bar");
+              let coreOccludedByFilterCount = 0;
+              if (filterBar && typeof nodeLabelHitboxes !== "undefined") {
+                const rect = filterBar.getBoundingClientRect();
+                for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
+                  if (!graph.hasNode(nodeId)) continue;
+                  const attrs = graph.getNodeAttributes(nodeId);
+                  if (attrs.hidden || attrs.layout_zone === "peripheral") continue;
+                  const left = box.x / pixelRatio;
+                  const top = box.y / pixelRatio;
+                  const right = (box.x + box.width) / pixelRatio;
+                  const bottom = (box.y + box.height) / pixelRatio;
+                  const overlapW = Math.max(0, Math.min(right, rect.right) - Math.max(left, rect.left));
+                  const overlapH = Math.max(0, Math.min(bottom, rect.bottom) - Math.max(top, rect.top));
+                  if (overlapW > 0 && overlapH > 0) coreOccludedByFilterCount += 1;
+                }
+              }
+              const sidebar = document.getElementById("sidebar");
+              const sidebarWidthRatio =
+                sidebar && window.innerWidth > 0
+                  ? sidebar.getBoundingClientRect().width / window.innerWidth
+                  : 0;
+              let applyTaxZone = null;
+              for (const nodeId of nodes) {
+                if (!String(nodeId).includes("apply_tax")) continue;
+                const attrs = graph.getNodeAttributes(nodeId);
+                applyTaxZone = attrs.layout_zone || null;
+                break;
+              }
 
               return {
                 total,
@@ -442,6 +487,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 peripheral_zone_nodes: zoneCounts.peripheral,
                 core_zone_occupancy: coreZoneOccupancy,
                 core_zone_vertical_share: coreZoneVerticalShare,
+                core_centroid_x_ratio: coreCentroidXRatio,
+                core_centroid_y_ratio: coreCentroidYRatio,
+                zone_gap_px: zoneGapPx,
+                zone_gap_ratio: zoneGapRatio,
                 peripheral_zone_footprint: peripheralZoneFootprint,
                 peripheral_label_overlap_ratio: peripheralLabelOverlapRatio,
                 overlap_ratio: overlapRatio,
@@ -451,6 +500,9 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 emphasized_edge_count: emphasizedEdgeCount,
                 render_edge_labels_enabled: renderEdgeLabelsEnabled,
                 enable_edge_events_enabled: enableEdgeEventsEnabled,
+                core_occluded_by_filter_count: coreOccludedByFilterCount,
+                sidebar_width_ratio: sidebarWidthRatio,
+                apply_tax_zone: applyTaxZone,
               };
             }
             """
@@ -465,6 +517,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["overlap_ratio"] < 0.45, visibility
         assert visibility["core_zone_nodes"] > 0, visibility
         assert visibility["core_zone_vertical_share"] >= 0.55, visibility
+        assert 0.30 <= visibility["core_centroid_x_ratio"] <= 0.62, visibility
+        assert 0.14 <= visibility["core_centroid_y_ratio"] <= 0.58, visibility
+        assert visibility["zone_gap_px"] >= 10, visibility
+        assert visibility["zone_gap_ratio"] <= 0.34, visibility
         assert visibility["peripheral_label_overlap_ratio"] < 0.02, visibility
         if visibility["peripheral_zone_nodes"] > 0:
             assert visibility["core_zone_occupancy"] >= 0.02, visibility
@@ -473,6 +529,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["emphasized_edge_count"] > 0, visibility
         assert visibility["render_edge_labels_enabled"] is True, visibility
         assert visibility["enable_edge_events_enabled"] is True, visibility
+        assert visibility["core_occluded_by_filter_count"] == 0, visibility
+        assert visibility["sidebar_width_ratio"] <= 0.315, visibility
+        if visibility["apply_tax_zone"] is not None:
+            assert visibility["apply_tax_zone"] in {"core", "peripheral"}, visibility
         if visibility["edge_total"] > 0:
             assert visibility["edge_span_visible"] > 0, visibility
 
