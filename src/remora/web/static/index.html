@@ -427,6 +427,14 @@
       ROW_BASE_PAD: 6.0,
       MIN_COLUMN_SEPARATION: 2.6,
       MIN_NODE_GAP_Y: 1.8,
+      COMPONENT_GAP_X: 10.0,
+      COMPONENT_GAP_Y: 12.0,
+      COMPONENT_PACK_MIN_WIDTH: 62.0,
+      COMPONENT_PACK_MAX_WIDTH: 138.0,
+      COMPONENT_PACK_FILL_RATIO: 0.95,
+      SATELLITE_GAP_X: 3.8,
+      SATELLITE_GAP_Y: 4.5,
+      SATELLITE_ROW_GAP: 4.0,
       FIT_PADDING_PX: 56,
     });
     const LAYOUT_MODE = "v5_component";
@@ -650,7 +658,7 @@
       return labelMeasureContext.measureText(String(text)).width + LAYOUT.LABEL_PAD_PX;
     }
 
-    function layoutNodesV4FileWrap(nodes, nodeById) {
+    function computeNodeDepths(nodes, nodeById) {
       const depthOf = {};
       const visiting = new Set();
       function computeDepth(nodeId) {
@@ -667,6 +675,100 @@
         return depthOf[nodeId];
       }
       for (const n of nodes) computeDepth(n.node_id);
+      return depthOf;
+    }
+
+    function computeConnectedComponents(nodes, edges) {
+      const nodeIds = nodes
+        .filter((node) => node.node_type !== "directory")
+        .map((node) => node.node_id)
+        .sort();
+      const adjacency = new Map(nodeIds.map((nodeId) => [nodeId, new Set()]));
+
+      for (const edge of edges || []) {
+        if (edge.edge_type === "contains") continue;
+        if (!adjacency.has(edge.from_id) || !adjacency.has(edge.to_id)) continue;
+        adjacency.get(edge.from_id).add(edge.to_id);
+        adjacency.get(edge.to_id).add(edge.from_id);
+      }
+
+      const seen = new Set();
+      const components = [];
+      for (const nodeId of nodeIds) {
+        if (seen.has(nodeId)) continue;
+        const stack = [nodeId];
+        const componentIds = [];
+        seen.add(nodeId);
+        while (stack.length > 0) {
+          const current = stack.pop();
+          componentIds.push(current);
+          const neighbors = adjacency.get(current) || new Set();
+          for (const neighbor of neighbors) {
+            if (!seen.has(neighbor)) {
+              seen.add(neighbor);
+              stack.push(neighbor);
+            }
+          }
+        }
+        componentIds.sort();
+        components.push(componentIds);
+      }
+
+      components.sort((a, b) => (b.length - a.length) || a[0].localeCompare(b[0]));
+      return { components, adjacency };
+    }
+
+    function computePositionBounds(positions, nodeById) {
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+
+      for (const [nodeId, pos] of positions) {
+        const label = nodeById[nodeId]?._displayLabel || nodeById[nodeId]?.name || nodeId;
+        const labelWidth = measureLabelWidth(label) / LAYOUT.PX_PER_UNIT;
+        const halfW = Math.max(2.6, labelWidth / 2);
+        const halfH = 1.25;
+        minX = Math.min(minX, pos.x - halfW);
+        maxX = Math.max(maxX, pos.x + halfW);
+        minY = Math.min(minY, pos.y - halfH);
+        maxY = Math.max(maxY, pos.y + halfH);
+      }
+
+      if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+        return {
+          minX: 0,
+          maxX: 0,
+          minY: 0,
+          maxY: 0,
+          width: 0,
+          height: 0,
+          centerX: 0,
+          centerY: 0,
+        };
+      }
+
+      return {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2,
+      };
+    }
+
+    function nodePathRoot(node) {
+      const parts = (node?.file_path || "")
+        .replace(/\\/g, "/")
+        .split("/")
+        .filter(Boolean);
+      return parts[0] || "__root__";
+    }
+
+    function layoutNodesV4FileWrap(nodes, nodeById, depthOf = computeNodeDepths(nodes, nodeById)) {
 
       const directories = [];
       const fileGroups = {};
@@ -815,15 +917,126 @@
       return { positions, boxes, directories };
     }
 
-    function layoutNodesV5Component(nodes, nodeById) {
-      return layoutNodesV4FileWrap(nodes, nodeById);
+    function layoutNodesV5Component(nodes, nodeById, edges) {
+      const depthOf = computeNodeDepths(nodes, nodeById);
+      const directories = nodes.filter((node) => node.node_type === "directory");
+      const contentNodes = nodes.filter((node) => node.node_type !== "directory");
+
+      const { components } = computeConnectedComponents(contentNodes, edges || []);
+      if (components.length === 0) {
+        return { positions: new Map(), boxes: new Map(), directories };
+      }
+
+      const componentLayouts = components.map((ids) => {
+        const componentNodes = ids.map((id) => nodeById[id]).filter(Boolean);
+        const localLayout = layoutNodesV4FileWrap(componentNodes, nodeById, depthOf);
+        const bounds = computePositionBounds(localLayout.positions, nodeById);
+        return {
+          ids,
+          positions: localLayout.positions,
+          bounds,
+          fileRoots: new Set(componentNodes.map((node) => nodePathRoot(node))),
+          satelliteCount: 0,
+        };
+      });
+
+      const mainComponents = componentLayouts.filter((item) => item.ids.length > 1);
+      const primaryComponents = mainComponents.length > 0 ? mainComponents : componentLayouts;
+      const trailingSingletons = mainComponents.length > 0
+        ? componentLayouts.filter((item) => item.ids.length === 1)
+        : [];
+
+      const graphWidthPx = document.getElementById("graph")?.clientWidth || 1200;
+      const inferredPackWidth =
+        (graphWidthPx / LAYOUT.PX_PER_UNIT) * LAYOUT.COMPONENT_PACK_FILL_RATIO;
+      const targetPackWidth = Math.max(
+        LAYOUT.COMPONENT_PACK_MIN_WIDTH,
+        Math.min(LAYOUT.COMPONENT_PACK_MAX_WIDTH, inferredPackWidth),
+      );
+
+      const placements = [];
+      let xCursor = 0;
+      let rowTop = 0;
+      let rowHeight = 0;
+
+      for (const component of primaryComponents) {
+        const width = component.bounds.width;
+        const height = component.bounds.height;
+        const projectedWidth =
+          xCursor === 0 ? width : xCursor + LAYOUT.COMPONENT_GAP_X + width;
+        if (xCursor > 0 && projectedWidth > targetPackWidth) {
+          xCursor = 0;
+          rowTop -= rowHeight + LAYOUT.COMPONENT_GAP_Y;
+          rowHeight = 0;
+        }
+        if (xCursor > 0) xCursor += LAYOUT.COMPONENT_GAP_X;
+
+        const tx = xCursor - component.bounds.minX;
+        const ty = rowTop - component.bounds.maxY;
+
+        placements.push({
+          component,
+          tx,
+          ty,
+          minY: component.bounds.minY + ty,
+          maxY: component.bounds.maxY + ty,
+          width,
+          centerX: component.bounds.centerX + tx,
+          fileRoots: component.fileRoots,
+          satelliteCount: 0,
+        });
+
+        xCursor += width;
+        rowHeight = Math.max(rowHeight, height);
+      }
+
+      const positions = new Map();
+      const applyPlacement = (placement) => {
+        for (const [nodeId, pos] of placement.component.positions) {
+          positions.set(nodeId, { x: pos.x + placement.tx, y: pos.y + placement.ty });
+        }
+      };
+      for (const placement of placements) {
+        applyPlacement(placement);
+      }
+
+      for (const singleton of trailingSingletons) {
+        if (placements.length === 0) break;
+        const singletonNode = nodeById[singleton.ids[0]];
+        const singletonRoot = nodePathRoot(singletonNode);
+
+        let anchor = placements[0];
+        const rootMatch = placements.find((placement) => placement.fileRoots.has(singletonRoot));
+        if (rootMatch) anchor = rootMatch;
+
+        const satelliteIndex = anchor.satelliteCount || 0;
+        anchor.satelliteCount = satelliteIndex + 1;
+        const side = satelliteIndex % 2 === 0 ? -1 : 1;
+        const row = Math.floor(satelliteIndex / 2);
+        const centerX =
+          anchor.centerX +
+          side * (anchor.width / 2 + singleton.bounds.width / 2 + LAYOUT.SATELLITE_GAP_X);
+        const topY =
+          anchor.minY -
+          LAYOUT.SATELLITE_GAP_Y -
+          row * (singleton.bounds.height + LAYOUT.SATELLITE_ROW_GAP);
+
+        applyPlacement({
+          component: singleton,
+          tx: centerX - singleton.bounds.centerX,
+          ty: topY - singleton.bounds.maxY,
+        });
+      }
+
+      const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
+      return { positions, boxes, directories };
     }
 
-    function layoutNodes(nodes, nodeById) {
+    function layoutNodes(nodes, nodeById, edges) {
       if (LAYOUT_MODE === "v4_file_wrap") {
         return layoutNodesV4FileWrap(nodes, nodeById);
       }
-      return layoutNodesV5Component(nodes, nodeById);
+      return layoutNodesV5Component(nodes, nodeById, edges);
     }
 
     function isDescendantOf(nodeId, ancestorId, nodeById) {
@@ -939,10 +1152,12 @@
     async function loadGraph() {
       const nodesResp = await fetch("/api/nodes");
       const nodes = await nodesResp.json();
+      const edgeResp = await fetch("/api/edges");
+      const edges = await edgeResp.json();
       const nodeById = Object.fromEntries(nodes.map((n) => [n.node_id, n]));
 
       qualifyLabels(nodes, nodeById);
-      const layout = layoutNodes(nodes, nodeById);
+      const layout = layoutNodes(nodes, nodeById, edges);
 
       const allPositions = [...layout.positions.values()];
       if (allPositions.length > 0) {
@@ -986,8 +1201,6 @@
         });
       }
 
-      const edgeResp = await fetch("/api/edges");
-      const edges = await edgeResp.json();
       for (const edge of edges) {
         if (edge.edge_type === "contains") continue;
         const key = edge.from_id + "->" + edge.to_id + ":" + edge.edge_type;

@@ -47,8 +47,10 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "WRAP_TARGET_WIDTH" in html
     assert "ROW_BAND_GAP" in html
     assert 'const LAYOUT_MODE = "v5_component";' in html
-    assert "function layoutNodes(nodes, nodeById)" in html
+    assert "function layoutNodes(nodes, nodeById, edges)" in html
     assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
+    assert "function computeConnectedComponents(nodes, edges)" in html
+    assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
     assert "const rows = [];" in html
     assert 'data-filter-edge-emphasis="cross-file"' in html
     assert "edgeEmphasisCrossFileOnly" in html
