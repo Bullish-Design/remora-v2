@@ -505,24 +505,45 @@
       context.restore();
     }
 
+    const EDGE_STYLES = Object.freeze({
+      contains: { color: "#233247", size: 0.5, hidden: true, type: "line" },
+      imports:  { color: "#60a5fa", size: 1.8, hidden: false, type: "arrow" },
+      inherits: { color: "#a78bfa", size: 1.8, hidden: false, type: "arrow" },
+    });
+    const DEFAULT_EDGE_STYLE = Object.freeze({
+      color: "#3a4f6a", size: 1, hidden: false, type: "line",
+    });
+
+    let selectedNode = null;
     const renderer = new Sigma(graph, document.getElementById("graph"), {
       labelRenderedSizeThreshold: 0,
       defaultDrawNodeLabel: drawNodeBoxLabel,
+      defaultEdgeType: "arrow",
       zIndex: true,
       nodeReducer: (node, data) => {
-        if (data.node_type === "__label__") {
-          return {
-            ...data,
-            size: 1.7,
-            color: "#9fb2c8",
-            label: data.label,
-            forceLabel: true,
-          };
+        const result = { ...data };
+        if (data.dimmed) {
+          result.color = "rgba(100, 116, 139, 0.2)";
+          result.label = data.label;
+          result.forceLabel = true;
         }
-        return data;
+        if (node === selectedNode) {
+          result.size = (data.size || 2.4) * 1.3;
+          result.zIndex = 10;
+        }
+        return result;
+      },
+      edgeReducer: (edge, data) => {
+        const style = EDGE_STYLES[data.label] || DEFAULT_EDGE_STYLE;
+        return {
+          ...data,
+          color: style.color,
+          size: style.size,
+          type: style.type,
+          hidden: data.hidden ?? style.hidden,
+        };
       },
     });
-    let selectedNode = null;
     const timelineEvents = [];
     const MAX_TIMELINE_EVENTS = 200;
     const agentEventCache = new Map();
@@ -533,15 +554,6 @@
       class: getComputedStyle(document.documentElement).getPropertyValue("--class").trim(),
       method: getComputedStyle(document.documentElement).getPropertyValue("--method").trim()
     };
-
-    const EDGE_STYLES = Object.freeze({
-      contains: { color: "#233247", size: 0.5, hidden: true, type: "line" },
-      imports:  { color: "#60a5fa", size: 1.8, hidden: false, type: "arrow" },
-      inherits: { color: "#a78bfa", size: 1.8, hidden: false, type: "arrow" },
-    });
-    const DEFAULT_EDGE_STYLE = Object.freeze({
-      color: "#3a4f6a", size: 1, hidden: false, type: "line",
-    });
 
     function qualifyLabels(nodes, nodeById) {
       const nameCount = {};

@@ -17,7 +17,7 @@
 - [x] Step 7: Add `layoutNodes`
 - [x] Step 8: Rewrite `loadGraph`
 - [x] Step 9: Rewrite `drawNodeBoxLabel`
-- [ ] Step 10: Update Sigma constructor
+- [x] Step 10: Update Sigma constructor
 - [ ] Step 11: Update `nodeColor` palette
 - [ ] Step 12: Add `filterState` + `applyFilters`
 - [ ] Step 13: Wire filter chip handlers
