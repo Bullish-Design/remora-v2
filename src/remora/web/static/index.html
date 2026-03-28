@@ -1161,6 +1161,34 @@ function addTimelineEvent(eventType, payload) {
       }
     });
 
+    document.getElementById("filter-bar").addEventListener("click", (event) => {
+      const chip = event.target.closest(".filter-chip");
+      if (!chip) return;
+
+      const nodeType = chip.dataset.filterNode;
+      const edgeType = chip.dataset.filterEdge;
+
+      if (nodeType) {
+        chip.classList.toggle("active");
+        if (filterState.hiddenNodeTypes.has(nodeType)) {
+          filterState.hiddenNodeTypes.delete(nodeType);
+        } else {
+          filterState.hiddenNodeTypes.add(nodeType);
+        }
+      }
+
+      if (edgeType) {
+        chip.classList.toggle("active");
+        if (filterState.hiddenEdgeTypes.has(edgeType)) {
+          filterState.hiddenEdgeTypes.delete(edgeType);
+        } else {
+          filterState.hiddenEdgeTypes.add(edgeType);
+        }
+      }
+
+      applyFilters();
+    });
+
     function ssePayload(event) {
       const data = JSON.parse(event.data);
       return data.payload || data;
