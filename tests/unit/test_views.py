@@ -46,10 +46,13 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "const LAYOUT = Object.freeze({" in html
     assert "WRAP_TARGET_WIDTH" in html
     assert "ROW_BAND_GAP" in html
+    assert "OCCUPANCY_TARGET_MIN" in html
+    assert "OCCUPANCY_TARGET_MAX" in html
     assert 'const LAYOUT_MODE = "v5_component";' in html
     assert "function layoutNodes(nodes, nodeById, edges)" in html
     assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
     assert "function computeConnectedComponents(nodes, edges)" in html
+    assert "function normalizeLayoutOccupancy(positions, nodeById)" in html
     assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
     assert "const rows = [];" in html
     assert 'data-filter-edge-emphasis="cross-file"' in html

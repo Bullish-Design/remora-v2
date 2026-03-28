@@ -435,6 +435,10 @@
       SATELLITE_GAP_X: 3.8,
       SATELLITE_GAP_Y: 4.5,
       SATELLITE_ROW_GAP: 4.0,
+      OCCUPANCY_TARGET_MIN: 0.35,
+      OCCUPANCY_TARGET_MAX: 0.82,
+      OCCUPANCY_SCALE_MIN: 0.88,
+      OCCUPANCY_SCALE_MAX: 1.45,
       FIT_PADDING_PX: 56,
     });
     const LAYOUT_MODE = "v5_component";
@@ -760,6 +764,36 @@
       };
     }
 
+    function normalizeLayoutOccupancy(positions, nodeById) {
+      if (!positions || positions.size === 0) return;
+      const graphEl = document.getElementById("graph");
+      const graphWidthPx = graphEl?.clientWidth || 1200;
+      const graphHeightPx = graphEl?.clientHeight || 900;
+      const viewportAreaUnits =
+        Math.max(1, graphWidthPx / LAYOUT.PX_PER_UNIT) *
+        Math.max(1, graphHeightPx / LAYOUT.PX_PER_UNIT);
+      const bounds = computePositionBounds(positions, nodeById);
+      const layoutAreaUnits = Math.max(1, bounds.width * bounds.height);
+      const occupancy = layoutAreaUnits / viewportAreaUnits;
+
+      let targetScale = 1;
+      if (occupancy < LAYOUT.OCCUPANCY_TARGET_MIN) {
+        targetScale = Math.sqrt(LAYOUT.OCCUPANCY_TARGET_MIN / Math.max(occupancy, 1e-6));
+      } else if (occupancy > LAYOUT.OCCUPANCY_TARGET_MAX) {
+        targetScale = Math.sqrt(LAYOUT.OCCUPANCY_TARGET_MAX / occupancy);
+      }
+      const scale = Math.max(
+        LAYOUT.OCCUPANCY_SCALE_MIN,
+        Math.min(LAYOUT.OCCUPANCY_SCALE_MAX, targetScale),
+      );
+      if (Math.abs(scale - 1) < 0.03) return;
+
+      for (const [, pos] of positions) {
+        pos.x = bounds.centerX + (pos.x - bounds.centerX) * scale;
+        pos.y = bounds.centerY + (pos.y - bounds.centerY) * scale;
+      }
+    }
+
     function nodePathRoot(node) {
       const parts = (node?.file_path || "")
         .replace(/\\/g, "/")
@@ -1028,6 +1062,7 @@
         });
       }
 
+      normalizeLayoutOccupancy(positions, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
       return { positions, boxes, directories };
     }
