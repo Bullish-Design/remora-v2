@@ -9,11 +9,12 @@ Current status:
 - v7 Step 2 complete: edge enter/leave/click handlers with sidebar relationship details and visual focus.
 - v7 Step 3 complete: peripheral dock now uses grid-cell placement with min width + enforced gaps.
 - v7 Step 4 complete: core-zone minimum vertical reservation and core-bounded custom camera fit.
-- Unit checks passing after Step 4.
+- v7 Step 5 complete: explicit zone separator rule + "supporting nodes" label in canvas render pass.
+- Unit checks passing after Step 5.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v7 Step 5 (zone separator rendering), then continue sequentially through Step 10.
+- Implement v7 Step 6 (hierarchy box alpha/tint overhaul), then continue sequentially through Step 10.

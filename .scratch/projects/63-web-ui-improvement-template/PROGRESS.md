@@ -157,7 +157,7 @@
 - [x] Step 2: Edge event handlers.
 - [x] Step 3: Fix peripheral grid layout.
 - [x] Step 4: Core zone canvas reservation + `setCustomBBox`.
-- [ ] Step 5: Zone separator rendering.
+- [x] Step 5: Zone separator rendering.
 - [ ] Step 6: Hierarchy box alpha overhaul.
 - [ ] Step 7: Edge narrative emphasis.
 - [ ] Step 8: Peripheral visual de-emphasis.

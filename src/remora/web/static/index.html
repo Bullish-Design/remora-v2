@@ -1519,7 +1519,12 @@
       normalizeLayoutOccupancy(positions, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
       const coreBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
-      return { positions, boxes, directories, zoneByNode, coreBounds };
+      const peripheralBounds = computeZoneBounds(positions, zoneByNode, "peripheral", nodeById);
+      const separatorY =
+        peripheralBounds.height > 0 && coreBounds.height > 0
+          ? (coreBounds.minY + peripheralBounds.maxY) / 2
+          : null;
+      return { positions, boxes, directories, zoneByNode, coreBounds, peripheralBounds, separatorY };
     }
 
     function layoutNodes(nodes, nodeById, edges) {
@@ -1612,6 +1617,7 @@
 
     let boundingBoxes = new Map();
     let coreZoneBounds = null;
+    let zoneSeparatorY = null;
 
     function computeFitBBox() {
       if (
@@ -1743,10 +1749,14 @@
             centerY: layout.coreBounds.centerY - cy,
           };
         }
+        if (Number.isFinite(layout.separatorY)) {
+          layout.separatorY -= cy;
+        }
       }
 
       boundingBoxes = layout.boxes;
       coreZoneBounds = layout.coreBounds || null;
+      zoneSeparatorY = Number.isFinite(layout.separatorY) ? layout.separatorY : null;
       graph.clear();
 
       for (const node of nodes) {
@@ -2215,15 +2225,39 @@ function addTimelineEvent(eventType, payload) {
 
     renderer.on("beforeRender", () => {
       nodeLabelHitboxes.clear();
-      if (!filterState.showBoundingBoxes) return;
 
       const context = renderer.getCanvases()?.edges?.getContext("2d");
       if (!context) return;
+      context.save();
+      if (Number.isFinite(zoneSeparatorY)) {
+        const dims = renderer.getDimensions();
+        const leftPoint = renderer.graphToViewport({ x: -1000, y: zoneSeparatorY });
+        const rightPoint = renderer.graphToViewport({ x: 1000, y: zoneSeparatorY });
+        const y = (leftPoint.y + rightPoint.y) / 2;
+        context.strokeStyle = "rgba(159, 178, 200, 0.20)";
+        context.lineWidth = 1;
+        context.setLineDash([5, 5]);
+        context.beginPath();
+        context.moveTo(12, y);
+        context.lineTo(Math.max(14, dims.width - 12), y);
+        context.stroke();
+        context.setLineDash([]);
+        context.fillStyle = "rgba(159, 178, 200, 0.68)";
+        context.font = '500 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        context.textAlign = "left";
+        context.textBaseline = "bottom";
+        context.fillText("supporting nodes", 16, y - 4);
+      }
+
+      if (!filterState.showBoundingBoxes) {
+        context.restore();
+        return;
+      }
+
       const cameraRatio = renderer.getCamera().getState().ratio || 1;
       const zoomOut = Math.max(1, cameraRatio);
       const minHeaderWidth = 120 * Math.min(2.6, zoomOut);
       const minHeaderHeight = 42 * Math.min(2.2, zoomOut);
-      context.save();
       for (const [dirId, box] of boundingBoxes) {
         const tl = renderer.graphToViewport({ x: box.x, y: box.y });
         const br = renderer.graphToViewport({ x: box.x + box.w, y: box.y - box.h });

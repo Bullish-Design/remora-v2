@@ -67,6 +67,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "CORE_ZONE_MIN_VERTICAL_RATIO" in html
     assert "function computeZoneBounds(positions, zoneByNode, zone, nodeById)" in html
     assert "coreZoneBounds = layout.coreBounds || null;" in html
+    assert "zoneSeparatorY = Number.isFinite(layout.separatorY) ? layout.separatorY : null;" in html
+    assert "\"supporting nodes\"" in html
     assert "fallback to deterministic hash suffix" in html
     assert "function colorWithAlpha(hex, alpha)" in html
     assert "length_norm" in html
