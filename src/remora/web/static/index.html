@@ -1952,14 +1952,25 @@ function addTimelineEvent(eventType, payload) {
         if (screenW < 2 || screenH < 2) continue;
 
         const depth = box.depth || 0;
+        const isTopLevel = depth <= 2;
         const depthFade = depth > 1 ? Math.min(0.65, (depth - 1) * 0.12 * zoomOut) : 0;
-        const fillAlpha = Math.min(0.3, Math.max(0.06, 0.1 + depth * 0.025 - depthFade * 0.25));
-        const strokeAlpha = Math.min(0.92, Math.max(0.2, 0.36 + depth * 0.08 - depthFade * 0.6));
-        const labelAlpha = Math.min(0.98, Math.max(0.62, 0.78 + depth * 0.08 - depthFade * 0.3));
+        const fillAlpha = isTopLevel
+          ? Math.min(0.34, Math.max(0.16, 0.24 - depthFade * 0.22))
+          : Math.min(0.3, Math.max(0.06, 0.1 + depth * 0.025 - depthFade * 0.25));
+        const strokeAlpha = isTopLevel
+          ? Math.min(0.98, Math.max(0.62, 0.78 - depthFade * 0.18))
+          : Math.min(0.92, Math.max(0.2, 0.36 + depth * 0.08 - depthFade * 0.6));
+        const labelAlpha = isTopLevel
+          ? Math.min(1.0, Math.max(0.9, 0.96 - depthFade * 0.1))
+          : Math.min(0.98, Math.max(0.62, 0.78 + depth * 0.08 - depthFade * 0.3));
+        const strokeBaseColor = isTopLevel ? "226, 232, 240" : "203, 213, 225";
+        const fillBaseColor = isTopLevel ? "226, 232, 240" : "203, 213, 225";
+        const headerMinWidth = isTopLevel ? 72 : minHeaderWidth;
+        const headerMinHeight = isTopLevel ? 24 : minHeaderHeight;
 
-        context.fillStyle = "rgba(203, 213, 225, " + fillAlpha + ")";
-        context.strokeStyle = "rgba(203, 213, 225, " + strokeAlpha + ")";
-        context.lineWidth = 1.2;
+        context.fillStyle = "rgba(" + fillBaseColor + ", " + fillAlpha + ")";
+        context.strokeStyle = "rgba(" + strokeBaseColor + ", " + strokeAlpha + ")";
+        context.lineWidth = isTopLevel ? 1.6 : 1.2;
         drawRoundedRect(context, tl.x, tl.y, screenW, screenH, 8);
         context.fill();
         context.stroke();
@@ -1968,7 +1979,7 @@ function addTimelineEvent(eventType, payload) {
         context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
         context.textAlign = "left";
         context.textBaseline = "top";
-        if (depth <= 2 && screenW >= minHeaderWidth && screenH >= minHeaderHeight) {
+        if (depth <= 2 && screenW >= headerMinWidth && screenH >= headerMinHeight) {
           context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
         }
       }
