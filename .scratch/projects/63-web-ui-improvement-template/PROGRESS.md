@@ -159,7 +159,7 @@
 - [x] Step 4: Core zone canvas reservation + `setCustomBBox`.
 - [x] Step 5: Zone separator rendering.
 - [x] Step 6: Hierarchy box alpha overhaul.
-- [ ] Step 7: Edge narrative emphasis.
+- [x] Step 7: Edge narrative emphasis.
 - [ ] Step 8: Peripheral visual de-emphasis.
 - [ ] Step 9: Smooth graph updates with `animateNodes`.
 - [ ] Step 10: Tests and verification.

@@ -592,7 +592,7 @@
 
     const EDGE_STYLES = Object.freeze({
       imports:  { color: "#60a5fa", size: 2.2, type: "arrow" },
-      inherits: { color: "#a78bfa", size: 2.0, type: "arrow" },
+      inherits: { color: "#f6c35b", size: 2.0, type: "arrow" },
     });
     const DEFAULT_EDGE_STYLE = Object.freeze({
       color: "#3a4f6a", size: 1, type: "line",
@@ -688,6 +688,8 @@
       edgeReducer: (edge, data) => {
         const style = EDGE_STYLES[data.label] || DEFAULT_EDGE_STYLE;
         const crossFileColor = data.label === "imports" && data.is_cross_file ? "#7cc4ff" : style.color;
+        const isPrimaryChain = !!data.is_primary_chain;
+        const primaryColor = data.label === "inherits" ? "#ffd978" : "#8de4ff";
         const visualType =
           data.visual_type ||
           (data.label === "imports" && data.is_cross_file && edgeCurveProgram ? "curve" : style.type);
@@ -733,13 +735,15 @@
         const sizeBoost = data.is_cross_file ? 0.95 : 0.15;
         const selectedBoost = inFocus ? 0.45 : 0;
         const lengthPenalty = lengthNorm * 0.2;
-        const emphasisBoost = isSelectedEdge || isHoveredEdge ? 0.75 : 0;
+        const emphasisBoost = (isSelectedEdge || isHoveredEdge ? 0.75 : 0) + (isPrimaryChain ? 1.0 : 0);
         const edgeSize = Math.max(0.86, style.size + sizeBoost + selectedBoost + emphasisBoost - lengthPenalty - zoneSizePenalty);
         const deEmphasis = hoveredEdgeNodes.size > 0 && !relatedToHoveredEdge && !isSelectedEdge && !isHoveredEdge;
-        const finalAlpha = deEmphasis ? alpha * 0.32 : (isSelectedEdge || isHoveredEdge ? Math.min(1, alpha + 0.22) : alpha);
+        const focusedAlpha = isSelectedEdge || isHoveredEdge ? Math.min(1, alpha + 0.22) : alpha;
+        const primaryAlpha = isPrimaryChain ? Math.max(0.9, focusedAlpha) : focusedAlpha;
+        const finalAlpha = deEmphasis ? primaryAlpha * 0.32 : primaryAlpha;
         return {
           ...data,
-          color: colorWithAlpha(crossFileColor, finalAlpha),
+          color: colorWithAlpha(isPrimaryChain ? primaryColor : crossFileColor, finalAlpha),
           size: edgeSize,
           type: visualType,
         };
@@ -1092,6 +1096,77 @@
         }
       }
       return computePositionBounds(filtered, nodeById);
+    }
+
+    function computePrimaryCoreEdgeKeys(edgeRecords, degreeByNode, zoneByNode) {
+      const coreEdges = (edgeRecords || []).filter(
+        (item) =>
+          (zoneByNode.get(item.fromId) || "core") === "core" &&
+          (zoneByNode.get(item.toId) || "core") === "core",
+      );
+      if (coreEdges.length === 0) return new Set();
+
+      const outgoing = new Map();
+      const outDegree = new Map();
+      for (const edge of coreEdges) {
+        if (!outgoing.has(edge.fromId)) outgoing.set(edge.fromId, []);
+        outgoing.get(edge.fromId).push(edge);
+        outDegree.set(edge.fromId, (outDegree.get(edge.fromId) || 0) + 1);
+      }
+
+      let startNode = coreEdges[0].fromId;
+      let bestStartScore = Number.NEGATIVE_INFINITY;
+      for (const [nodeId, count] of outDegree.entries()) {
+        const score = count * 4 + (degreeByNode.get(nodeId) || 0);
+        if (score > bestStartScore) {
+          bestStartScore = score;
+          startNode = nodeId;
+        }
+      }
+
+      const primaryKeys = new Set();
+      const visitedNodes = new Set([startNode]);
+      let cursor = startNode;
+      let safety = 0;
+      while (safety < 48) {
+        safety += 1;
+        const candidates = (outgoing.get(cursor) || []).filter(
+          (edge) => !primaryKeys.has(edge.key) && !visitedNodes.has(edge.toId),
+        );
+        if (candidates.length === 0) break;
+        candidates.sort((a, b) => {
+          const aScore =
+            (a.isCrossFile ? 3 : 0) +
+            (degreeByNode.get(a.fromId) || 0) +
+            (degreeByNode.get(a.toId) || 0);
+          const bScore =
+            (b.isCrossFile ? 3 : 0) +
+            (degreeByNode.get(b.fromId) || 0) +
+            (degreeByNode.get(b.toId) || 0);
+          return bScore - aScore;
+        });
+        const chosen = candidates[0];
+        primaryKeys.add(chosen.key);
+        cursor = chosen.toId;
+        visitedNodes.add(cursor);
+      }
+
+      if (primaryKeys.size === 0 && coreEdges.length > 0) {
+        coreEdges.sort((a, b) => {
+          const aScore =
+            (a.isCrossFile ? 3 : 0) +
+            (degreeByNode.get(a.fromId) || 0) +
+            (degreeByNode.get(a.toId) || 0);
+          const bScore =
+            (b.isCrossFile ? 3 : 0) +
+            (degreeByNode.get(b.fromId) || 0) +
+            (degreeByNode.get(b.toId) || 0);
+          return bScore - aScore;
+        });
+        primaryKeys.add(coreEdges[0].key);
+      }
+
+      return primaryKeys;
     }
 
     function normalizeLayoutOccupancy(positions, nodeById) {
@@ -1797,6 +1872,7 @@
       graph.forEachNode((nodeId) => {
         degreeByNode.set(nodeId, 0);
       });
+      const addedCoreEdgeRecords = [];
 
       for (const item of preparedEdges) {
         const edge = item.edge;
@@ -1824,8 +1900,25 @@
           visual_type:
             edge.edge_type === "imports" && isCrossFile && edgeCurveProgram ? "curve" : "arrow",
         });
+        addedCoreEdgeRecords.push({
+          key,
+          fromId: edge.from_id,
+          toId: edge.to_id,
+          isCrossFile,
+        });
         degreeByNode.set(edge.from_id, (degreeByNode.get(edge.from_id) || 0) + 1);
         degreeByNode.set(edge.to_id, (degreeByNode.get(edge.to_id) || 0) + 1);
+      }
+
+      const primaryCoreEdgeKeys = computePrimaryCoreEdgeKeys(
+        addedCoreEdgeRecords,
+        degreeByNode,
+        layout.zoneByNode || new Map(),
+      );
+      for (const edgeKey of primaryCoreEdgeKeys) {
+        if (graph.hasEdge(edgeKey)) {
+          graph.setEdgeAttribute(edgeKey, "is_primary_chain", true);
+        }
       }
 
       const fileRepresentative = new Map();

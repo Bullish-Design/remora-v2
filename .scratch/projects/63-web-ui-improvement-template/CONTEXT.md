@@ -11,11 +11,12 @@ Current status:
 - v7 Step 4 complete: core-zone minimum vertical reservation and core-bounded custom camera fit.
 - v7 Step 5 complete: explicit zone separator rule + "supporting nodes" label in canvas render pass.
 - v7 Step 6 complete: hierarchy box alpha/tint recalibration for dark-background visibility.
-- Unit checks passing after Step 6.
+- v7 Step 7 complete: primary-core-edge detection and emphasis rendering in edge reducer.
+- Unit checks passing after Step 7.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v7 Step 7 (primary edge narrative emphasis), then continue sequentially through Step 10.
+- Implement v7 Step 8 (peripheral visual de-emphasis + label chip hierarchy), then continue sequentially through Step 10.
