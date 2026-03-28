@@ -1,27 +1,29 @@
-# Concept: Graph View Overhaul
+# Concept: Graph View Overhaul (v2)
 
 ## Table of Contents
 1. [Design Goals](#1-design-goals)
-2. [Deterministic Layout System](#2-deterministic-layout-system)
-3. [Edge Rendering by Type](#3-edge-rendering-by-type)
-4. [Node Visual Identity](#4-node-visual-identity)
-5. [Interaction Layer](#5-interaction-layer)
-6. [Filter Controls](#6-filter-controls)
-7. [File Scope](#7-file-scope)
-8. [Determinism Guarantee](#8-determinism-guarantee)
+2. [Core Idea: Two Visual Channels](#2-core-idea-two-visual-channels)
+3. [Deterministic Layout System](#3-deterministic-layout-system)
+4. [Directory Bounding Boxes](#4-directory-bounding-boxes)
+5. [Edge Rendering by Type](#5-edge-rendering-by-type)
+6. [Node Visual Identity](#6-node-visual-identity)
+7. [Interaction Layer](#7-interaction-layer)
+8. [Filter Controls](#8-filter-controls)
+9. [Bug Fixes from v1](#9-bug-fixes-from-v1)
+10. [File Scope](#10-file-scope)
+11. [Determinism Guarantee](#11-determinism-guarantee)
 
 ---
 
 ## 1. Design Goals
 
 **Primary**: The graph should be immediately legible. A user glancing at the screen should
-be able to identify containment hierarchy, cross-file relationships, and node types within
-seconds — not minutes of tracing spaghetti edges.
+be able to identify the filesystem hierarchy, cross-file relationships, and node types
+within seconds.
 
 **Secondary**: The layout must be **deterministic**. Given the same set of discovered nodes,
 the graph must produce the same visual arrangement every time. Tear down and restart → same
-picture. This rules out force-directed layouts, randomized initial positions, and any
-algorithm that depends on iteration order from async discovery timing.
+picture.
 
 **Constraints**:
 - Single-file change (`index.html`) — no new vendor scripts, no build step.
@@ -30,258 +32,404 @@ algorithm that depends on iteration order from async discovery timing.
 
 ---
 
-## 2. Deterministic Layout System
+## 2. Core Idea: Two Visual Channels
 
-### 2.1 Why the Current Layout Fails
+The graph has three edge types: `contains`, `imports`, `inherits`. These serve
+fundamentally different purposes:
 
-The current layout computes each node's `(x, y)` from a cocktail of:
+| Edge Type | Purpose | Nature |
+|-----------|---------|--------|
+| `contains` | Filesystem structure (dir→file→class→method) | Tree — every node has exactly one parent |
+| `imports` | Cross-file dependency | DAG — sparse, semantic |
+| `inherits` | Class inheritance | DAG — sparse, semantic |
+
+Drawing all three as lines creates spaghetti. The solution is to encode them on
+**different visual channels**:
+
+| Channel | Encodes | Visual Form |
+|---------|---------|-------------|
+| **Spatial containment** | `contains` edges | Nested bounding boxes — translucent rectangles around each directory's contents |
+| **Drawn arrows** | `imports` + `inherits` | Colored directional arrows between nodes |
+
+These channels don't compete. The boxes define *where things live*. The arrows define
+*how things relate*. A user reads the filesystem by scanning the nested rectangles and
+reads the dependency graph by following the arrows.
 
 ```
-x = typeTrackOffset + siblingSpread + levelSpread + depthFanout
-    + depthZigzag + depthWave + hashJitter
-y = fileBandY + depth * DEPTH_ROW_SPACING + hashJitter
+┌─ src/ ─────────────────────────────────────────────────┐
+│  ┌─ services/ ──────────────────┐  ┌─ utils/ ───────┐ │
+│  │  (OrderRequest) ── imports ──────→ (format_usd)   │ │
+│  │  (OrderSummary)              │  │  (choose_wh...) │ │
+│  │  (create_order)              │  └─────────────────┘ │
+│  └──────────────────────────────┘                      │
+│  ┌─ models/ ────────────────────┐                      │
+│  │  (OrderRequest)              │                      │
+│  │  (OrderSummary)              │                      │
+│  └──────────────────────────────┘                      │
+└────────────────────────────────────────────────────────┘
+┌─ bundles/ ──────────────────────┐
+│  (Runtime profiles)             │
+│  (Validation checks)            │
+│  (Virtual agents)               │
+└─────────────────────────────────┘
 ```
 
-This produces **unstable, overlapping results** because:
+This directly solves the "disconnected section/virtual nodes" problem: bundle sections
+and virtual agents appear inside their parent directory's bounding box, visually grouped
+even though they have no `imports`/`inherits` edges.
 
-1. `depthWave = sin(depth * 0.85 + hash % 7) * amplitude` — sinusoidal jitter that fights
-   the other x-terms.
-2. `hashJitter` via `deterministicOffset()` — pseudo-random per node, unaware of neighbors.
-3. `SIBLING_SPREAD = 1.8` — fixed constant regardless of label width.
-4. `TYPE_TRACK_OFFSETS` — assigns x by type, but siblings of different types scatter
-   across the x-axis with no coherent grouping.
+---
 
-The result is that labels overlap, edges cross needlessly, and the spatial layout carries
-no semantic meaning that a user can learn and remember.
+## 3. Deterministic Layout System
 
-### 2.2 New Layout: File-Column Grid
+### 3.1 Why the Original Layout Failed
+
+The original layout computed each node's `(x, y)` from a mix of type-track offsets,
+sibling spread, level spread, depth fanout, depth zigzag, sine-wave jitter, and hash
+jitter. This produced overlapping labels, spaghetti edge crossings, and a spatial layout
+that carried no learnable meaning.
+
+### 3.2 New Layout: File-Column Grid
 
 Replace the entire positioning system with a **file-column grid** where:
 
-- **X-axis** = file identity (each file gets a column).
-- **Y-axis** = depth in the containment tree (directories at top, functions/methods at
-  bottom).
+- **X-axis** = file identity (each unique `file_path` gets a column).
+- **Y-axis** = containment depth (root directories at top, leaf functions at bottom).
 
-This makes the graph read like a project explorer turned sideways: files are columns,
-and their contents stack vertically within each column.
+**Critical**: Sigma's coordinate system has **positive y = up on screen**. To render
+directories at the top and leaf nodes below, the layout must **negate y**:
 
-```
-         orders.py       pricing.py      utils.py
-         ─────────       ──────────      ────────
-depth 0: [services/]─────────────────────────────── (directory row, shared)
-depth 1: [orders.py]     [pricing.py]    [utils.py]
-depth 2: [OrderRequest]  [PricingRule]   [format_usd]
-         [OrderSummary]  [apply_tax]     [choose_warehouse]
-depth 3: [validate]      [_compute]
-         [serialize]
+```javascript
+y = -(depth * ROW_HEIGHT + slotOffset * SUB_ROW_HEIGHT)
 ```
 
-#### Algorithm
+This gives root nodes (depth 0) the largest y values (top of screen) and deep nodes the
+smallest y values (bottom of screen).
+
+### 3.3 Directory Nodes Are Not Graph Nodes
+
+Directories are removed from the graphology graph entirely. They don't participate in
+node rendering, edge connections, hover, or selection. Instead, they become **background
+bounding boxes** drawn on the canvas layer beneath Sigma's rendering (see §4).
+
+This means the layout algorithm only positions non-directory nodes (functions, classes,
+methods, sections, tables, virtual agents). Directories are consumed by the bounding-box
+computation.
+
+### 3.4 Algorithm
 
 ```
-Step 1 — Build the containment tree from parent_id.
-Step 2 — Assign each file-rooted subtree a column index.
-         Sort columns by file_path (alphabetical → deterministic).
-Step 3 — Within each column, sort children by (start_line, name) — deterministic.
-Step 4 — Assign y by tree depth. Within a depth level, assign y-slots top to bottom
-         in child order.
-Step 5 — Assign x by column index × column width.
-Step 6 — Column width = max label width of any node in that column + padding.
-Step 7 — Directory nodes that span multiple file columns get placed as a wide row
-         above their file children (spanning the column range).
+Step 1 — Compute tree depth for every node from parent_id chains.
+Step 2 — Separate directory nodes from non-directory nodes.
+Step 3 — Group non-directory nodes by file_path. Each group is a column.
+Step 4 — Sort columns alphabetically by file_path → deterministic column order.
+Step 5 — Measure the widest label in each column → adaptive column widths.
+Step 6 — Compute column x-centers from cumulative widths + padding.
+Step 7 — Within each column, sort nodes by (depth, start_line, name).
+         Assign y-slots: nodes at the same depth get incrementing sub-slots.
+         Negate all y values so depth 0 = top of screen.
+Step 8 — After layout, compute bounding boxes from directory→descendant positions.
 ```
 
-#### Handling Directories
-
-Directories sit *above* their file children as **spanning headers**. A directory node's
-x-position is the midpoint of its children's column range, and it sits at its natural
-tree depth on the y-axis. This visually groups files under their directory without needing
-`contains` edges drawn.
-
-```
-              ┌──── services/ ────┐         ← directory, x = midpoint of children
-              ▼                   ▼
-         [orders.py]         [pricing.py]   ← files, each a column
-         [OrderRequest]      [PricingRule]  ← classes within each file
-         [OrderSummary]      [apply_tax]
-```
-
-#### Determinism Proof
-
-Every input to the layout is a pure function of the node set:
-
-| Input | Source | Deterministic? |
-|-------|--------|----------------|
-| File columns | Sorted `file_path` values | Yes — alphabetical sort is stable |
-| Column order | `file_path.localeCompare()` | Yes |
-| Child order within column | `(start_line, name)` sort | Yes — same source → same lines |
-| Tree depth | `parent_id` chain length | Yes — same parent_id → same depth |
-| Column width | `max(measureText(label))` per column | Yes — same labels → same widths |
-| Directory x | Midpoint of child column range | Yes — derived from above |
-
-No hash jitter. No sin waves. No iteration-order dependence. Same nodes → same picture.
-
-### 2.3 Layout Constants
+### 3.5 Layout Constants
 
 ```javascript
 const LAYOUT = Object.freeze({
-  COL_PAD:       3.0,   // graph-unit padding between columns
-  ROW_HEIGHT:    2.0,   // graph-unit vertical spacing per depth level
-  LABEL_PAD_X:   20,    // pixel padding inside label boxes
-  DIR_HEADER_GAP: 1.0,  // extra y-gap above directory spanning rows
-  MIN_COL_WIDTH: 4.0,   // minimum column width in graph units
-  PX_PER_UNIT:   14,    // approximate pixel-to-graph-unit conversion at default zoom
+  COL_PAD:        3.0,   // graph-unit gap between columns
+  ROW_HEIGHT:     2.2,   // graph-unit vertical spacing per depth level
+  SUB_ROW_HEIGHT: 1.6,   // graph-unit spacing between siblings at same depth
+  MIN_COL_WIDTH:  4.0,   // floor for column width so narrow labels don't collapse
+  PX_PER_UNIT:    14,    // pixel-to-graph-unit conversion at default zoom
+  LABEL_PAD_PX:   20,    // pixel padding inside label boxes for measurement
+  BOX_PAD:        2.0,   // graph-unit padding inside bounding boxes
+  BOX_HEADER:     1.4,   // graph-unit reserved for bounding box header label
 });
 ```
 
-These are tuning constants, not algorithmic randomness. Changing them shifts the whole
-grid uniformly — it doesn't change relative positions.
-
-### 2.4 Pseudocode
+### 3.6 Pseudocode
 
 ```javascript
-function layoutNodes(nodes) {
-  // 1. Build tree
-  const tree = buildContainmentTree(nodes);        // parent_id → children
-  const depthOf = computeDepths(tree);             // node_id → int
+function layoutNodes(nodes, nodeById) {
+  const depthOf = computeDepths(nodes, nodeById);
 
-  // 2. Group by file, sort columns
-  const fileGroups = groupByFile(nodes);           // file_path → [node, ...]
+  // Separate directories from content nodes
+  const directories = [];
+  const fileGroups = {};  // file_path → [node, ...]
+  for (const n of nodes) {
+    if (n.node_type === "directory") { directories.push(n); continue; }
+    (fileGroups[n.file_path || "__unfiled__"] ||= []).push(n);
+  }
+
   const sortedFiles = Object.keys(fileGroups).sort();
 
-  // 3. Measure column widths
-  const colWidths = sortedFiles.map(file =>
+  // Measure column widths
+  const colWidths = sortedFiles.map(fp =>
     Math.max(LAYOUT.MIN_COL_WIDTH,
-      ...fileGroups[file].map(n => measureLabel(n.name) / LAYOUT.PX_PER_UNIT)
-    )
+      ...fileGroups[fp].map(n => measureLabel(n._displayLabel) / LAYOUT.PX_PER_UNIT))
   );
 
-  // 4. Compute column x-offsets (cumulative widths + padding)
+  // Cumulative x-centers
   const colX = [];
   let xCursor = 0;
   for (let i = 0; i < sortedFiles.length; i++) {
-    colX.push(xCursor + colWidths[i] / 2);        // center of column
+    colX.push(xCursor + colWidths[i] / 2);
     xCursor += colWidths[i] + LAYOUT.COL_PAD;
   }
 
-  // 5. Position file-level and below nodes
+  // Position content nodes — y NEGATED so depth 0 = top
   const positions = new Map();
   for (let ci = 0; ci < sortedFiles.length; ci++) {
-    const fileNodes = fileGroups[sortedFiles[ci]];
-    // Sort by (depth, start_line, name) for vertical slot assignment
-    fileNodes.sort((a, b) =>
+    const group = fileGroups[sortedFiles[ci]];
+    group.sort((a, b) =>
       (depthOf[a.node_id] - depthOf[b.node_id])
       || (a.start_line - b.start_line)
-      || a.name.localeCompare(b.name)
-    );
-    for (const node of fileNodes) {
-      const y = depthOf[node.node_id] * LAYOUT.ROW_HEIGHT;
-      positions.set(node.node_id, { x: colX[ci], y });
+      || a.name.localeCompare(b.name));
+
+    let prevDepth = -1, slotInDepth = 0;
+    for (const n of group) {
+      const d = depthOf[n.node_id];
+      if (d === prevDepth) slotInDepth++;
+      else { slotInDepth = 0; prevDepth = d; }
+      positions.set(n.node_id, {
+        x: colX[ci],
+        y: -(d * LAYOUT.ROW_HEIGHT + slotInDepth * LAYOUT.SUB_ROW_HEIGHT),
+      });
     }
   }
 
-  // 6. Position directory nodes as spanning headers
-  for (const node of nodes) {
-    if (node.node_type === 'directory') {
-      const childXs = getChildColumnXs(node, positions);
-      const x = (Math.min(...childXs) + Math.max(...childXs)) / 2;
-      const y = depthOf[node.node_id] * LAYOUT.ROW_HEIGHT - LAYOUT.DIR_HEADER_GAP;
-      positions.set(node.node_id, { x, y });
-    }
-  }
+  // Compute bounding boxes for directories (see §4)
+  const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
 
-  // 7. Collision resolution within each depth row
-  resolveRowCollisions(positions, depthOf);
-
-  return positions;
+  return { positions, boxes };
 }
 ```
 
-### 2.5 Within-Row Collision Resolution
+### 3.7 Within-Column Collision Resolution
 
-After initial grid placement, nodes at the same depth in the same column may overlap
-(e.g., two classes in the same file). Resolution:
+The sub-slot mechanism handles same-depth siblings directly:
 
-1. Group nodes by `(column, depth)`.
-2. Sort group by `(start_line, name)`.
-3. Assign incrementing y-sub-slots: `y = baseY + slotIndex * SUB_ROW_HEIGHT`.
+1. Nodes in each column are sorted by `(depth, start_line, name)`.
+2. When consecutive nodes share a depth, `slotInDepth` increments.
+3. Each slot adds `SUB_ROW_HEIGHT` to the y offset.
 
 This is O(n) and deterministic. No iterative physics.
 
 ---
 
-## 3. Edge Rendering by Type
+## 4. Directory Bounding Boxes
 
-### 3.1 Edge Types in the System
+### 4.1 Concept
+
+Each directory node becomes a translucent rounded rectangle drawn behind all graph nodes
+and edges. The rectangle encloses all of the directory's descendant node positions (with
+padding), and has a small header label showing the directory name.
+
+Boxes nest naturally: `src/` contains `src/services/`, which contains the nodes from
+`services/orders.py`. This creates a visual hierarchy:
+
+```
+┌─ src/ (outermost, lightest) ──────────────────┐
+│  ┌─ services/ (inner, slightly darker) ─────┐ │
+│  │  (OrderRequest)  (OrderSummary)           │ │
+│  │  (create_order)  (discount_for_tier)      │ │
+│  └───────────────────────────────────────────┘ │
+│  ┌─ models/ ─────────────────────────────────┐ │
+│  │  (OrderRequest)  (OrderSummary)           │ │
+│  └───────────────────────────────────────────┘ │
+└────────────────────────────────────────────────┘
+```
+
+### 4.2 Computation
+
+Bounding boxes are computed **bottom-up**: deepest directories first, so inner boxes are
+resolved before outer boxes can include them in their extent.
+
+```javascript
+function computeBoundingBoxes(directories, positions, nodeById, depthOf) {
+  // Sort deepest first
+  directories.sort((a, b) =>
+    (depthOf[b.node_id] - depthOf[a.node_id]) || a.name.localeCompare(b.name));
+
+  const boxes = new Map();  // dir node_id → { x, y, w, h, label, depth }
+
+  for (const dir of directories) {
+    // Collect bounds of direct + transitive descendants
+    const points = [];  // array of { x, y } extremes
+
+    // Content nodes that descend from this directory
+    for (const [nid, pos] of positions) {
+      if (isDescendantOf(nid, dir.node_id, nodeById)) {
+        points.push(pos);
+      }
+    }
+
+    // Inner directory boxes that are direct children
+    for (const [did, box] of boxes) {
+      if (nodeById[did]?.parent_id === dir.node_id) {
+        points.push({ x: box.x, y: box.y });
+        points.push({ x: box.x + box.w, y: box.y - box.h });
+      }
+    }
+
+    if (points.length === 0) continue;
+
+    const minX = Math.min(...points.map(p => p.x));
+    const maxX = Math.max(...points.map(p => p.x));
+    const maxY = Math.max(...points.map(p => p.y));  // highest on screen (least negative)
+    const minY = Math.min(...points.map(p => p.y));  // lowest on screen (most negative)
+
+    boxes.set(dir.node_id, {
+      x: minX - LAYOUT.BOX_PAD,
+      y: maxY + LAYOUT.BOX_PAD + LAYOUT.BOX_HEADER,  // top edge (above highest child)
+      w: (maxX - minX) + LAYOUT.BOX_PAD * 2,
+      h: (maxY - minY) + LAYOUT.BOX_PAD * 2 + LAYOUT.BOX_HEADER,  // total height
+      label: dir.name,
+      depth: depthOf[dir.node_id],
+    });
+  }
+  return boxes;
+}
+
+function isDescendantOf(nodeId, ancestorId, nodeById) {
+  let current = nodeById[nodeId];
+  while (current) {
+    if (current.parent_id === ancestorId) return true;
+    current = current.parent_id ? nodeById[current.parent_id] : null;
+  }
+  return false;
+}
+```
+
+### 4.3 Rendering
+
+Boxes are drawn in Sigma's `beforeRender` callback, which fires before node/edge
+rendering. This ensures boxes appear *behind* everything.
+
+```javascript
+renderer.on("beforeRender", ({ context }) => {
+  nodeLabelHitboxes.clear();
+  if (!filterState.showBoundingBoxes) return;
+
+  for (const [dirId, box] of boundingBoxes) {
+    const tl = renderer.graphToViewport({ x: box.x, y: box.y });
+    const br = renderer.graphToViewport({ x: box.x + box.w, y: box.y - box.h });
+    const screenW = br.x - tl.x;
+    const screenH = br.y - tl.y;
+
+    // Deeper directories get slightly more opaque
+    const alpha = 0.03 + box.depth * 0.015;
+    const borderAlpha = 0.12 + box.depth * 0.04;
+
+    context.fillStyle = `rgba(148, 163, 184, ${alpha})`;
+    context.strokeStyle = `rgba(148, 163, 184, ${borderAlpha})`;
+    context.lineWidth = 1;
+    drawRoundedRect(context, tl.x, tl.y, screenW, screenH, 8);
+    context.fill();
+    context.stroke();
+
+    // Header label in top-left
+    context.fillStyle = `rgba(148, 163, 184, ${0.45 + box.depth * 0.1})`;
+    context.font = '600 11px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+    context.textAlign = "left";
+    context.textBaseline = "top";
+    context.fillText(box.label + "/", tl.x + 8, tl.y + 5);
+  }
+});
+```
+
+### 4.4 Why Not Graph Nodes
+
+Drawing directories as graph nodes creates problems:
+- They participate in edge rendering → `contains` edges create spaghetti.
+- They participate in hover/selection → clicking a directory isn't useful.
+- They compete for visual space with actual code nodes.
+- They need `contains` edge lines to show hierarchy, which is what we're avoiding.
+
+As bounding boxes:
+- They provide visual containment without drawn edges.
+- They're a canvas-layer overlay — outside Sigma's node/edge system.
+- They nest naturally, showing the full filesystem tree.
+- Non-Python nodes (sections, virtual agents) appear inside their parent box.
+
+---
+
+## 5. Edge Rendering by Type
+
+### 5.1 Edge Types in the System
 
 | Edge Type  | Created By | Meaning | Prevalence |
 |------------|-----------|---------|------------|
-| `contains` | `reconciler.py`, `directories.py` | Parent→child structural containment | ~1 per node (most edges) |
+| `contains` | `reconciler.py`, `directories.py` | Parent→child structural containment | ~1 per node |
 | `imports`  | `relationships.py` (tree-sitter) | File-level import dependency | Moderate |
 | `inherits` | `relationships.py` (tree-sitter) | Class inheritance | Sparse |
 
-### 3.2 Rendering Rules
+### 5.2 Rendering Rules
 
-| Edge Type  | Default Visibility | Color | Style | Arrow | Size |
-|------------|-------------------|-------|-------|-------|------|
-| `contains` | **Hidden** | `#233247` (muted) | Straight | None | 0.5 |
-| `imports`  | **Visible** | `#60a5fa` (blue) | Curved | → | 1.8 |
-| `inherits` | **Visible** | `#a78bfa` (purple) | Curved | ◇ (open) | 1.8 |
+`contains` edges are **never drawn as lines**. They are consumed by the bounding-box
+system (§4). Only `imports` and `inherits` edges are added to the graphology graph.
 
-**Rationale for hiding `contains`**: The file-column layout already communicates
-containment through spatial proximity. Drawing `contains` edges would add a line from
-every parent to every child — which is exactly the spaghetti we're eliminating. Users who
-want to see structure can toggle `contains` on via the filter bar.
+| Edge Type  | In graphology? | Color | Style | Arrow | Size |
+|------------|---------------|-------|-------|-------|------|
+| `contains` | **No** — consumed by bounding boxes | — | — | — | — |
+| `imports`  | **Yes** | `#60a5fa` (blue) | Arrow | → | 1.8 |
+| `inherits` | **Yes** | `#a78bfa` (purple) | Arrow | → | 1.8 |
 
-### 3.3 Implementation
+### 5.3 Implementation
 
-Sigma's bundled `EdgeArrow` program supports arrow rendering. Edge type styling goes into
-the `edgeReducer`:
+In `loadGraph()`, filter edges before adding them to the graph:
+
+```javascript
+for (const edge of edges) {
+  if (edge.edge_type === "contains") continue;  // consumed by bounding boxes
+  const key = edge.from_id + "->" + edge.to_id + ":" + edge.edge_type;
+  if (!graph.hasNode(edge.from_id) || !graph.hasNode(edge.to_id)) continue;
+  if (!graph.hasEdge(key)) {
+    graph.addEdgeWithKey(key, edge.from_id, edge.to_id, {
+      label: edge.edge_type,
+      size: 1,
+    });
+  }
+}
+```
+
+Edge styling via `edgeReducer`:
 
 ```javascript
 const EDGE_STYLES = Object.freeze({
-  contains: { color: '#233247', size: 0.5, hidden: true,  type: 'line'  },
-  imports:  { color: '#60a5fa', size: 1.8, hidden: false, type: 'arrow' },
-  inherits: { color: '#a78bfa', size: 1.8, hidden: false, type: 'arrow' },
+  imports:  { color: "#60a5fa", size: 1.8, type: "arrow" },
+  inherits: { color: "#a78bfa", size: 1.8, type: "arrow" },
+});
+const DEFAULT_EDGE_STYLE = Object.freeze({
+  color: "#3a4f6a", size: 1, type: "line",
 });
 
 // In Sigma options:
 edgeReducer: (edge, data) => {
-  const style = EDGE_STYLES[data.label] || { color: '#3a4f6a', size: 1, type: 'line' };
-  return { ...data, ...style };
+  const style = EDGE_STYLES[data.label] || DEFAULT_EDGE_STYLE;
+  return { ...data, color: style.color, size: style.size, type: style.type };
 },
 ```
 
-### 3.4 Curved Routing
-
-For `imports` and `inherits`, use `type: 'curved'` (if Sigma supports it in the vendored
-build) or compute a manual curvature offset. Since these edges typically cross multiple
-file columns horizontally, a gentle arc prevents them from overlapping the column contents.
-
-If the vendored Sigma doesn't expose a `curved` edge type, we fall back to `arrow`
-(straight with arrowhead). The color + arrow differentiation alone is a massive
-improvement over the current uniform gray lines.
-
 ---
 
-## 4. Node Visual Identity
+## 6. Node Visual Identity
 
-### 4.1 Color by Node Type (Idle State)
+### 6.1 Color by Node Type (Idle State)
 
 | Node Type   | Border Color | Fill Color | CSS Variable |
 |-------------|-------------|------------|--------------|
-| `directory` | `#94a3b8` | `rgba(148, 163, 184, 0.08)` | `--directory` |
-| `class`     | `#a78bfa` | `rgba(167, 139, 250, 0.08)` | `--class` |
-| `function`  | `#60a5fa` | `rgba(96, 165, 250, 0.08)` | `--function` |
-| `method`    | `#22d3ee` | `rgba(34, 211, 238, 0.08)` | `--method` |
-| `section`   | `#fbbf24` | `rgba(251, 191, 36, 0.08)` | `--section` |
-| `table`     | `#34d399` | `rgba(52, 211, 153, 0.08)` | `--table` |
-| `virtual`   | `#f472b6` | `rgba(244, 114, 182, 0.08)` | `--virtual` |
+| `class`     | `#a78bfa` | `rgba(167, 139, 250, 0.10)` | `--class` |
+| `function`  | `#60a5fa` | `rgba(96, 165, 250, 0.10)` | `--function` |
+| `method`    | `#22d3ee` | `rgba(34, 211, 238, 0.10)` | `--method` |
+| `section`   | `#fbbf24` | `rgba(251, 191, 36, 0.10)` | `--section` |
+| `table`     | `#34d399` | `rgba(52, 211, 153, 0.10)` | `--table` |
+| `virtual`   | `#f472b6` | `rgba(244, 114, 182, 0.10)` | `--virtual` |
 
-### 4.2 Status Overrides
+Note: `directory` is absent — directories are bounding boxes, not graph nodes.
 
-Status changes override the **border color only**, preserving the fill so the user can
-still identify node type:
+### 6.2 Status Overrides
+
+Status changes override the **border color only**, preserving the fill:
 
 | Status | Border Override | Additional Effect |
 |--------|----------------|-------------------|
@@ -291,220 +439,262 @@ still identify node type:
 | `awaiting_input` | `#fbbf24` (yellow) | Dashed border |
 | `awaiting_review` | `#fbbf24` (yellow) | Dashed border |
 
-### 4.3 Shape Variation
-
-Extend `drawNodeBoxLabel()` to draw different shapes by type:
+### 6.3 Shape Variation
 
 | Node Type | Shape |
 |-----------|-------|
-| `directory` | Rounded rect, **bold 2px** border, slightly larger font |
 | `class` | Rounded rect, **double border** (outer + inner stroke) |
 | `function` | **Pill** (fully rounded ends, `borderRadius = height / 2`) |
 | `method` | **Pill**, dashed border |
-| `section`, `table`, `virtual` | Standard rounded rect (current style) |
+| `section`, `table`, `virtual` | Standard rounded rect |
 
-This gives users two redundant channels (color + shape) to identify type at a glance,
-which also helps with colorblindness.
+Two redundant channels (color + shape) for type identification. Helps with colorblindness.
 
-### 4.4 Qualified Labels for Duplicates
+### 6.4 Qualified Labels for Duplicates
 
-When two or more nodes share the same `name`, qualify them with their parent's name:
+When two or more nodes share the same `name`, qualify them with context. The v1
+implementation used `parent.name` which produced useless results like
+`OrderSummary/OrderSummary` when the parent had the same name.
+
+**Fixed algorithm:**
 
 ```javascript
-function qualifyLabels(nodes) {
+function qualifyLabels(nodes, nodeById) {
   const nameCount = {};
   for (const n of nodes) nameCount[n.name] = (nameCount[n.name] || 0) + 1;
+
   for (const n of nodes) {
-    if (nameCount[n.name] > 1 && n.parent_id) {
-      const parentName = nodeById[n.parent_id]?.name;
-      if (parentName) n._displayLabel = `${parentName}/${n.name}`;
+    if (nameCount[n.name] <= 1) {
+      n._displayLabel = n.name;
+      continue;
     }
-    n._displayLabel ??= n.name;
+    // Try parent name first
+    const parent = n.parent_id ? nodeById[n.parent_id] : null;
+    if (parent && parent.name !== n.name) {
+      n._displayLabel = parent.name + "/" + n.name;
+      continue;
+    }
+    // Fallback: use directory name from file_path
+    const parts = (n.file_path || "").replace(/\\/g, "/").split("/").filter(Boolean);
+    // Walk backwards to find a meaningful directory name (skip the filename itself)
+    let qualifier = null;
+    for (let i = parts.length - 2; i >= 0; i--) {
+      if (parts[i] !== n.name) { qualifier = parts[i]; break; }
+    }
+    n._displayLabel = qualifier ? qualifier + "/" + n.name : n.name;
   }
 }
 ```
 
-This resolves the screenshot's duplicate `OrderRequest`, `OrderSummary`, `services`,
-`models`, `utils`, `configs` ambiguity.
+This produces `services/OrderRequest` vs `models/OrderRequest` instead of
+`OrderRequest/OrderRequest`.
 
 ---
 
-## 5. Interaction Layer
+## 7. Interaction Layer
 
-### 5.1 Hover → Highlight Neighbors
+### 7.1 Hover → Highlight Neighbors
 
-When the mouse enters a node, highlight it and its direct neighbors. Dim everything else
-to ~15% opacity.
+When the mouse enters a node, dim non-neighbors to ~15% opacity and hide unrelated edges.
 
 ```javascript
-renderer.on('enterNode', ({ node }) => {
+renderer.on("enterNode", ({ node }) => {
   const neighbors = new Set(graph.neighbors(node));
   neighbors.add(node);
-  graph.forEachNode((id, attrs) => {
-    graph.setNodeAttribute(id, 'dimmed', !neighbors.has(id));
+  graph.forEachNode((id) => {
+    graph.setNodeAttribute(id, "dimmed", !neighbors.has(id));
   });
   graph.forEachEdge((edge, attrs, src, tgt) => {
-    graph.setEdgeAttribute(edge, 'hidden',
-      !neighbors.has(src) || !neighbors.has(tgt));
+    if (!neighbors.has(src) || !neighbors.has(tgt)) {
+      graph.setEdgeAttribute(edge, "hidden", true);
+    }
   });
   renderer.refresh();
 });
 
-renderer.on('leaveNode', () => {
-  graph.forEachNode((id) => graph.removeNodeAttribute(id, 'dimmed'));
-  graph.forEachEdge((edge) => graph.setEdgeAttribute(edge, 'hidden',
-    EDGE_STYLES[graph.getEdgeAttribute(edge, 'label')]?.hidden ?? false));
-  renderer.refresh();
+renderer.on("leaveNode", () => {
+  graph.forEachNode((id) => graph.removeNodeAttribute(id, "dimmed"));
+  applyFilters();  // restore edge visibility to filter state
 });
 ```
 
-The `nodeReducer` then applies `opacity: 0.15` when `dimmed` is set.
+The `nodeReducer` applies dimming: faded color + faded text for `dimmed` nodes.
+The `drawNodeBoxLabel` function checks `data.dimmed` for text opacity.
 
-### 5.2 Click → Select + Sidebar Detail
+### 7.2 Click → Select + Sidebar Detail
 
-No change from current behavior — clicking a node populates the sidebar panel. But the
-node gets a bright highlight ring to indicate selection:
+Clicking a node highlights it (slightly larger via `nodeReducer`) and populates the
+sidebar. No change from current behavior.
 
+### 7.3 Zoom Controls + Camera Fit
+
+Three buttons overlaid at bottom-left: `+`, `-`, `fit-to-view`.
+
+**Critical addition**: After `loadGraph()` completes, call:
 ```javascript
-// In nodeReducer:
-if (node === selectedNode) {
-  return { ...data, size: data.size * 1.3, zIndex: 10 };
-}
+renderer.getCamera().animatedReset({ duration: 300 });
 ```
-
-### 5.3 Zoom Controls
-
-Three buttons overlaid at bottom-left of the graph canvas:
-
-```html
-<div id="zoom-controls">
-  <button onclick="renderer.getCamera().animatedZoom({ duration: 200 })">+</button>
-  <button onclick="renderer.getCamera().animatedUnzoom({ duration: 200 })">−</button>
-  <button onclick="renderer.getCamera().animatedReset({ duration: 200 })">⊡</button>
-</div>
-```
+This auto-fits the graph extent into the viewport, solving right-edge clipping for nodes
+with long labels.
 
 ---
 
-## 6. Filter Controls
+## 8. Filter Controls
 
-### 6.1 UI: Chip Bar
+### 8.1 UI: Chip Bar
 
 A horizontal bar of toggleable chips at the top of the graph canvas:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ [◆ classes] [ƒ functions] [→ methods] [📁 dirs]  │  [→ imports] [◇ inherits] [⊂ contains]  │
-└──────────────────────────────────────────────────────────────────┘
+[ classes ] [ functions ] [ methods ] [ sections ] [ virtual ]  |  [ imports ] [ inherits ] [ filesystem ]
 ```
 
-Left group: node type toggles. Right group: edge type toggles.
+**Key change from v1**: The old `contains` edge chip is replaced with a `filesystem` chip
+that toggles **bounding box visibility**, not edge lines. `contains` edges no longer exist
+in the graph.
 
-Each chip shows its type color as a small swatch so the chip bar doubles as a **legend**.
-
-### 6.2 State
+### 8.2 State
 
 ```javascript
 const filterState = {
-  hiddenNodeTypes: new Set(),                 // e.g., Set(['section', 'table'])
-  hiddenEdgeTypes: new Set(['contains']),     // contains hidden by default
+  hiddenNodeTypes: new Set(),
+  hiddenEdgeTypes: new Set(),
+  showBoundingBoxes: true,         // filesystem boxes visible by default
 };
 ```
 
-### 6.3 Applying Filters
+### 8.3 Applying Filters
 
 ```javascript
 function applyFilters() {
   graph.forEachNode((id, attrs) => {
-    const hidden = filterState.hiddenNodeTypes.has(attrs.node_type)
-                   || attrs.node_type === '__label__' && false; // labels always visible
-    graph.setNodeAttribute(id, 'hidden', hidden);
+    graph.setNodeAttribute(id, "hidden", filterState.hiddenNodeTypes.has(attrs.node_type));
   });
   graph.forEachEdge((edge, attrs) => {
-    const hidden = filterState.hiddenEdgeTypes.has(attrs.label);
-    graph.setEdgeAttribute(edge, 'hidden', hidden);
+    graph.setEdgeAttribute(edge, "hidden", filterState.hiddenEdgeTypes.has(attrs.label));
   });
-  renderer.refresh();
+  renderer.refresh();  // triggers beforeRender which checks showBoundingBoxes
 }
 ```
 
-Chip click handler toggles the set and calls `applyFilters()`.
+The `filesystem` chip toggles `filterState.showBoundingBoxes`. The `beforeRender`
+callback checks this flag and skips box drawing when false.
+
+### 8.4 No `dirs` Node Chip
+
+Since directories are no longer graph nodes, the `dirs` node-type chip is removed from
+the filter bar. Directories are controlled by the `filesystem` chip instead.
 
 ---
 
-## 7. File Scope
+## 9. Bug Fixes from v1
+
+These issues were identified from the v1 implementation screenshot and are addressed in
+the design above:
+
+### 9.1 Y-Axis Inversion (§3.2)
+
+**Symptom**: Directories appeared at the bottom of the screen, leaf nodes at the top.
+**Cause**: Sigma positive y = up. Layout assigned `y = depth * ROW_HEIGHT` (increasing).
+**Fix**: Negate all y values. `y = -(depth * ROW_HEIGHT + slot * SUB_ROW_HEIGHT)`.
+
+### 9.2 Self-Referencing Qualified Labels (§6.4)
+
+**Symptom**: Labels like `OrderSummary/OrderSummary`.
+**Cause**: `qualifyLabels` used `parent.name` even when parent name === node name.
+**Fix**: When parent name matches node name, fall back to file path directory component.
+
+### 9.3 Disconnected Section/Virtual Nodes (§4)
+
+**Symptom**: Bundle sections and virtual agents floated in empty space with no connections.
+**Cause**: These nodes have `contains` edges to parents but no `imports`/`inherits`.
+  With `contains` hidden, they appeared orphaned.
+**Fix**: Bounding boxes provide visual containment. These nodes now appear inside their
+  parent directory's box.
+
+### 9.4 Right-Edge Clipping (§7.3)
+
+**Symptom**: Long node names like `demo-src-filter-observer` cut off by the sidebar.
+**Cause**: No camera fit-to-view after initial layout.
+**Fix**: `renderer.getCamera().animatedReset()` after `loadGraph()`.
+
+---
+
+## 10. File Scope
 
 All changes are in **one file**: `src/remora/web/static/index.html`.
 
-### 7.1 What Gets Replaced
+### 10.1 What Gets Replaced
 
-| Section | Current Lines | Change |
-|---------|--------------|--------|
-| CSS variables | 10–24 | Add `--directory`, `--virtual` vars |
-| Layout constants | 257–276 | Replace all `FILE_BAND_*`, `DEPTH_*`, `TYPE_TRACK_*` with `LAYOUT` object |
-| `loadGraph()` positioning | 479–516 | Rewrite with file-column grid algorithm |
-| File band label nodes | 519–547 | Replace with directory spanning-header logic |
-| `drawNodeBoxLabel()` | 293–329 | Extend with type-based shape + color |
-| Sigma constructor | 331–347 | Add `edgeReducer`, update `nodeReducer` |
-| Event handlers | 828–841 | Add `enterNode`/`leaveNode` for hover highlight |
+| Section | Change |
+|---------|--------|
+| CSS variables | Add `--section`, `--table`, `--virtual` |
+| Layout constants | Replace all `FILE_BAND_*`, `DEPTH_*`, `TYPE_TRACK_*` with `LAYOUT` object |
+| `loadGraph()` | Rewrite: new layout, directories excluded from graph, `contains` edges skipped |
+| `drawNodeBoxLabel()` | Type-based shapes, dimming support |
+| Sigma constructor | Add `edgeReducer`, update `nodeReducer`, add `beforeRender` for boxes |
 
-### 7.2 What Gets Added
+### 10.2 What Gets Added
 
-| Addition | Location |
-|----------|----------|
-| `EDGE_STYLES` constant | After `colorByType` (~line 358) |
-| `layoutNodes()` function | Replace current positioning in `loadGraph()` |
-| `qualifyLabels()` function | Called in `loadGraph()` before adding nodes |
-| `resolveRowCollisions()` function | Called at end of layout |
-| Filter chip HTML + CSS | Inserted before `<div id="graph">` |
-| Zoom control HTML + CSS | Inserted after `<div id="graph">` |
-| `filterState` + `applyFilters()` | After Sigma constructor |
-| Hover highlight handlers | After click handlers |
+| Addition | Purpose |
+|----------|---------|
+| `EDGE_STYLES` constant | Edge type → color/size/arrow mapping |
+| `layoutNodes()` function | Deterministic file-column grid + bounding box computation |
+| `computeBoundingBoxes()` function | Bottom-up box extent calculation |
+| `isDescendantOf()` helper | Walks parent chain for box membership |
+| `qualifyLabels()` function | Duplicate name disambiguation with fallback |
+| `filterState` + `applyFilters()` | Filter state management |
+| `beforeRender` handler | Draws bounding boxes on canvas layer |
+| Filter chip HTML + CSS | Node type, edge type, and filesystem toggles |
+| Zoom controls HTML + handlers | +/−/fit buttons |
+| Hover highlight handlers | `enterNode`/`leaveNode` for neighbor focus |
+| Camera reset call | Fit-to-view after `loadGraph()` |
 
-### 7.3 What Stays the Same
+### 10.3 What Gets Deleted
+
+| Deletion | Reason |
+|----------|--------|
+| `hashNodeId()` | Hash jitter removed — layout is sort-based |
+| `deterministicOffset()` | Hash jitter removed |
+| `fileBandKeyFromPath()` | File bands replaced by file columns |
+| `buildFileBands()` | File bands replaced |
+| `bandYForNode()` | File bands replaced |
+| `__label__` synthetic nodes | Directories are now bounding boxes, not label nodes |
+
+### 10.4 What Stays the Same
 
 - Sidebar structure, agent panel, events, timeline — unchanged.
 - SSE event handling — unchanged.
 - API endpoints — unchanged.
 - Hit-testing logic — unchanged (still uses `nodeLabelHitboxes`).
-- `drawRoundedRect()` — unchanged (reused for all shapes).
+- `drawRoundedRect()` — unchanged (reused for boxes and node shapes).
 
 ---
 
-## 8. Determinism Guarantee
+## 11. Determinism Guarantee
 
-### 8.1 Definition
+### 11.1 Definition
 
-> For any set of nodes N and edges E, the layout function `layoutNodes(N)` produces
-> identical `(x, y)` coordinates for every node, regardless of:
-> - The order nodes arrived via SSE
-> - The wall-clock time of discovery
-> - The number of times the page has been refreshed
-> - Whether the demo was torn down and restarted
+> For any set of nodes N and edges E, the layout function produces identical `(x, y)`
+> coordinates and identical bounding boxes, regardless of discovery order, wall-clock
+> time, page refresh count, or demo restart.
 
-### 8.2 How It's Achieved
+### 11.2 How It's Achieved
 
-1. **Sort-based column assignment**: Columns assigned by `file_path.sort()`, not insertion
-   order.
-2. **Sort-based row assignment**: Within-column slots assigned by
-   `(depth, start_line, name)` sort.
-3. **No randomness**: No `Math.random()`, no hash jitter, no `Date.now()` in positions.
-4. **Full re-layout on discovery**: When a `node_discovered` SSE event arrives, the
-   current `loadGraph()` already re-fetches all nodes from `/api/nodes` and rebuilds from
-   scratch. The new layout function is a pure function of that complete node set, so
-   incremental arrivals produce the same final layout.
-5. **Label measurement is pure**: `measureText()` returns the same width for the same
-   string and font on the same browser.
+| Input | Source | Deterministic? |
+|-------|--------|----------------|
+| File columns | Sorted `file_path` values | Yes — alphabetical sort is stable |
+| Child order within column | `(depth, start_line, name)` sort | Yes — same source → same lines |
+| Tree depth | `parent_id` chain length | Yes |
+| Column widths | `max(measureText(label))` per column | Yes — same labels + font → same widths |
+| Bounding boxes | Derived from descendant positions | Yes — positions are deterministic |
+| Qualified labels | Derived from name counts + parent/path | Yes |
 
-### 8.3 Edge Case: Incremental Discovery
+No hash jitter. No sin waves. No iteration-order dependence. Same nodes → same picture.
 
-During live discovery, the graph builds up over a few seconds as nodes stream in. Each
-`node_discovered` event triggers a full `loadGraph()` which re-fetches the complete node
-set from the API and re-runs the layout. This means early frames may show a partial graph
-that shifts as more nodes arrive, but once discovery is complete, the layout is stable and
-identical across restarts.
+### 11.3 Edge Case: Incremental Discovery
 
-This is acceptable because:
-- Discovery typically completes in <2 seconds for a project.
-- The final resting state is always the same.
-- There's no animation that depends on the *sequence* of arrivals.
+During live discovery, `node_discovered` SSE events trigger a full `loadGraph()` which
+re-fetches all nodes from `/api/nodes` and re-runs the layout from scratch. Early frames
+show partial graphs. Once discovery completes, the layout is stable and identical across
+restarts.
