@@ -1120,6 +1120,19 @@ function addTimelineEvent(eventType, payload) {
       applyFilters();
     });
 
+    document.getElementById("zoom-in").addEventListener("click", () => {
+      const camera = renderer.getCamera();
+      camera.animatedZoom({ duration: 200 });
+    });
+    document.getElementById("zoom-out").addEventListener("click", () => {
+      const camera = renderer.getCamera();
+      camera.animatedUnzoom({ duration: 200 });
+    });
+    document.getElementById("zoom-reset").addEventListener("click", () => {
+      const camera = renderer.getCamera();
+      camera.animatedReset({ duration: 200 });
+    });
+
     document.getElementById("send-chat").addEventListener("click", async () => {
       const message = document.getElementById("chat-input").value.trim();
       if (!selectedNode || !message) return;
