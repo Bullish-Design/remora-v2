@@ -235,7 +235,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         await page.goto(base_url, wait_until="domcontentloaded")
         await page.wait_for_selector("#graph canvas")
         await page.wait_for_function(
-            "() => typeof graph !== 'undefined' && graph.order > 0",
+            "() => typeof graph !== 'undefined' && graph.order >= 2",
             timeout=20000,
         )
 
@@ -249,22 +249,87 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               const nodes = graph.nodes();
               let total = 0;
               let visible = 0;
+              const labelCounts = new Map();
               for (const nodeId of nodes) {
                 const attrs = graph.getNodeAttributes(nodeId);
                 if (attrs.hidden) continue;
                 total += 1;
+                const label = String(attrs.label || "");
+                labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
                 const p = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
                 if (p.x >= 0 && p.x <= dims.width && p.y >= 0 && p.y <= dims.height) {
                   visible += 1;
                 }
               }
-              return { total, visible };
+
+              const viewportArea = Math.max(1, dims.width * dims.height);
+              const duplicates = [...labelCounts.values()].filter((count) => count > 1).length;
+
+              const boxes =
+                typeof nodeLabelHitboxes !== "undefined"
+                  ? [...nodeLabelHitboxes.entries()]
+                      .filter(([nodeId]) => graph.hasNode(nodeId) && !graph.getNodeAttribute(nodeId, "hidden"))
+                      .map(([, box]) => box)
+                  : [];
+              let areaSum = 0;
+              let overlapArea = 0;
+              for (let i = 0; i < boxes.length; i++) {
+                const a = boxes[i];
+                const aArea = Math.max(0, a.width) * Math.max(0, a.height);
+                areaSum += aArea;
+                for (let j = i + 1; j < boxes.length; j++) {
+                  const b = boxes[j];
+                  const left = Math.max(a.x, b.x);
+                  const top = Math.max(a.y, b.y);
+                  const right = Math.min(a.x + a.width, b.x + b.width);
+                  const bottom = Math.min(a.y + a.height, b.y + b.height);
+                  const w = Math.max(0, right - left);
+                  const h = Math.max(0, bottom - top);
+                  overlapArea += w * h;
+                }
+              }
+              const overlapRatio = areaSum > 0 ? overlapArea / areaSum : 0;
+              const occupancy = areaSum > 0 ? Math.min(1, areaSum / viewportArea) : 0;
+
+              const edges = graph.edges();
+              let edgeTotal = 0;
+              let edgeSpanVisible = 0;
+              for (const edgeId of edges) {
+                const attrs = graph.getEdgeAttributes(edgeId);
+                if (attrs.hidden) continue;
+                const [sourceId, targetId] = graph.extremities(edgeId);
+                if (!graph.hasNode(sourceId) || !graph.hasNode(targetId)) continue;
+                const source = graph.getNodeAttributes(sourceId);
+                const target = graph.getNodeAttributes(targetId);
+                if (source.hidden || target.hidden) continue;
+                edgeTotal += 1;
+                const p1 = renderer.graphToViewport({ x: source.x, y: source.y });
+                const p2 = renderer.graphToViewport({ x: target.x, y: target.y });
+                const span = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                if (span > 4) edgeSpanVisible += 1;
+              }
+
+              return {
+                total,
+                visible,
+                occupancy,
+                duplicate_labels: duplicates,
+                overlap_ratio: overlapRatio,
+                edge_total: edgeTotal,
+                edge_span_visible: edgeSpanVisible,
+              };
             }
             """
         )
 
         assert visibility["total"] > 0, visibility
         assert visibility["visible"] > 0, visibility
+        assert visibility["occupancy"] >= 0.002, visibility
+        assert visibility["occupancy"] <= 0.92, visibility
+        assert visibility["duplicate_labels"] == 0, visibility
+        assert visibility["overlap_ratio"] < 0.45, visibility
+        if visibility["edge_total"] > 0:
+            assert visibility["edge_span_visible"] > 0, visibility
 
 
 @pytest.mark.asyncio

@@ -110,3 +110,19 @@
 - [x] Compare against v4 goals and identify remaining legibility gaps.
 - [x] Draft v5 corrective architecture and implementation plan:
   - `.scratch/projects/63-web-ui-improvement-template/CONCEPT_V5.md`
+
+## v5 implementation execution
+
+- [x] Step 1: v5 layout mode scaffolding (`LAYOUT_MODE` switch + dispatch).
+- [x] Step 2: component-aware layout pipeline (component extraction + packing).
+- [x] Step 3: occupancy normalization pass for stable graph density.
+- [x] Step 4: readability-constrained fit and initial-fit path cleanup.
+- [x] Step 5: iterative unique label qualification with deterministic fallback.
+- [x] Step 6: edge priority tuning (cross-file emphasis, same-file attenuation, long-edge fade).
+- [x] Step 7: filesystem fallback grouping via synthetic directories.
+- [x] Step 8: acceptance-test metric hardening (occupancy/overlap/uniqueness/edge-span).
+
+### v5 verification
+
+- `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_views.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
+  - Result: `70 passed, 2 warnings`
