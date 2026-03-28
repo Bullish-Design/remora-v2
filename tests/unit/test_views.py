@@ -76,6 +76,9 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "\"116, 132, 168\"" in html
     assert "const primaryFontSize = isPeripheral ? 11 : 14;" in html
     assert "layoutZone === \"peripheral\" ? 1.92 : 2.4" in html
+    assert "const sigmaAnimateNodes = sigmaUtils.animateNodes;" in html
+    assert "sigmaAnimateNodes(graph, animationTargets" in html
+    assert "easing: \"cubicInOut\"" in html
     assert "fallback to deterministic hash suffix" in html
     assert "function colorWithAlpha(hex, alpha)" in html
     assert "length_norm" in html

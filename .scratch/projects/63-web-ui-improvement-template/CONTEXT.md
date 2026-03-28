@@ -13,11 +13,12 @@ Current status:
 - v7 Step 6 complete: hierarchy box alpha/tint recalibration for dark-background visibility.
 - v7 Step 7 complete: primary-core-edge detection and emphasis rendering in edge reducer.
 - v7 Step 8 complete: peripheral size/opacity de-emphasis and chip-style label treatment.
-- Unit checks passing after Step 8.
+- v7 Step 9 complete: `Sigma.utils.animateNodes` wired for smooth graph reload transitions.
+- Unit checks passing after Step 9.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Implement v7 Step 9 (animated graph updates via Sigma utils), then finish with Step 10 verification.
+- Implement v7 Step 10 acceptance/verification updates and run full web suite.

@@ -161,7 +161,7 @@
 - [x] Step 6: Hierarchy box alpha overhaul.
 - [x] Step 7: Edge narrative emphasis.
 - [x] Step 8: Peripheral visual de-emphasis.
-- [ ] Step 9: Smooth graph updates with `animateNodes`.
+- [x] Step 9: Smooth graph updates with `animateNodes`.
 - [ ] Step 10: Tests and verification.
 
 ### v7 verification (in progress)

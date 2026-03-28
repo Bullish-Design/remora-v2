@@ -624,12 +624,14 @@
     const sigmaApi = globalThis.sigma || {};
     const sigmaCtorApi = globalThis.Sigma || {};
     const sigmaRendering = sigmaApi.rendering || sigmaCtorApi.rendering || Sigma.rendering || {};
+    const sigmaUtils = sigmaApi.utils || sigmaCtorApi.utils || Sigma.utils || {};
     const edgeCurveProgram =
       sigmaApi.EdgeCurveProgram ||
       sigmaApi.programs?.EdgeCurveProgram ||
       sigmaCtorApi.EdgeCurveProgram ||
       sigmaCtorApi.programs?.EdgeCurveProgram ||
       sigmaRendering.EdgeCurveProgram;
+    const sigmaAnimateNodes = sigmaUtils.animateNodes;
     const drawDiscNodeHover =
       sigmaRendering.drawDiscNodeHover ||
       sigmaApi.drawDiscNodeHover ||
@@ -1838,7 +1840,13 @@
       boundingBoxes = layout.boxes;
       coreZoneBounds = layout.coreBounds || null;
       zoneSeparatorY = Number.isFinite(layout.separatorY) ? layout.separatorY : null;
+      const previousNodePositions = new Map();
+      graph.forEachNode((nodeId, attrs) => {
+        previousNodePositions.set(nodeId, { x: attrs.x, y: attrs.y });
+      });
+      const hadExistingNodes = previousNodePositions.size > 0;
       graph.clear();
+      const animationTargets = {};
 
       for (const node of nodes) {
         if (node.node_type === "directory") continue;
@@ -1846,13 +1854,16 @@
         if (!pos) continue;
         const layoutZone = layout.zoneByNode.get(node.node_id) || "core";
         const baseNodeSize = layoutZone === "peripheral" ? 1.92 : 2.4;
+        const previousPos = previousNodePositions.get(node.node_id);
+        const startX = previousPos ? previousPos.x : pos.x;
+        const startY = previousPos ? previousPos.y : pos.y;
         graph.addNode(node.node_id, {
           node_id: node.node_id,
           label: node._displayLabel || node.name,
           forceLabel: true,
           size: baseNodeSize,
-          x: pos.x,
-          y: pos.y,
+          x: startX,
+          y: startY,
           color: nodeColor(node.node_type, node.status),
           peripheral_color: colorWithAlpha(nodeColor(node.node_type, node.status), 0.52),
           layout_zone: layoutZone,
@@ -1860,6 +1871,7 @@
           file_path: node.file_path || "",
           status: node.status,
         });
+        animationTargets[node.node_id] = { x: pos.x, y: pos.y };
       }
 
       const preparedEdges = [];
@@ -1990,7 +2002,17 @@
 
       applyFilters();
       renderer.refresh();
-      applyCustomFit(120);
+      const canAnimate =
+        hadExistingNodes &&
+        typeof sigmaAnimateNodes === "function" &&
+        Object.keys(animationTargets).length > 0;
+      if (canAnimate) {
+        sigmaAnimateNodes(graph, animationTargets, {
+          duration: 500,
+          easing: "cubicInOut",
+        });
+      }
+      applyCustomFit(canAnimate ? 220 : 120);
     }
 
     function appendEventLine(text) {
