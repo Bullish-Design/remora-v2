@@ -446,7 +446,7 @@
       FIT_MARGIN_BOTTOM_UNITS: 3.2,
       FIT_PADDING_PX: 56,
     });
-    const LAYOUT_MODE = "v5_component";
+    const LAYOUT_MODE = "v6_core_peripheral";
 
     function drawRoundedRect(context, x, y, width, height, radius) {
       const r = Math.min(radius, width / 2, height / 2);
@@ -468,17 +468,31 @@
 
       const nodeType = data.node_type || "";
       const text = String(data.label);
+      const separatorIndex = text.indexOf("::");
+      const hasQualifier = separatorIndex > 0;
+      const primaryText = hasQualifier ? text.slice(separatorIndex + 2) : text;
+      const qualifierText = hasQualifier ? text.slice(0, separatorIndex) : "";
 
-      const fontSize = 12;
-      const fontWeight = "500";
+      const primaryFontSize = 12;
+      const qualifierFontSize = 10;
       const padX = 10;
       const padY = 5;
+      const lineGap = hasQualifier ? 2 : 0;
 
       context.save();
-      context.font = fontWeight + " " + fontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
-      const textWidth = context.measureText(text).width;
+      context.font = "600 " + primaryFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+      const primaryWidth = context.measureText(primaryText).width;
+      let qualifierWidth = 0;
+      if (hasQualifier) {
+        context.font = "500 " + qualifierFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        qualifierWidth = context.measureText(qualifierText).width;
+      }
+      const textWidth = Math.max(primaryWidth, qualifierWidth);
+      const contentHeight = hasQualifier
+        ? (primaryFontSize + qualifierFontSize + lineGap)
+        : primaryFontSize;
       const boxWidth = textWidth + padX * 2;
-      const boxHeight = fontSize + padY * 2;
+      const boxHeight = contentHeight + padY * 2;
       const x = data.x - boxWidth / 2;
       const y = data.y - boxHeight / 2;
 
@@ -528,10 +542,23 @@
         context.stroke();
       }
 
-      context.fillStyle = data.dimmed ? "rgba(229, 237, 247, 0.15)" : "#e5edf7";
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText(text, data.x, data.y);
+      if (hasQualifier) {
+        const textTop = y + padY;
+        context.textAlign = "center";
+        context.textBaseline = "top";
+        context.font = "600 " + primaryFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        context.fillStyle = data.dimmed ? "rgba(229, 237, 247, 0.22)" : "#f1f5f9";
+        context.fillText(primaryText, data.x, textTop);
+        context.font = "500 " + qualifierFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        context.fillStyle = data.dimmed ? "rgba(148, 163, 184, 0.25)" : "rgba(203, 213, 225, 0.92)";
+        context.fillText(qualifierText, data.x, textTop + primaryFontSize + lineGap);
+      } else {
+        context.fillStyle = data.dimmed ? "rgba(229, 237, 247, 0.15)" : "#e5edf7";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.font = "500 " + primaryFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        context.fillText(primaryText, data.x, data.y);
+      }
 
       if (data.node_id) {
         nodeLabelHitboxes.set(data.node_id, {
@@ -676,30 +703,93 @@
       return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 6);
     }
 
-    function labelForLevel(node, nodeById, level) {
+    function splitPathSegments(path) {
+      return String(path || "")
+        .replace(/\\/g, "/")
+        .split("/")
+        .filter(Boolean);
+    }
+
+    function commonWorkspacePathPrefix(paths) {
+      const segmented = (paths || [])
+        .map((value) => splitPathSegments(value))
+        .filter((segments) => segments.length > 0);
+      if (segmented.length === 0) return "";
+      let prefix = [...segmented[0]];
+      for (let i = 1; i < segmented.length; i++) {
+        const current = segmented[i];
+        let len = 0;
+        while (len < prefix.length && len < current.length && prefix[len] === current[len]) {
+          len += 1;
+        }
+        prefix = prefix.slice(0, len);
+        if (prefix.length === 0) break;
+      }
+      return prefix.join("/");
+    }
+
+    function workspaceRelativePath(path, workspacePrefix) {
+      const pathSegments = splitPathSegments(path);
+      if (pathSegments.length === 0) return "";
+      const prefixSegments = splitPathSegments(workspacePrefix);
+      let offset = 0;
+      while (
+        offset < prefixSegments.length &&
+        offset < pathSegments.length &&
+        prefixSegments[offset] === pathSegments[offset]
+      ) {
+        offset += 1;
+      }
+      return pathSegments.slice(offset).join("/");
+    }
+
+    function compressPathSegments(path, maxSegments = 4) {
+      const segments = splitPathSegments(path);
+      if (segments.length <= maxSegments) return segments.join("/");
+      if (maxSegments <= 2) {
+        return [segments[0], "..."].join("/");
+      }
+      const tailCount = maxSegments - 2;
+      const tail = segments.slice(-tailCount);
+      return [segments[0], "...", ...tail].join("/");
+    }
+
+    function buildLabelContext(nodes) {
+      const paths = nodes
+        .filter((node) => node.node_type !== "directory")
+        .map((node) => node.file_path || "")
+        .filter(Boolean);
+      return {
+        workspacePrefix: commonWorkspacePathPrefix(paths),
+      };
+    }
+
+    function labelForLevel(node, nodeById, level, labelContext) {
       const base = node.name || node.node_id || "node";
       if (level <= 0) return base;
       const parent = node.parent_id ? nodeById[node.parent_id] : null;
       const parentName = parent?.name || null;
-      const parts = (node.file_path || "")
-        .replace(/\\/g, "/")
-        .split("/")
-        .filter(Boolean);
-      const filePath = parts.join("/");
+      const relativePath = workspaceRelativePath(node.file_path || "", labelContext?.workspacePrefix || "");
+      const compressedPath = compressPathSegments(relativePath, 4);
+      const parts = splitPathSegments(relativePath);
       const dirPath = parts.slice(0, -1).join("/");
+      const dirSuffix = parts.slice(Math.max(0, parts.length - 3), Math.max(0, parts.length - 1)).join("/");
 
       if (level === 1 && parentName && parentName !== base) {
         return parentName + "/" + base;
       }
       if (level === 2 && dirPath) {
-        if (parentName && parentName !== base) return dirPath + "/" + parentName + "/" + base;
-        return dirPath + "/" + base;
+        if (parentName && parentName !== base) {
+          return (dirSuffix ? dirSuffix + "/" : "") + parentName + "/" + base;
+        }
+        return (dirSuffix || dirPath) + "/" + base;
       }
-      if (filePath) return filePath + "::" + base;
+      if (compressedPath) return compressedPath + "::" + base;
       return node.node_id || base;
     }
 
     function ensureUniqueDisplayLabels(nodes, nodeById) {
+      const labelContext = buildLabelContext(nodes);
       const assigned = new Map();
       let unresolved = new Set(nodes.map((node) => node.node_id));
 
@@ -708,14 +798,14 @@
         for (const nodeId of unresolved) {
           const node = nodeById[nodeId];
           if (!node) continue;
-          const candidate = labelForLevel(node, nodeById, level);
+          const candidate = labelForLevel(node, nodeById, level, labelContext);
           counts.set(candidate, (counts.get(candidate) || 0) + 1);
         }
         const stillUnresolved = new Set();
         for (const nodeId of unresolved) {
           const node = nodeById[nodeId];
           if (!node) continue;
-          const candidate = labelForLevel(node, nodeById, level);
+          const candidate = labelForLevel(node, nodeById, level, labelContext);
           if ((counts.get(candidate) || 0) === 1) {
             assigned.set(nodeId, candidate);
           } else {
@@ -729,7 +819,7 @@
       for (const nodeId of unresolved) {
         const node = nodeById[nodeId];
         if (!node) continue;
-        const base = labelForLevel(node, nodeById, 3);
+        const base = labelForLevel(node, nodeById, 3, labelContext);
         assigned.set(nodeId, base + "#" + shortDeterministicHash(nodeId));
       }
 

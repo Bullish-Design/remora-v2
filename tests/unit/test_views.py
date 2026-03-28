@@ -50,13 +50,16 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "OCCUPANCY_TARGET_MAX" in html
     assert "FIT_MIN_MEDIAN_LABEL_PX" in html
     assert "FIT_MARGIN_LEFT_UNITS" in html
-    assert 'const LAYOUT_MODE = "v5_component";' in html
+    assert 'const LAYOUT_MODE = "v6_core_peripheral";' in html
     assert "function layoutNodes(nodes, nodeById, edges)" in html
     assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
     assert "function computeConnectedComponents(nodes, edges)" in html
     assert "function normalizeLayoutOccupancy(positions, nodeById)" in html
     assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
     assert "function ensureUniqueDisplayLabels(nodes, nodeById)" in html
+    assert "function commonWorkspacePathPrefix(paths)" in html
+    assert "function workspaceRelativePath(path, workspacePrefix)" in html
+    assert "function compressPathSegments(path, maxSegments = 4)" in html
     assert "fallback to deterministic hash suffix" in html
     assert "function colorWithAlpha(hex, alpha)" in html
     assert "length_norm" in html
