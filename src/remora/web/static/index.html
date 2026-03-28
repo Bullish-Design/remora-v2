@@ -466,6 +466,10 @@
       FIT_MARGIN_TOP_UNITS: 5.5,
       FIT_MARGIN_BOTTOM_UNITS: 3.2,
       FIT_PADDING_PX: 56,
+      FIT_SAFE_LEFT_PX: 288,
+      FIT_SAFE_TOP_PX: 124,
+      FIT_SAFE_RIGHT_PX: 24,
+      FIT_SAFE_BOTTOM_PX: 64,
     });
     const LAYOUT_MODE = "v6_core_peripheral";
 
@@ -1707,6 +1711,79 @@
     let coreZoneBounds = null;
     let zoneSeparatorY = null;
 
+    function computeOverlayFitSafeInsetsPx() {
+      const graphEl = document.getElementById("graph");
+      if (!graphEl) {
+        return {
+          left: LAYOUT.FIT_SAFE_LEFT_PX,
+          top: LAYOUT.FIT_SAFE_TOP_PX,
+          right: LAYOUT.FIT_SAFE_RIGHT_PX,
+          bottom: LAYOUT.FIT_SAFE_BOTTOM_PX,
+        };
+      }
+      const graphRect = graphEl.getBoundingClientRect();
+      const graphWidth = Math.max(1, graphRect.width);
+      const graphHeight = Math.max(1, graphRect.height);
+      const graphMidX = graphRect.left + graphRect.width / 2;
+      const graphMidY = graphRect.top + graphRect.height / 2;
+      const safe = {
+        left: LAYOUT.FIT_SAFE_LEFT_PX,
+        top: LAYOUT.FIT_SAFE_TOP_PX,
+        right: LAYOUT.FIT_SAFE_RIGHT_PX,
+        bottom: LAYOUT.FIT_SAFE_BOTTOM_PX,
+      };
+      const overlays = [
+        document.getElementById("filter-bar"),
+        document.getElementById("zoom-controls"),
+      ];
+      for (const overlay of overlays) {
+        if (!overlay) continue;
+        const style = window.getComputedStyle(overlay);
+        if (style.display === "none" || style.visibility === "hidden") continue;
+        const rect = overlay.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const pad = 12;
+
+        if (centerX <= graphMidX) {
+          safe.left = Math.max(safe.left, rect.right - graphRect.left + pad);
+        } else {
+          safe.right = Math.max(safe.right, graphRect.right - rect.left + pad);
+        }
+        if (centerY <= graphMidY) {
+          safe.top = Math.max(safe.top, rect.bottom - graphRect.top + pad);
+        } else {
+          safe.bottom = Math.max(safe.bottom, graphRect.bottom - rect.top + pad);
+        }
+      }
+
+      return {
+        left: Math.min(graphWidth * 0.46, Math.max(0, safe.left)),
+        top: Math.min(graphHeight * 0.42, Math.max(0, safe.top)),
+        right: Math.min(graphWidth * 0.4, Math.max(0, safe.right)),
+        bottom: Math.min(graphHeight * 0.38, Math.max(0, safe.bottom)),
+      };
+    }
+
+    function applyFitSafeInsets(bbox, dims, safeInsetsPx) {
+      if (!bbox || !dims || !safeInsetsPx) return bbox;
+      const width = Math.max(1e-6, bbox.x[1] - bbox.x[0]);
+      const height = Math.max(1e-6, bbox.y[1] - bbox.y[0]);
+      const unitsPerPxX = width / Math.max(1, dims.width);
+      const unitsPerPxY = height / Math.max(1, dims.height);
+      return {
+        x: [
+          bbox.x[0] - safeInsetsPx.left * unitsPerPxX,
+          bbox.x[1] + safeInsetsPx.right * unitsPerPxX,
+        ],
+        y: [
+          bbox.y[0] - safeInsetsPx.bottom * unitsPerPxY,
+          bbox.y[1] + safeInsetsPx.top * unitsPerPxY,
+        ],
+      };
+    }
+
     function computeFitBBox() {
       if (
         coreZoneBounds &&
@@ -1715,7 +1792,7 @@
         Number.isFinite(coreZoneBounds.minY) &&
         Number.isFinite(coreZoneBounds.maxY)
       ) {
-        return {
+        const coreBBox = {
           x: [
             coreZoneBounds.minX - LAYOUT.FIT_MARGIN_LEFT_UNITS,
             coreZoneBounds.maxX + LAYOUT.FIT_MARGIN_RIGHT_UNITS,
@@ -1725,6 +1802,8 @@
             coreZoneBounds.maxY + LAYOUT.FIT_MARGIN_TOP_UNITS,
           ],
         };
+        const safeInsetsPx = computeOverlayFitSafeInsetsPx();
+        return applyFitSafeInsets(coreBBox, renderer.getDimensions(), safeInsetsPx);
       }
 
       let minX = Number.POSITIVE_INFINITY;
@@ -1785,7 +1864,8 @@
         }
       }
 
-      return { x: [minX, maxX], y: [minY, maxY] };
+      const safeInsetsPx = computeOverlayFitSafeInsetsPx();
+      return applyFitSafeInsets({ x: [minX, maxX], y: [minY, maxY] }, renderer.getDimensions(), safeInsetsPx);
     }
 
     function applyCustomFit(duration = 200) {
