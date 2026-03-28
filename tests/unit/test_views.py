@@ -62,6 +62,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "function commonWorkspacePathPrefix(paths)" in html
     assert "function workspaceRelativePath(path, workspacePrefix)" in html
     assert "function compressPathSegments(path, maxSegments = 4)" in html
+    assert "PERIPHERAL_GRID_MIN_CELL_WIDTH" in html
+    assert "function peripheralComponentCellWidth(component, nodeById)" in html
     assert "fallback to deterministic hash suffix" in html
     assert "function colorWithAlpha(hex, alpha)" in html
     assert "length_norm" in html

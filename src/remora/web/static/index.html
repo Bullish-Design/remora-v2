@@ -443,6 +443,10 @@
       PERIPHERAL_DOCK_GAP_X: 4.5,
       PERIPHERAL_DOCK_GAP_Y: 6.2,
       PERIPHERAL_DOCK_MAX_WIDTH: 132.0,
+      PERIPHERAL_GRID_MIN_CELL_WIDTH: 16.0,
+      PERIPHERAL_GRID_CELL_PAD: 3.2,
+      PERIPHERAL_GRID_GAP_X: 7.4,
+      PERIPHERAL_GRID_GAP_Y: 7.8,
       PERIPHERAL_NODE_ALPHA: 0.62,
       PERIPHERAL_EDGE_ALPHA_SCALE: 0.58,
       OCCUPANCY_TARGET_MIN: 0.35,
@@ -1019,6 +1023,23 @@
       };
     }
 
+    function peripheralComponentCellWidth(component, nodeById) {
+      let maxLabelWidthUnits = 0;
+      for (const nodeId of component?.ids || []) {
+        const node = nodeById[nodeId];
+        if (!node) continue;
+        const label = node._displayLabel || node.name || nodeId;
+        const widthUnits = measureLabelWidth(label) / LAYOUT.PX_PER_UNIT;
+        if (widthUnits > maxLabelWidthUnits) maxLabelWidthUnits = widthUnits;
+      }
+      const labelTarget = maxLabelWidthUnits + LAYOUT.PERIPHERAL_GRID_CELL_PAD * 2;
+      return Math.max(
+        LAYOUT.PERIPHERAL_GRID_MIN_CELL_WIDTH,
+        component?.bounds?.width || 0,
+        labelTarget,
+      );
+    }
+
     function computePositionBounds(positions, nodeById) {
       let minX = Number.POSITIVE_INFINITY;
       let maxX = Number.NEGATIVE_INFINITY;
@@ -1429,17 +1450,29 @@
         );
         const dockOriginY = coreBounds.minY - LAYOUT.PERIPHERAL_DOCK_GAP_Y;
         const dockAnchorX = coreBounds.centerX - dockWidth / 2;
-        const preCount = placements.length;
-        placeGroup(
-          peripheralComponents,
-          "peripheral",
-          dockOriginY,
-          dockWidth,
-          LAYOUT.PERIPHERAL_DOCK_GAP_X,
-          LAYOUT.PERIPHERAL_DOCK_GAP_Y,
-        );
-        for (let i = preCount; i < placements.length; i++) {
-          placements[i].tx += dockAnchorX;
+        let xCursor = 0;
+        let rowTop = dockOriginY;
+        let rowHeight = 0;
+        for (const component of peripheralComponents) {
+          const cellWidth = peripheralComponentCellWidth(component, nodeById);
+          const cellHeight = Math.max(component.bounds.height, LAYOUT.ROW_HEIGHT * 3);
+          const projectedWidth =
+            xCursor === 0
+              ? cellWidth
+              : xCursor + LAYOUT.PERIPHERAL_GRID_GAP_X + cellWidth;
+          if (xCursor > 0 && projectedWidth > dockWidth) {
+            xCursor = 0;
+            rowTop -= rowHeight + LAYOUT.PERIPHERAL_GRID_GAP_Y;
+            rowHeight = 0;
+          }
+          if (xCursor > 0) xCursor += LAYOUT.PERIPHERAL_GRID_GAP_X;
+          const cellCenterX = dockAnchorX + xCursor + cellWidth / 2;
+          const componentCenterX = (component.bounds.minX + component.bounds.maxX) / 2;
+          const tx = cellCenterX - componentCenterX;
+          const ty = rowTop - component.bounds.maxY;
+          placements.push({ component, tx, ty, zone: "peripheral", cellWidth });
+          xCursor += cellWidth;
+          rowHeight = Math.max(rowHeight, cellHeight);
         }
       }
 
