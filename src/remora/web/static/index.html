@@ -635,31 +635,80 @@
       virtual:  getComputedStyle(document.documentElement).getPropertyValue("--virtual").trim(),
     };
 
-    function qualifyLabels(nodes, nodeById) {
-      const nameCount = {};
-      for (const n of nodes) {
-        nameCount[n.name] = (nameCount[n.name] || 0) + 1;
+    function shortDeterministicHash(value) {
+      const text = String(value || "");
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
       }
-      for (const n of nodes) {
-        if (nameCount[n.name] <= 1) {
-          n._displayLabel = n.name;
-          continue;
+      return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 6);
+    }
+
+    function labelForLevel(node, nodeById, level) {
+      const base = node.name || node.node_id || "node";
+      if (level <= 0) return base;
+      const parent = node.parent_id ? nodeById[node.parent_id] : null;
+      const parentName = parent?.name || null;
+      const parts = (node.file_path || "")
+        .replace(/\\/g, "/")
+        .split("/")
+        .filter(Boolean);
+      const filePath = parts.join("/");
+      const dirPath = parts.slice(0, -1).join("/");
+
+      if (level === 1 && parentName && parentName !== base) {
+        return parentName + "/" + base;
+      }
+      if (level === 2 && dirPath) {
+        if (parentName && parentName !== base) return dirPath + "/" + parentName + "/" + base;
+        return dirPath + "/" + base;
+      }
+      if (filePath) return filePath + "::" + base;
+      return node.node_id || base;
+    }
+
+    function ensureUniqueDisplayLabels(nodes, nodeById) {
+      const assigned = new Map();
+      let unresolved = new Set(nodes.map((node) => node.node_id));
+
+      for (let level = 0; level <= 3 && unresolved.size > 0; level++) {
+        const counts = new Map();
+        for (const nodeId of unresolved) {
+          const node = nodeById[nodeId];
+          if (!node) continue;
+          const candidate = labelForLevel(node, nodeById, level);
+          counts.set(candidate, (counts.get(candidate) || 0) + 1);
         }
-        const parent = n.parent_id ? nodeById[n.parent_id] : null;
-        if (parent && parent.name !== n.name) {
-          n._displayLabel = parent.name + "/" + n.name;
-          continue;
-        }
-        const parts = (n.file_path || "").replace(/\\/g, "/").split("/").filter(Boolean);
-        let qualifier = null;
-        for (let i = parts.length - 2; i >= 0; i--) {
-          if (parts[i] !== n.name) {
-            qualifier = parts[i];
-            break;
+        const stillUnresolved = new Set();
+        for (const nodeId of unresolved) {
+          const node = nodeById[nodeId];
+          if (!node) continue;
+          const candidate = labelForLevel(node, nodeById, level);
+          if ((counts.get(candidate) || 0) === 1) {
+            assigned.set(nodeId, candidate);
+          } else {
+            stillUnresolved.add(nodeId);
           }
         }
-        n._displayLabel = qualifier ? qualifier + "/" + n.name : n.name;
+        unresolved = stillUnresolved;
       }
+
+      // fallback to deterministic hash suffix
+      for (const nodeId of unresolved) {
+        const node = nodeById[nodeId];
+        if (!node) continue;
+        const base = labelForLevel(node, nodeById, 3);
+        assigned.set(nodeId, base + "#" + shortDeterministicHash(nodeId));
+      }
+
+      for (const node of nodes) {
+        node._displayLabel = assigned.get(node.node_id) || node.name || node.node_id;
+      }
+    }
+
+    function qualifyLabels(nodes, nodeById) {
+      ensureUniqueDisplayLabels(nodes, nodeById);
     }
 
     function measureLabelWidth(text) {
