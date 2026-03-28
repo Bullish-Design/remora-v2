@@ -2543,19 +2543,32 @@ function addTimelineEvent(eventType, payload) {
         const leftPoint = renderer.graphToViewport({ x: -1000, y: zoneSeparatorY });
         const rightPoint = renderer.graphToViewport({ x: 1000, y: zoneSeparatorY });
         const y = (leftPoint.y + rightPoint.y) / 2;
-        context.strokeStyle = "rgba(159, 178, 200, 0.20)";
-        context.lineWidth = 1;
-        context.setLineDash([5, 5]);
+        context.strokeStyle = "rgba(159, 178, 200, 0.34)";
+        context.lineWidth = 1.25;
         context.beginPath();
         context.moveTo(12, y);
         context.lineTo(Math.max(14, dims.width - 12), y);
         context.stroke();
-        context.setLineDash([]);
-        context.fillStyle = "rgba(159, 178, 200, 0.68)";
+
+        const chipText = "supporting nodes";
+        context.font = '500 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        const chipTextWidth = context.measureText(chipText).width;
+        const chipX = 16;
+        const chipY = y - 17;
+        const chipW = chipTextWidth + 12;
+        const chipH = 14;
+        drawRoundedRect(context, chipX, chipY, chipW, chipH, 6);
+        context.fillStyle = "rgba(16, 24, 38, 0.92)";
+        context.fill();
+        context.strokeStyle = "rgba(159, 178, 200, 0.46)";
+        context.lineWidth = 1;
+        context.stroke();
+
+        context.fillStyle = "rgba(203, 213, 225, 0.90)";
         context.font = '500 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
         context.textAlign = "left";
-        context.textBaseline = "bottom";
-        context.fillText("supporting nodes", 16, y - 4);
+        context.textBaseline = "middle";
+        context.fillText(chipText, chipX + 6, chipY + chipH / 2 + 0.2);
       }
 
       if (!filterState.showBoundingBoxes) {
