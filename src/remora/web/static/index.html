@@ -439,6 +439,11 @@
       OCCUPANCY_TARGET_MAX: 0.82,
       OCCUPANCY_SCALE_MIN: 0.88,
       OCCUPANCY_SCALE_MAX: 1.45,
+      FIT_MIN_MEDIAN_LABEL_PX: 92,
+      FIT_MARGIN_LEFT_UNITS: 7.0,
+      FIT_MARGIN_RIGHT_UNITS: 2.8,
+      FIT_MARGIN_TOP_UNITS: 5.5,
+      FIT_MARGIN_BOTTOM_UNITS: 3.2,
       FIT_PADDING_PX: 56,
     });
     const LAYOUT_MODE = "v5_component";
@@ -1145,10 +1150,13 @@
       let maxX = Number.NEGATIVE_INFINITY;
       let minY = Number.POSITIVE_INFINITY;
       let maxY = Number.NEGATIVE_INFINITY;
+      const visibleLabelWidthsPx = [];
 
       graph.forEachNode((nodeId, attrs) => {
         if (attrs.hidden) return;
-        const labelWidth = measureLabelWidth(attrs.label || attrs.node_id || nodeId) / LAYOUT.PX_PER_UNIT;
+        const labelWidthPx = measureLabelWidth(attrs.label || attrs.node_id || nodeId);
+        const labelWidth = labelWidthPx / LAYOUT.PX_PER_UNIT;
+        visibleLabelWidthsPx.push(labelWidthPx);
         const halfW = Math.max(2.6, labelWidth / 2);
         const halfH = 1.25;
         minX = Math.min(minX, attrs.x - halfW);
@@ -1169,6 +1177,33 @@
       if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
         return null;
       }
+
+      minX -= LAYOUT.FIT_MARGIN_LEFT_UNITS;
+      maxX += LAYOUT.FIT_MARGIN_RIGHT_UNITS;
+      minY -= LAYOUT.FIT_MARGIN_BOTTOM_UNITS;
+      maxY += LAYOUT.FIT_MARGIN_TOP_UNITS;
+
+      const graphEl = document.getElementById("graph");
+      const graphWidthPx = graphEl?.clientWidth || 1200;
+      if (visibleLabelWidthsPx.length > 0 && graphWidthPx > 0) {
+        const sortedWidths = [...visibleLabelWidthsPx].sort((a, b) => a - b);
+        const mid = Math.floor(sortedWidths.length / 2);
+        const medianLabelPx =
+          sortedWidths.length % 2 === 0
+            ? (sortedWidths[mid - 1] + sortedWidths[mid]) / 2
+            : sortedWidths[mid];
+        const maxReadableWidthUnits =
+          (graphWidthPx / LAYOUT.FIT_MIN_MEDIAN_LABEL_PX) *
+          (medianLabelPx / LAYOUT.PX_PER_UNIT);
+        const fitWidthUnits = maxX - minX;
+        if (fitWidthUnits > maxReadableWidthUnits && maxReadableWidthUnits > 0) {
+          const cx = (minX + maxX) / 2;
+          const half = maxReadableWidthUnits / 2;
+          minX = cx - half;
+          maxX = cx + half;
+        }
+      }
+
       return { x: [minX, maxX], y: [minY, maxY] };
     }
 
@@ -1176,12 +1211,9 @@
       const camera = renderer.getCamera();
       const bbox = computeFitBBox();
       renderer.setCustomBBox(bbox || null);
-      if (duration > 0) {
-        camera.animatedReset({ duration: Math.max(120, duration) });
-      } else {
-        camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
-        renderer.refresh();
-      }
+      const resetDuration = Math.max(0, duration);
+      camera.animatedReset({ duration: resetDuration });
+      if (resetDuration === 0) renderer.refresh();
     }
 
     async function loadGraph() {
@@ -1258,7 +1290,7 @@
 
       applyFilters();
       renderer.refresh();
-      applyCustomFit(0);
+      applyCustomFit(120);
     }
 
     function appendEventLine(text) {

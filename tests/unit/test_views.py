@@ -48,6 +48,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "ROW_BAND_GAP" in html
     assert "OCCUPANCY_TARGET_MIN" in html
     assert "OCCUPANCY_TARGET_MAX" in html
+    assert "FIT_MIN_MEDIAN_LABEL_PX" in html
+    assert "FIT_MARGIN_LEFT_UNITS" in html
     assert 'const LAYOUT_MODE = "v5_component";' in html
     assert "function layoutNodes(nodes, nodeById, edges)" in html
     assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
@@ -58,6 +60,7 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert 'data-filter-edge-emphasis="cross-file"' in html
     assert "edgeEmphasisCrossFileOnly" in html
     assert "renderer.setCustomBBox(bbox || null);" in html
+    assert "camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });" not in html
     assert "const nodeLabelHitboxes = new Map();" in html
     assert 'renderer.on("clickStage"' in html
     assert "event.x * pixelRatio" in html
