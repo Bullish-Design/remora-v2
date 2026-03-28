@@ -454,6 +454,9 @@
       PERIPHERAL_GRID_GAP_Y: 7.8,
       CORE_ZONE_MIN_VERTICAL_RATIO: 0.60,
       CORE_ZONE_SCALE_MAX: 2.4,
+      CORE_ASPECT_MAX: 1.9,
+      CORE_ASPECT_COMPRESS_X: 0.88,
+      CORE_ASPECT_EXPAND_Y: 1.12,
       PERIPHERAL_NODE_ALPHA: 0.62,
       PERIPHERAL_EDGE_ALPHA_SCALE: 0.58,
       OCCUPANCY_TARGET_MIN: 0.35,
@@ -1216,6 +1219,21 @@
       }
     }
 
+    function normalizeCoreAspect(positions, zoneByNode, nodeById) {
+      if (!positions || positions.size === 0) return;
+      const coreBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
+      if (!coreBounds || coreBounds.height <= 0 || coreBounds.width <= 0) return;
+      const coreAspect = coreBounds.width / Math.max(1e-6, coreBounds.height);
+      if (coreAspect <= LAYOUT.CORE_ASPECT_MAX) return;
+      const xScale = Math.max(0.7, Math.min(0.98, LAYOUT.CORE_ASPECT_COMPRESS_X));
+      const yScale = Math.max(1, Math.min(1.4, LAYOUT.CORE_ASPECT_EXPAND_Y));
+      for (const [nodeId, pos] of positions) {
+        if ((zoneByNode.get(nodeId) || "core") !== "core") continue;
+        pos.x = coreBounds.centerX + (pos.x - coreBounds.centerX) * xScale;
+        pos.y = coreBounds.centerY + (pos.y - coreBounds.centerY) * yScale;
+      }
+    }
+
     function nodePathRoot(node) {
       const parts = (node?.file_path || "")
         .replace(/\\/g, "/")
@@ -1608,6 +1626,7 @@
         }
       }
 
+      normalizeCoreAspect(positions, zoneByNode, nodeById);
       normalizeLayoutOccupancy(positions, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
       const coreZoneBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
