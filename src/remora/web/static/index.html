@@ -435,6 +435,10 @@
       SATELLITE_GAP_X: 3.8,
       SATELLITE_GAP_Y: 4.5,
       SATELLITE_ROW_GAP: 4.0,
+      CORE_COMPONENT_MIN_SCORE: 18,
+      PERIPHERAL_DOCK_GAP_X: 4.5,
+      PERIPHERAL_DOCK_GAP_Y: 6.2,
+      PERIPHERAL_DOCK_MAX_WIDTH: 132.0,
       OCCUPANCY_TARGET_MIN: 0.35,
       OCCUPANCY_TARGET_MAX: 0.82,
       OCCUPANCY_SCALE_MIN: 0.88,
@@ -897,6 +901,46 @@
       return { components, adjacency };
     }
 
+    function componentScore(component, componentStats) {
+      const stats = componentStats || {};
+      const nodeWeight = (component?.ids?.length || 0) * 5;
+      const internalEdgeWeight = (stats.internalEdges || 0) * 4;
+      const crossFileWeight = (stats.crossFileEdges || 0) * 6;
+      const nonVirtualWeight = (stats.nonVirtualNodes || 0) * 2;
+      return nodeWeight + internalEdgeWeight + crossFileWeight + nonVirtualWeight;
+    }
+
+    function computePlacementBounds(placements) {
+      if (!placements || placements.length === 0) {
+        return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0, centerX: 0, centerY: 0 };
+      }
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      for (const placement of placements) {
+        const b = placement.component.bounds;
+        const left = b.minX + placement.tx;
+        const right = b.maxX + placement.tx;
+        const bottom = b.minY + placement.ty;
+        const top = b.maxY + placement.ty;
+        minX = Math.min(minX, left);
+        maxX = Math.max(maxX, right);
+        minY = Math.min(minY, bottom);
+        maxY = Math.max(maxY, top);
+      }
+      return {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2,
+      };
+    }
+
     function computePositionBounds(positions, nodeById) {
       let minX = Number.POSITIVE_INFINITY;
       let maxX = Number.NEGATIVE_INFINITY;
@@ -1195,27 +1239,76 @@
 
       const { components } = computeConnectedComponents(contentNodes, edges || []);
       if (components.length === 0) {
-        return { positions: new Map(), boxes: new Map(), directories };
+        return { positions: new Map(), boxes: new Map(), directories, zoneByNode: new Map() };
       }
 
-      const componentLayouts = components.map((ids) => {
+      const componentIndexByNode = new Map();
+      components.forEach((ids, index) => {
+        for (const nodeId of ids) {
+          componentIndexByNode.set(nodeId, index);
+        }
+      });
+
+      const componentStats = new Map();
+      components.forEach((ids, index) => {
+        let nonVirtualNodes = 0;
+        for (const nodeId of ids) {
+          const node = nodeById[nodeId];
+          if (node && node.node_type !== "virtual") nonVirtualNodes += 1;
+        }
+        componentStats.set(index, {
+          internalEdges: 0,
+          crossFileEdges: 0,
+          nonVirtualNodes,
+        });
+      });
+
+      for (const edge of edges || []) {
+        if (edge.edge_type === "contains") continue;
+        const sourceIndex = componentIndexByNode.get(edge.from_id);
+        const targetIndex = componentIndexByNode.get(edge.to_id);
+        if (sourceIndex === undefined || targetIndex === undefined) continue;
+        if (sourceIndex !== targetIndex) continue;
+        const stats = componentStats.get(sourceIndex);
+        if (!stats) continue;
+        stats.internalEdges += 1;
+        const sourcePath = nodeById[edge.from_id]?.file_path || "";
+        const targetPath = nodeById[edge.to_id]?.file_path || "";
+        if (sourcePath && targetPath && sourcePath !== targetPath) {
+          stats.crossFileEdges += 1;
+        }
+      }
+
+      const componentLayouts = components.map((ids, index) => {
         const componentNodes = ids.map((id) => nodeById[id]).filter(Boolean);
         const localLayout = layoutNodesV4FileWrap(componentNodes, nodeById, depthOf);
         const bounds = computePositionBounds(localLayout.positions, nodeById);
+        const stats = componentStats.get(index) || { internalEdges: 0, crossFileEdges: 0, nonVirtualNodes: 0 };
         return {
           ids,
           positions: localLayout.positions,
           bounds,
-          fileRoots: new Set(componentNodes.map((node) => nodePathRoot(node))),
-          satelliteCount: 0,
+          score: componentScore({ ids }, stats),
+          stats,
         };
       });
 
-      const mainComponents = componentLayouts.filter((item) => item.ids.length > 1);
-      const primaryComponents = mainComponents.length > 0 ? mainComponents : componentLayouts;
-      const trailingSingletons = mainComponents.length > 0
-        ? componentLayouts.filter((item) => item.ids.length === 1)
-        : [];
+      const sortedComponents = [...componentLayouts].sort(
+        (a, b) => (b.score - a.score) || a.ids[0].localeCompare(b.ids[0]),
+      );
+      const coreComponents = [];
+      const peripheralComponents = [];
+      for (const component of sortedComponents) {
+        const isCore =
+          component.score >= LAYOUT.CORE_COMPONENT_MIN_SCORE ||
+          component.stats.internalEdges > 0 ||
+          component.ids.length > 1;
+        if (isCore) coreComponents.push(component);
+        else peripheralComponents.push(component);
+      }
+      if (coreComponents.length === 0 && peripheralComponents.length > 0) {
+        coreComponents.push(peripheralComponents.shift());
+      }
 
       const graphWidthPx = document.getElementById("graph")?.clientWidth || 1200;
       const inferredPackWidth =
@@ -1226,82 +1319,64 @@
       );
 
       const placements = [];
-      let xCursor = 0;
-      let rowTop = 0;
-      let rowHeight = 0;
-
-      for (const component of primaryComponents) {
-        const width = component.bounds.width;
-        const height = component.bounds.height;
-        const projectedWidth =
-          xCursor === 0 ? width : xCursor + LAYOUT.COMPONENT_GAP_X + width;
-        if (xCursor > 0 && projectedWidth > targetPackWidth) {
-          xCursor = 0;
-          rowTop -= rowHeight + LAYOUT.COMPONENT_GAP_Y;
-          rowHeight = 0;
+      const placeGroup = (componentsToPlace, zone, originY = 0, packWidth = targetPackWidth, gapX = LAYOUT.COMPONENT_GAP_X, gapY = LAYOUT.COMPONENT_GAP_Y) => {
+        let xCursor = 0;
+        let rowTop = originY;
+        let rowHeight = 0;
+        for (const component of componentsToPlace) {
+          const width = component.bounds.width;
+          const height = component.bounds.height;
+          const projectedWidth = xCursor === 0 ? width : xCursor + gapX + width;
+          if (xCursor > 0 && projectedWidth > packWidth) {
+            xCursor = 0;
+            rowTop -= rowHeight + gapY;
+            rowHeight = 0;
+          }
+          if (xCursor > 0) xCursor += gapX;
+          const tx = xCursor - component.bounds.minX;
+          const ty = rowTop - component.bounds.maxY;
+          placements.push({ component, tx, ty, zone });
+          xCursor += width;
+          rowHeight = Math.max(rowHeight, height);
         }
-        if (xCursor > 0) xCursor += LAYOUT.COMPONENT_GAP_X;
+      };
 
-        const tx = xCursor - component.bounds.minX;
-        const ty = rowTop - component.bounds.maxY;
+      placeGroup(coreComponents, "core", 0, targetPackWidth, LAYOUT.COMPONENT_GAP_X, LAYOUT.COMPONENT_GAP_Y);
+      const coreBounds = computePlacementBounds(placements);
 
-        placements.push({
-          component,
-          tx,
-          ty,
-          minY: component.bounds.minY + ty,
-          maxY: component.bounds.maxY + ty,
-          width,
-          centerX: component.bounds.centerX + tx,
-          fileRoots: component.fileRoots,
-          satelliteCount: 0,
-        });
-
-        xCursor += width;
-        rowHeight = Math.max(rowHeight, height);
+      if (peripheralComponents.length > 0) {
+        const dockWidth = Math.min(
+          LAYOUT.PERIPHERAL_DOCK_MAX_WIDTH,
+          Math.max(targetPackWidth * 0.9, coreBounds.width),
+        );
+        const dockOriginY = coreBounds.minY - LAYOUT.PERIPHERAL_DOCK_GAP_Y;
+        const dockAnchorX = coreBounds.centerX - dockWidth / 2;
+        const preCount = placements.length;
+        placeGroup(
+          peripheralComponents,
+          "peripheral",
+          dockOriginY,
+          dockWidth,
+          LAYOUT.PERIPHERAL_DOCK_GAP_X,
+          LAYOUT.PERIPHERAL_DOCK_GAP_Y,
+        );
+        for (let i = preCount; i < placements.length; i++) {
+          placements[i].tx += dockAnchorX;
+        }
       }
 
       const positions = new Map();
-      const applyPlacement = (placement) => {
+      const zoneByNode = new Map();
+      for (const placement of placements) {
         for (const [nodeId, pos] of placement.component.positions) {
           positions.set(nodeId, { x: pos.x + placement.tx, y: pos.y + placement.ty });
+          zoneByNode.set(nodeId, placement.zone);
         }
-      };
-      for (const placement of placements) {
-        applyPlacement(placement);
-      }
-
-      for (const singleton of trailingSingletons) {
-        if (placements.length === 0) break;
-        const singletonNode = nodeById[singleton.ids[0]];
-        const singletonRoot = nodePathRoot(singletonNode);
-
-        let anchor = placements[0];
-        const rootMatch = placements.find((placement) => placement.fileRoots.has(singletonRoot));
-        if (rootMatch) anchor = rootMatch;
-
-        const satelliteIndex = anchor.satelliteCount || 0;
-        anchor.satelliteCount = satelliteIndex + 1;
-        const side = satelliteIndex % 2 === 0 ? -1 : 1;
-        const row = Math.floor(satelliteIndex / 2);
-        const centerX =
-          anchor.centerX +
-          side * (anchor.width / 2 + singleton.bounds.width / 2 + LAYOUT.SATELLITE_GAP_X);
-        const topY =
-          anchor.minY -
-          LAYOUT.SATELLITE_GAP_Y -
-          row * (singleton.bounds.height + LAYOUT.SATELLITE_ROW_GAP);
-
-        applyPlacement({
-          component: singleton,
-          tx: centerX - singleton.bounds.centerX,
-          ty: topY - singleton.bounds.maxY,
-        });
       }
 
       normalizeLayoutOccupancy(positions, nodeById);
       const boxes = computeBoundingBoxes(directories, positions, nodeById, depthOf);
-      return { positions, boxes, directories };
+      return { positions, boxes, directories, zoneByNode };
     }
 
     function layoutNodes(nodes, nodeById, edges) {

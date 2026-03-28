@@ -54,8 +54,10 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "function layoutNodes(nodes, nodeById, edges)" in html
     assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
     assert "function computeConnectedComponents(nodes, edges)" in html
+    assert "function componentScore(component, componentStats)" in html
     assert "function normalizeLayoutOccupancy(positions, nodeById)" in html
     assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
+    assert "const coreComponents = [];" in html
     assert "function ensureUniqueDisplayLabels(nodes, nodeById)" in html
     assert "function commonWorkspacePathPrefix(paths)" in html
     assert "function workspaceRelativePath(path, workspacePrefix)" in html
