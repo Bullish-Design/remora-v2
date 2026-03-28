@@ -21,7 +21,6 @@
       --function: #60a5fa;
       --class: #a78bfa;
       --method: #22d3ee;
-      --directory: #94a3b8;
       --section: #fbbf24;
       --table: #34d399;
       --virtual: #f472b6;
@@ -29,7 +28,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: radial-gradient(1200px 800px at 10% 0%, #17263a, var(--bg));
+      background: var(--bg);
       color: var(--ink);
       font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
       display: flex;
@@ -283,13 +282,9 @@
   </style>
 </head>
 <body>
-  <div id="graph-container" style="position: relative; flex: 1; min-height: 100vh;">
+  <div id="graph-container">
     <div id="filter-bar">
       <div class="filter-group">
-        <button class="filter-chip active" data-filter-node="directory">
-          <span class="chip-swatch" style="background: var(--directory);"></span>
-          dirs
-        </button>
         <button class="filter-chip active" data-filter-node="class">
           <span class="chip-swatch" style="background: var(--class);"></span>
           classes
@@ -313,10 +308,6 @@
       </div>
       <div class="filter-separator"></div>
       <div class="filter-group">
-        <button class="filter-chip" data-filter-edge="contains">
-          <span class="chip-swatch" style="background: var(--muted);"></span>
-          contains
-        </button>
         <button class="filter-chip active" data-filter-edge="imports">
           <span class="chip-swatch" style="background: var(--function);"></span>
           imports
@@ -324,6 +315,13 @@
         <button class="filter-chip active" data-filter-edge="inherits">
           <span class="chip-swatch" style="background: var(--class);"></span>
           inherits
+        </button>
+      </div>
+      <div class="filter-separator"></div>
+      <div class="filter-group">
+        <button class="filter-chip active" data-filter-boxes="filesystem">
+          <span class="chip-swatch" style="background: var(--muted);"></span>
+          filesystem
         </button>
       </div>
     </div>
@@ -402,15 +400,14 @@
     const labelMeasureCanvas = document.createElement("canvas");
     const labelMeasureContext = labelMeasureCanvas.getContext("2d");
     const LAYOUT = Object.freeze({
-      COL_PAD: 1.8,
-      ROW_HEIGHT: 6.0,
-      SUB_ROW_HEIGHT: 3.4,
-      DIR_HEADER_GAP: 2.0,
-      MIN_COL_WIDTH: 3.4,
-      MAX_COL_WIDTH: 10.5,
-      COL_Y_STAGGER: 1.3,
+      COL_PAD: 3.0,
+      ROW_HEIGHT: 2.2,
+      SUB_ROW_HEIGHT: 1.6,
+      MIN_COL_WIDTH: 4.0,
       PX_PER_UNIT: 14,
       LABEL_PAD_PX: 20,
+      BOX_PAD: 2.0,
+      BOX_HEADER: 1.4,
     });
 
     function drawRoundedRect(context, x, y, width, height, radius) {
@@ -434,13 +431,8 @@
       const nodeType = data.node_type || "";
       const text = String(data.label);
 
-      let fontSize = 12;
-      let fontWeight = "500";
-      if (nodeType === "directory") {
-        fontSize = 13;
-        fontWeight = "700";
-      }
-
+      const fontSize = 12;
+      const fontWeight = "500";
       const padX = 10;
       const padY = 5;
 
@@ -455,12 +447,9 @@
       let borderRadius = 8;
       if (nodeType === "function" || nodeType === "method") {
         borderRadius = boxHeight / 2;
-      } else if (nodeType === "directory") {
-        borderRadius = 6;
       }
 
       const fillColors = {
-        directory: "rgba(148, 163, 184, 0.10)",
         class:     "rgba(167, 139, 250, 0.10)",
         function:  "rgba(96, 165, 250, 0.10)",
         method:    "rgba(34, 211, 238, 0.10)",
@@ -474,7 +463,7 @@
       context.fillStyle = fillColor;
       context.fill();
       context.strokeStyle = data.color || "#22d3ee";
-      context.lineWidth = nodeType === "directory" ? 2.0 : 1.4;
+      context.lineWidth = 1.4;
 
       if (
         nodeType === "method" ||
@@ -487,7 +476,15 @@
       context.setLineDash([]);
 
       if (nodeType === "class") {
-        drawRoundedRect(context, x + 3, y + 3, boxWidth - 6, boxHeight - 6, borderRadius - 2);
+        const inset = 3;
+        drawRoundedRect(
+          context,
+          x + inset,
+          y + inset,
+          boxWidth - inset * 2,
+          boxHeight - inset * 2,
+          Math.max(2, borderRadius - inset),
+        );
         context.strokeStyle = data.color || "#a78bfa";
         context.lineWidth = 0.8;
         context.stroke();
@@ -512,12 +509,11 @@
     }
 
     const EDGE_STYLES = Object.freeze({
-      contains: { color: "#233247", size: 0.5, hidden: true, type: "line" },
-      imports:  { color: "#60a5fa", size: 1.8, hidden: false, type: "arrow" },
-      inherits: { color: "#a78bfa", size: 1.8, hidden: false, type: "arrow" },
+      imports:  { color: "#60a5fa", size: 1.8, type: "arrow" },
+      inherits: { color: "#a78bfa", size: 1.8, type: "arrow" },
     });
     const DEFAULT_EDGE_STYLE = Object.freeze({
-      color: "#3a4f6a", size: 1, hidden: false, type: "line",
+      color: "#3a4f6a", size: 1, type: "line",
     });
 
     let selectedNode = null;
@@ -546,7 +542,6 @@
           color: style.color,
           size: style.size,
           type: style.type,
-          hidden: data.hidden ?? style.hidden,
         };
       },
     });
@@ -557,7 +552,8 @@
 
     const filterState = {
       hiddenNodeTypes: new Set(),
-      hiddenEdgeTypes: new Set(["contains"]),
+      hiddenEdgeTypes: new Set(),
+      showBoundingBoxes: true,
     };
 
     function applyFilters() {
@@ -566,22 +562,18 @@
         graph.setNodeAttribute(id, "hidden", shouldHide);
       });
       graph.forEachEdge((edge, attrs) => {
-        const edgeType = attrs.label;
-        const baseHidden = EDGE_STYLES[edgeType]?.hidden ?? false;
-        const filterHidden = filterState.hiddenEdgeTypes.has(edgeType);
-        graph.setEdgeAttribute(edge, "hidden", baseHidden || filterHidden);
+        graph.setEdgeAttribute(edge, "hidden", filterState.hiddenEdgeTypes.has(attrs.label));
       });
       renderer.refresh();
     }
 
     const colorByType = {
-      directory: getComputedStyle(document.documentElement).getPropertyValue("--directory").trim(),
       function: getComputedStyle(document.documentElement).getPropertyValue("--function").trim(),
-      class: getComputedStyle(document.documentElement).getPropertyValue("--class").trim(),
-      method: getComputedStyle(document.documentElement).getPropertyValue("--method").trim(),
-      section: getComputedStyle(document.documentElement).getPropertyValue("--section").trim(),
-      table: getComputedStyle(document.documentElement).getPropertyValue("--table").trim(),
-      virtual: getComputedStyle(document.documentElement).getPropertyValue("--virtual").trim(),
+      class:    getComputedStyle(document.documentElement).getPropertyValue("--class").trim(),
+      method:   getComputedStyle(document.documentElement).getPropertyValue("--method").trim(),
+      section:  getComputedStyle(document.documentElement).getPropertyValue("--section").trim(),
+      table:    getComputedStyle(document.documentElement).getPropertyValue("--table").trim(),
+      virtual:  getComputedStyle(document.documentElement).getPropertyValue("--virtual").trim(),
     };
 
     function qualifyLabels(nodes, nodeById) {
@@ -590,14 +582,24 @@
         nameCount[n.name] = (nameCount[n.name] || 0) + 1;
       }
       for (const n of nodes) {
-        if (nameCount[n.name] > 1 && n.parent_id) {
-          const parent = nodeById[n.parent_id];
-          if (parent) {
-            n._displayLabel = parent.name + "/" + n.name;
-            continue;
+        if (nameCount[n.name] <= 1) {
+          n._displayLabel = n.name;
+          continue;
+        }
+        const parent = n.parent_id ? nodeById[n.parent_id] : null;
+        if (parent && parent.name !== n.name) {
+          n._displayLabel = parent.name + "/" + n.name;
+          continue;
+        }
+        const parts = (n.file_path || "").replace(/\\/g, "/").split("/").filter(Boolean);
+        let qualifier = null;
+        for (let i = parts.length - 2; i >= 0; i--) {
+          if (parts[i] !== n.name) {
+            qualifier = parts[i];
+            break;
           }
         }
-        n._displayLabel = n.name;
+        n._displayLabel = qualifier ? qualifier + "/" + n.name : n.name;
       }
     }
 
