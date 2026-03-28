@@ -1,32 +1,23 @@
 # Context — 63-web-ui-improvement-template
 
 Current focus:
-- Execute the full `CONCEPT_V5.md` implementation sequence and validate outcomes.
+- Analyze post-v5 screenshot quality and define v6 corrective plan.
 
 Current status:
-- `CONCEPT_V5.md` implementation is complete in `src/remora/web/static/index.html`:
-  - v5 component-first layout path with mode dispatch.
-  - occupancy normalization to stabilize graph density.
-  - readability-constrained Sigma fit margins and label-width guard.
-  - iterative globally-unique display labels with deterministic hash fallback.
-  - edge priority tuning (cross-file emphasis, same-file attenuation, long-edge fade).
-  - filesystem fallback grouping via synthetic directory hierarchy when needed.
-- Acceptance suite now includes stronger runtime metrics in
-  `tests/acceptance/test_web_graph_ui.py`:
-  - occupancy floor/ceiling,
-  - label overlap ratio,
-  - duplicate label rejection,
-  - non-zero edge on-screen span when edges exist.
-- Verified:
-  - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_views.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
-  - `70 passed, 2 warnings`
+- Latest screenshot reviewed:
+  - `.scratch/projects/63-web-ui-improvement-template/ui-playwright-20260328-121351-721.png`
+- Remaining issues identified despite v5:
+  - labels regress to verbose absolute paths,
+  - composition still fragmented into disconnected islands,
+  - weak primary-vs-peripheral visual hierarchy,
+  - filesystem grouping too subtle for fast comprehension.
+- New v6 corrective guide created:
+  - `.scratch/projects/63-web-ui-improvement-template/CONCEPT_V6.md`
+  - Introduces core/peripheral zoning, concise relative labels, stronger hierarchy cues, and refined acceptance targets.
 
 Constraints and direction:
 - Node labels remain always visible.
 - Scope remains graph-view focused; sidebar/event/timeline behavior unchanged.
 
 Next immediate step:
-- Patch release handoff:
-  - patch version bump,
-  - commit/push,
-  - annotated tag push.
+- Implement `CONCEPT_V6.md` end-to-end with commit/push after each step, then run full web subset verification and release handoff.

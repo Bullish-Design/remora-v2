@@ -126,3 +126,11 @@
 
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_views.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
   - Result: `70 passed, 2 warnings`
+
+## v6 concept drafting
+
+- [x] Analyze latest screenshot:
+  - `.scratch/projects/63-web-ui-improvement-template/ui-playwright-20260328-121351-721.png`
+- [x] Identify remaining gaps against desired demo UI goals.
+- [x] Create v6 corrective design + implementation guide:
+  - `.scratch/projects/63-web-ui-improvement-template/CONCEPT_V6.md`
