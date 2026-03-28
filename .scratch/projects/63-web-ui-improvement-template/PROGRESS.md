@@ -102,3 +102,11 @@
 
 - `devenv shell -- pytest tests/acceptance/test_web_graph_ui.py tests/unit/test_views.py tests/unit/test_web_static_assets.py tests/unit/test_web_server.py tests/unit/test_web_decomposition.py tests/unit/test_sse_resume.py -q -rs`
   - Result: `70 passed, 2 warnings`
+
+## v5 concept drafting
+
+- [x] Analyze latest screenshot:
+  - `.scratch/projects/63-web-ui-improvement-template/ui-playwright-20260328-110404-178.png`
+- [x] Compare against v4 goals and identify remaining legibility gaps.
+- [x] Draft v5 corrective architecture and implementation plan:
+  - `.scratch/projects/63-web-ui-improvement-template/CONCEPT_V5.md`
