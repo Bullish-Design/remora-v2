@@ -424,30 +424,74 @@
 
     function drawNodeBoxLabel(context, data) {
       if (!data.label || data.hidden) return;
-      const isFileLabel = data.node_type === "__label__";
+
+      const nodeType = data.node_type || "";
       const text = String(data.label);
-      const fontSize = isFileLabel ? 11 : 12;
-      const fontWeight = isFileLabel ? "600" : "500";
-      const padX = isFileLabel ? 6 : 8;
-      const padY = isFileLabel ? 3 : 4;
+
+      let fontSize = 12;
+      let fontWeight = "500";
+      if (nodeType === "directory") {
+        fontSize = 13;
+        fontWeight = "700";
+      }
+
+      const padX = 10;
+      const padY = 5;
 
       context.save();
-      context.font = `${fontWeight} ${fontSize}px "IBM Plex Mono", "IBM Plex Sans", sans-serif`;
+      context.font = fontWeight + " " + fontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
       const textWidth = context.measureText(text).width;
       const boxWidth = textWidth + padX * 2;
       const boxHeight = fontSize + padY * 2;
       const x = data.x - boxWidth / 2;
       const y = data.y - boxHeight / 2;
-      drawRoundedRect(context, x, y, boxWidth, boxHeight, isFileLabel ? 6 : 8);
-      context.fillStyle = isFileLabel ? "rgba(16, 24, 38, 0.76)" : "rgba(10, 16, 24, 0.9)";
+
+      let borderRadius = 8;
+      if (nodeType === "function" || nodeType === "method") {
+        borderRadius = boxHeight / 2;
+      } else if (nodeType === "directory") {
+        borderRadius = 6;
+      }
+
+      const fillColors = {
+        directory: "rgba(148, 163, 184, 0.10)",
+        class:     "rgba(167, 139, 250, 0.10)",
+        function:  "rgba(96, 165, 250, 0.10)",
+        method:    "rgba(34, 211, 238, 0.10)",
+        section:   "rgba(251, 191, 36, 0.10)",
+        table:     "rgba(52, 211, 153, 0.10)",
+        virtual:   "rgba(244, 114, 182, 0.10)",
+      };
+      const fillColor = fillColors[nodeType] || "rgba(10, 16, 24, 0.9)";
+
+      drawRoundedRect(context, x, y, boxWidth, boxHeight, borderRadius);
+      context.fillStyle = fillColor;
       context.fill();
       context.strokeStyle = data.color || "#22d3ee";
-      context.lineWidth = isFileLabel ? 1 : 1.4;
+      context.lineWidth = nodeType === "directory" ? 2.0 : 1.4;
+
+      if (
+        nodeType === "method" ||
+        data.status === "awaiting_input" ||
+        data.status === "awaiting_review"
+      ) {
+        context.setLineDash([4, 3]);
+      }
       context.stroke();
-      context.fillStyle = isFileLabel ? "#9fb2c8" : "#e5edf7";
+      context.setLineDash([]);
+
+      if (nodeType === "class") {
+        drawRoundedRect(context, x + 3, y + 3, boxWidth - 6, boxHeight - 6, borderRadius - 2);
+        context.strokeStyle = data.color || "#a78bfa";
+        context.lineWidth = 0.8;
+        context.stroke();
+      }
+
+      context.fillStyle = data.dimmed ? "rgba(229, 237, 247, 0.15)" : "#e5edf7";
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillText(text, data.x, data.y);
+
       if (data.node_id) {
         nodeLabelHitboxes.set(data.node_id, {
           x,
@@ -457,6 +501,7 @@
           area: boxWidth * boxHeight,
         });
       }
+
       context.restore();
     }
 

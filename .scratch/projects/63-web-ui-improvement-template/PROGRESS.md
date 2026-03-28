@@ -16,7 +16,7 @@
 - [x] Step 6: Add `qualifyLabels`
 - [x] Step 7: Add `layoutNodes`
 - [x] Step 8: Rewrite `loadGraph`
-- [ ] Step 9: Rewrite `drawNodeBoxLabel`
+- [x] Step 9: Rewrite `drawNodeBoxLabel`
 - [ ] Step 10: Update Sigma constructor
 - [ ] Step 11: Update `nodeColor` palette
 - [ ] Step 12: Add `filterState` + `applyFilters`
