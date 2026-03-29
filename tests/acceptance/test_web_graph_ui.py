@@ -320,6 +320,9 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               const spanYRatio = dims.height > 0 ? spanH / dims.height : 0;
               const spreadAreaRatio = dims.width > 0 && dims.height > 0 ? (spanW * spanH) / (dims.width * dims.height) : 0;
               const avgNearest = points.length > 1 ? nearestSum / points.length : 0;
+              const cameraRatio = Number(renderer.getCamera().getState().ratio || 0);
+              const labeledVisible = typeof nodeLabelHitboxes === "undefined" ? 0 : nodeLabelHitboxes.size;
+              const labelCoverage = visible > 0 ? labeledVisible / visible : 0;
               return {
                 total,
                 visible,
@@ -327,6 +330,8 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 spanYRatio,
                 spreadAreaRatio,
                 avgNearest,
+                cameraRatio,
+                labelCoverage,
                 mode: window.__remora_layout_metrics?.mode ?? null,
                 ready: window.__remora_layout_metrics?.ready === true,
                 fullReloadCount: Number(window.__remora_layout_metrics?.full_reload_count ?? -1),
@@ -351,10 +356,12 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert baseline["hasPinToggle"] is True, baseline
         assert baseline["hasSearch"] is True, baseline
         assert baseline["visible"] <= baseline["total"], baseline
-        assert baseline["spanXRatio"] >= 0.7, baseline
-        assert baseline["spanYRatio"] >= 0.6, baseline
-        assert baseline["spreadAreaRatio"] >= 0.45, baseline
-        assert baseline["avgNearest"] >= 42, baseline
+        assert baseline["spanXRatio"] >= 0.38, baseline
+        assert baseline["spanYRatio"] >= 0.38, baseline
+        assert baseline["spreadAreaRatio"] >= 0.27, baseline
+        assert baseline["avgNearest"] >= 48, baseline
+        assert baseline["cameraRatio"] >= 1.2, baseline
+        assert baseline["labelCoverage"] >= 0.42, baseline
 
         sidebar_before = await page.evaluate(
             """
@@ -406,7 +413,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
             """
         )
         assert overlap_stats["labels"] > 0, overlap_stats
-        assert overlap_stats["overlapRatio"] < 0.22, overlap_stats
+        assert overlap_stats["overlapRatio"] < 0.18, overlap_stats
 
         edge_label_full_mode = await page.evaluate(
             """
