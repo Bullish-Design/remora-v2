@@ -258,7 +258,7 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
         result.label = "";
       }
       if (!result.is_high_signal && !showLabel) {
-        result.color = colorWithAlpha(result.color || "#4f627d", 0.35);
+        result.color = colorWithAlpha(result.color || "#4f627d", result.dense_scene ? 0.22 : 0.35);
       }
       if (result.dimmed) {
         result.color = colorWithAlpha(result.color || "#4f627d", 0.18);

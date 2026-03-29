@@ -578,6 +578,72 @@ export function createLayoutEngine() {
     }
   }
 
+  function deflectCrossingCorridors(
+    graph,
+    nodes,
+    {
+      minHubDegree = 4,
+      angleThreshold = 0.16,
+      radiusThreshold = 34,
+      maxRounds = 2,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 6) return;
+    const nodeSet = new Set(nodes);
+    for (let round = 0; round < maxRounds; round += 1) {
+      let moved = 0;
+      for (const hubId of nodes) {
+        if (!graph.hasNode(hubId)) continue;
+        if (graph.degree(hubId) < minHubDegree) continue;
+        const hub = graph.getNodeAttributes(hubId);
+        const hx = Number(hub.x);
+        const hy = Number(hub.y);
+        if (!Number.isFinite(hx) || !Number.isFinite(hy)) continue;
+        const neighbors = (graph.neighbors(hubId) || [])
+          .filter((id) => nodeSet.has(id) && graph.hasNode(id))
+          .filter((id) => !(pinnedNodeId && id === pinnedNodeId))
+          .map((id) => {
+            const attrs = graph.getNodeAttributes(id);
+            const nx = Number(attrs.x);
+            const ny = Number(attrs.y);
+            const dx = nx - hx;
+            const dy = ny - hy;
+            const angle = Math.atan2(dy, dx);
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            return { id, nx, ny, angle, radius };
+          })
+          .filter((item) => Number.isFinite(item.radius) && item.radius > 0.001)
+          .sort((a, b) => a.angle - b.angle);
+        if (neighbors.length < minHubDegree) continue;
+        for (let i = 0; i < neighbors.length - 1; i += 1) {
+          const a = neighbors[i];
+          const b = neighbors[i + 1];
+          const gap = Math.abs(b.angle - a.angle);
+          const rGap = Math.abs(b.radius - a.radius);
+          if (gap > angleThreshold || rGap > radiusThreshold) continue;
+          const midAngle = (a.angle + b.angle) / 2;
+          const rx = Math.cos(midAngle);
+          const ry = Math.sin(midAngle);
+          const radialPush = Math.max(10, (angleThreshold - gap) * 80);
+          const tangentPush = Math.max(8, (radiusThreshold - rGap) * 0.22);
+          const tx = -Math.sin(midAngle);
+          const ty = Math.cos(midAngle);
+          graph.setNodeAttribute(a.id, "x", a.nx - rx * radialPush + tx * tangentPush);
+          graph.setNodeAttribute(a.id, "y", a.ny - ry * radialPush + ty * tangentPush);
+          graph.setNodeAttribute(b.id, "x", b.nx + rx * radialPush - tx * tangentPush);
+          graph.setNodeAttribute(b.id, "y", b.ny + ry * radialPush - ty * tangentPush);
+          moved += 1;
+        }
+      }
+      if (moved === 0) break;
+      relaxCollisions(graph, nodes, {
+        minRounds: 4,
+        maxRounds: 12,
+        targetAverageOverlap: 0.037,
+      });
+    }
+  }
+
   function applyExclusionZones(
     graph,
     nodes,
@@ -804,7 +870,13 @@ export function createLayoutEngine() {
     });
     deconflictHubCorridors(graph, nodes, {
       minHubDegree: 4,
-      minAngleGap: 0.24,
+      minAngleGap: 0.28,
+      maxRounds: 3,
+    });
+    deflectCrossingCorridors(graph, nodes, {
+      minHubDegree: 4,
+      angleThreshold: 0.17,
+      radiusThreshold: 36,
       maxRounds: 2,
     });
     relaxCollisions(graph, nodes, {

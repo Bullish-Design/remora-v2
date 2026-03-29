@@ -98,6 +98,7 @@ export function createInteractions({ graph, renderer }) {
     } else if (eligibleEdgeCount > 80) {
       containsBudget = Math.max(28, Math.floor(eligibleEdgeCount * 0.4));
     }
+    const denseCrossingScene = eligibleEdgeCount >= 96;
 
     const containsKeep = new Set();
     if (Number.isFinite(containsBudget) && containsCandidates.length > containsBudget) {
@@ -147,14 +148,15 @@ export function createInteractions({ graph, renderer }) {
       );
       graph.setEdgeAttribute(edgeId, "show_label", showLabel);
       graph.setEdgeAttribute(edgeId, "is_high_signal", highSignal);
+      graph.setEdgeAttribute(edgeId, "dense_scene", denseCrossingScene);
       graph.removeEdgeAttribute(edgeId, "dimmed");
-      graph.setEdgeAttribute(edgeId, "size", highSignal ? 2.2 : 1.0);
+      graph.setEdgeAttribute(edgeId, "size", highSignal ? 2.2 : (denseCrossingScene ? 0.72 : 0.95));
       graph.setEdgeAttribute(
         edgeId,
         "color",
         highSignal
           ? (attrs.is_cross_file ? "#8fd1ff" : "#78b8ff")
-          : "#4f627d",
+          : (denseCrossingScene ? "#42556e" : "#4f627d"),
       );
       if (!hidden) visibleEdgeCount += 1;
       if (hiddenByThinning) hiddenByThinningCount += 1;
