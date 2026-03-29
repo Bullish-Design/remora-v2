@@ -722,9 +722,57 @@ function wireRendererInteractions() {
   });
 }
 
+function wireSidebarResize() {
+  const handle = document.getElementById("sidebar-resize-handle");
+  const sidebar = document.getElementById("sidebar");
+  if (!handle || !sidebar) return;
+
+  const STORAGE_KEY = "remora_sidebar_width";
+  const MIN_WIDTH = 280;
+  const MAX_RATIO = 0.6;
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    const w = parseInt(saved, 10);
+    if (Number.isFinite(w) && w >= MIN_WIDTH) {
+      sidebar.style.width = Math.min(w, Math.floor(window.innerWidth * MAX_RATIO)) + "px";
+    }
+  }
+
+  let dragging = false;
+
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    handle.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const maxWidth = Math.floor(window.innerWidth * MAX_RATIO);
+    const newWidth = Math.max(MIN_WIDTH, Math.min(maxWidth, window.innerWidth - e.clientX));
+    sidebar.style.width = newWidth + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    localStorage.setItem(STORAGE_KEY, parseInt(sidebar.style.width, 10));
+    // Nudge Sigma to recompute its canvas dimensions after sidebar resize.
+    rendererApi.renderer.refresh();
+    syncLayoutExclusionZones();
+  });
+}
+
 async function start() {
   wireUiControls();
   wireRendererInteractions();
+  wireSidebarResize();
 
   await fullSnapshot({ fit: true });
   runtimeMetrics.ready = true;

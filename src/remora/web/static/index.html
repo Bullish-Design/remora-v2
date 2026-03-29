@@ -47,16 +47,28 @@
       height: 100%;
     }
     #sidebar {
-      width: clamp(320px, 30vw, 400px);
+      width: 380px;
+      min-width: 280px;
+      max-width: 60vw;
+      flex-shrink: 0;
       border-left: 1px solid var(--line);
       background: var(--panel);
       padding: 18px;
       overflow-y: auto;
     }
-    @media (max-width: 1180px) {
-      #sidebar {
-        width: clamp(300px, 36vw, 380px);
-      }
+    #sidebar-resize-handle {
+      width: 5px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      background: transparent;
+      border-left: 1px solid var(--line);
+      transition: background 0.15s;
+      z-index: 20;
+    }
+    #sidebar-resize-handle:hover,
+    #sidebar-resize-handle.dragging {
+      background: var(--accent);
+      border-left-color: var(--accent);
     }
     h1 { margin: 0 0 12px; font-size: 1.1rem; letter-spacing: 0.02em; }
     h2 { margin: 0 0 8px; font-size: 1rem; }
@@ -375,6 +387,8 @@
       <button id="zoom-reset" title="Fit to view">&#8862;</button>
     </div>
   </div>
+
+  <div id="sidebar-resize-handle"></div>
 
   <aside id="sidebar">
     <h1>Remora <span id="connection-status" class="connected" title="SSE connection status">●</span></h1>
