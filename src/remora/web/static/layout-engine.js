@@ -47,6 +47,7 @@ function nodeSpacing(graph, nodeId, attrs) {
 
 export function createLayoutEngine() {
   let pinnedNodeId = null;
+  let exclusionZones = [];
 
   function initializeLayout(graph, { seed = 42 } = {}) {
     let index = 0;
@@ -383,6 +384,66 @@ export function createLayoutEngine() {
     }
   }
 
+  function applyExclusionZones(
+    graph,
+    nodes,
+    {
+      defaultPadding = 20,
+      maxPasses = 2,
+    } = {},
+  ) {
+    if (!Array.isArray(exclusionZones) || exclusionZones.length === 0) return;
+    if (!Array.isArray(nodes) || nodes.length === 0) return;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+      let moved = 0;
+      for (const nodeId of nodes) {
+        if (!graph.hasNode(nodeId)) continue;
+        if (pinnedNodeId && nodeId === pinnedNodeId) continue;
+        const attrs = graph.getNodeAttributes(nodeId);
+        const x = Number(attrs.x);
+        const y = Number(attrs.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        for (const zone of exclusionZones) {
+          const left = Number(zone.left);
+          const right = Number(zone.right);
+          const top = Number(zone.top);
+          const bottom = Number(zone.bottom);
+          if (![left, right, top, bottom].every(Number.isFinite)) continue;
+          const pad = Number.isFinite(Number(zone.padding))
+            ? Number(zone.padding)
+            : defaultPadding;
+          const ext = labelCollisionExtents(attrs);
+          const minX = left - pad - ext.hx * 0.65;
+          const maxX = right + pad + ext.hx * 0.65;
+          const minY = top - pad - ext.hy * 0.65;
+          const maxY = bottom + pad + ext.hy * 0.65;
+          if (x < minX || x > maxX || y < minY || y > maxY) continue;
+          const toLeft = Math.abs(x - minX);
+          const toRight = Math.abs(maxX - x);
+          const toTop = Math.abs(y - minY);
+          const toBottom = Math.abs(maxY - y);
+          const nearest = Math.min(toLeft, toRight, toTop, toBottom);
+          let nx = x;
+          let ny = y;
+          if (nearest === toLeft) nx = minX - 2;
+          else if (nearest === toRight) nx = maxX + 2;
+          else if (nearest === toTop) ny = minY - 2;
+          else ny = maxY + 2;
+          graph.setNodeAttribute(nodeId, "x", nx);
+          graph.setNodeAttribute(nodeId, "y", ny);
+          moved += 1;
+          break;
+        }
+      }
+      if (moved === 0) break;
+      relaxCollisions(graph, nodes, {
+        minRounds: 4,
+        maxRounds: 10,
+        targetAverageOverlap: 0.05,
+      });
+    }
+  }
+
   function runForce(graph, {
     iterations = 80,
     repulsion = 7000,
@@ -494,6 +555,15 @@ export function createLayoutEngine() {
       minFill: 0.72,
       maxFill: 0.84,
     });
+    applyExclusionZones(graph, nodes, {
+      defaultPadding: 18,
+      maxPasses: 2,
+    });
+    relaxCollisions(graph, nodes, {
+      minRounds: 5,
+      maxRounds: 12,
+      targetAverageOverlap: 0.038,
+    });
   }
 
   function runInitialLayout(graph, { iterations = 340 } = {}) {
@@ -522,6 +592,27 @@ export function createLayoutEngine() {
     pinnedNodeId = nodeId == null ? null : String(nodeId);
   }
 
+  function setExclusionZones(zones) {
+    if (!Array.isArray(zones)) {
+      exclusionZones = [];
+      return;
+    }
+    exclusionZones = zones
+      .filter((zone) => zone && typeof zone === "object")
+      .map((zone) => ({
+        left: Number(zone.left),
+        right: Number(zone.right),
+        top: Number(zone.top),
+        bottom: Number(zone.bottom),
+        padding: Number(zone.padding),
+      }))
+      .filter((zone) =>
+        [zone.left, zone.right, zone.top, zone.bottom].every(Number.isFinite)
+        && zone.left < zone.right
+        && zone.top < zone.bottom,
+      );
+  }
+
   function getPinnedNode() {
     return pinnedNodeId;
   }
@@ -535,6 +626,7 @@ export function createLayoutEngine() {
     runInitialLayout,
     reheatLayout,
     setPinnedNode,
+    setExclusionZones,
     getPinnedNode,
     disposeLayout,
   };

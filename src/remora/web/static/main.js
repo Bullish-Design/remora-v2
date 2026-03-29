@@ -92,6 +92,10 @@ async function getJson(url) {
   return await response.json();
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function refreshFallbackHitboxes() {
   const ratio = rendererApi.renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
   if (!Number.isFinite(ratio) || ratio <= 0) return;
@@ -153,6 +157,43 @@ function setPinChipActive(active) {
   document
     .querySelectorAll("[data-pin-toggle]")
     .forEach((el) => el.classList.toggle("active", !!active));
+}
+
+function syncLayoutExclusionZones() {
+  const graphEl = document.getElementById("graph");
+  const filterEl = document.getElementById("filter-bar");
+  if (!graphEl || !filterEl) {
+    layoutEngine.setExclusionZones([]);
+    return;
+  }
+  if (typeof rendererApi.renderer.viewportToGraph !== "function") {
+    layoutEngine.setExclusionZones([]);
+    return;
+  }
+  const graphRect = graphEl.getBoundingClientRect();
+  const filterRect = filterEl.getBoundingClientRect();
+  const margin = 14;
+  const left = clamp(filterRect.left - graphRect.left - margin, 0, graphRect.width);
+  const top = clamp(filterRect.top - graphRect.top - margin, 0, graphRect.height);
+  const right = clamp(filterRect.right - graphRect.left + margin, 0, graphRect.width);
+  const bottom = clamp(filterRect.bottom - graphRect.top + margin, 0, graphRect.height);
+  if (right - left < 8 || bottom - top < 8) {
+    layoutEngine.setExclusionZones([]);
+    return;
+  }
+  const p1 = rendererApi.renderer.viewportToGraph({ x: left, y: top });
+  const p2 = rendererApi.renderer.viewportToGraph({ x: right, y: bottom });
+  if (![p1?.x, p1?.y, p2?.x, p2?.y].every(Number.isFinite)) {
+    layoutEngine.setExclusionZones([]);
+    return;
+  }
+  layoutEngine.setExclusionZones([{
+    left: Math.min(p1.x, p2.x),
+    right: Math.max(p1.x, p2.x),
+    top: Math.min(p1.y, p2.y),
+    bottom: Math.max(p1.y, p2.y),
+    padding: 16,
+  }]);
 }
 
 function syncGraphFromState() {
@@ -274,6 +315,7 @@ async function fullSnapshot({ fit = false } = {}) {
   graphState.applySnapshot(nodes, edges);
   syncGraphFromState();
   layoutEngine.initializeLayout(graph, { seed: 42 });
+  syncLayoutExclusionZones();
   layoutEngine.runInitialLayout(graph, { iterations: 260 });
   interactions.applyVisibility();
   syncVisibilityTelemetry();
@@ -362,6 +404,7 @@ async function applyIncrementalBatch(batch) {
   const selectedBefore = interactions.getState().selectedNodeId;
   syncGraphFromState();
   layoutEngine.initializeLayout(graph, { seed: 42 });
+  syncLayoutExclusionZones();
   layoutEngine.reheatLayout(graph, { iterations: 70 });
   interactions.applyVisibility();
   syncVisibilityTelemetry();
@@ -515,6 +558,10 @@ function wireUiControls() {
     syncVisibilityTelemetry();
     setPinChipActive(pinned);
     layoutEngine.setPinnedNode(pinned ? interactions.getState().selectedNodeId : null);
+  });
+
+  window.addEventListener("resize", () => {
+    syncLayoutExclusionZones();
   });
 }
 
