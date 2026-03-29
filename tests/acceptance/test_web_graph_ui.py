@@ -448,9 +448,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                   : null;
               const pixelRatio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
               const filterBar = document.getElementById("filter-bar");
+              const filterRect = filterBar ? filterBar.getBoundingClientRect() : null;
+              let coreClippedByViewportCount = 0;
               let coreOccludedByFilterCount = 0;
-              if (filterBar && typeof nodeLabelHitboxes !== "undefined") {
-                const rect = filterBar.getBoundingClientRect();
+              if (typeof nodeLabelHitboxes !== "undefined") {
                 for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
                   if (!graph.hasNode(nodeId)) continue;
                   const attrs = graph.getNodeAttributes(nodeId);
@@ -459,9 +460,14 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                   const top = box.y / pixelRatio;
                   const right = (box.x + box.width) / pixelRatio;
                   const bottom = (box.y + box.height) / pixelRatio;
-                  const overlapW = Math.max(0, Math.min(right, rect.right) - Math.max(left, rect.left));
-                  const overlapH = Math.max(0, Math.min(bottom, rect.bottom) - Math.max(top, rect.top));
-                  if (overlapW > 0 && overlapH > 0) coreOccludedByFilterCount += 1;
+                  const clipped =
+                    left < 0 || top < 0 || right > dims.width || bottom > dims.height;
+                  if (clipped) coreClippedByViewportCount += 1;
+                  if (filterRect) {
+                    const overlapW = Math.max(0, Math.min(right, filterRect.right) - Math.max(left, filterRect.left));
+                    const overlapH = Math.max(0, Math.min(bottom, filterRect.bottom) - Math.max(top, filterRect.top));
+                    if (overlapW > 0 && overlapH > 0) coreOccludedByFilterCount += 1;
+                  }
                 }
               }
               const sidebar = document.getElementById("sidebar");
@@ -469,6 +475,11 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 sidebar && window.innerWidth > 0
                   ? sidebar.getBoundingClientRect().width / window.innerWidth
                   : 0;
+              const runtimeMetrics =
+                typeof window.__remora_layout_metrics === "object" &&
+                window.__remora_layout_metrics !== null
+                  ? window.__remora_layout_metrics
+                  : {};
               let applyTaxZone = null;
               for (const nodeId of nodes) {
                 if (!String(nodeId).includes("apply_tax")) continue;
@@ -500,9 +511,32 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 emphasized_edge_count: emphasizedEdgeCount,
                 render_edge_labels_enabled: renderEdgeLabelsEnabled,
                 enable_edge_events_enabled: enableEdgeEventsEnabled,
+                core_clipped_label_count: coreClippedByViewportCount,
                 core_occluded_by_filter_count: coreOccludedByFilterCount,
                 sidebar_width_ratio: sidebarWidthRatio,
                 apply_tax_zone: applyTaxZone,
+                runtime_layout_metrics_ready: !!runtimeMetrics.ready,
+                runtime_core_label_clipped_count:
+                  Number.isFinite(runtimeMetrics.core_label_clipped_count)
+                    ? runtimeMetrics.core_label_clipped_count
+                    : null,
+                runtime_core_occluded_by_filter_count:
+                  Number.isFinite(runtimeMetrics.core_occluded_by_filter_count)
+                    ? runtimeMetrics.core_occluded_by_filter_count
+                    : null,
+                runtime_core_centroid_x_ratio:
+                  Number.isFinite(runtimeMetrics.core_centroid_x_ratio)
+                    ? runtimeMetrics.core_centroid_x_ratio
+                    : null,
+                runtime_core_centroid_y_ratio:
+                  Number.isFinite(runtimeMetrics.core_centroid_y_ratio)
+                    ? runtimeMetrics.core_centroid_y_ratio
+                    : null,
+                runtime_zone_gap_ratio:
+                  Number.isFinite(runtimeMetrics.zone_gap_ratio)
+                    ? runtimeMetrics.zone_gap_ratio
+                    : null,
+                runtime_separator_visible: runtimeMetrics.separator_visible === true,
               };
             }
             """
@@ -529,8 +563,26 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["emphasized_edge_count"] > 0, visibility
         assert visibility["render_edge_labels_enabled"] is True, visibility
         assert visibility["enable_edge_events_enabled"] is True, visibility
+        assert visibility["core_clipped_label_count"] >= 0, visibility
         assert visibility["core_occluded_by_filter_count"] == 0, visibility
         assert visibility["sidebar_width_ratio"] <= 0.315, visibility
+        assert visibility["runtime_layout_metrics_ready"] is True, visibility
+        assert visibility["runtime_core_label_clipped_count"] is not None, visibility
+        assert abs(
+            visibility["runtime_core_label_clipped_count"] - visibility["core_clipped_label_count"]
+        ) <= 1, visibility
+        assert visibility["runtime_core_occluded_by_filter_count"] == visibility["core_occluded_by_filter_count"], visibility
+        assert visibility["runtime_separator_visible"] is True, visibility
+        assert visibility["runtime_core_centroid_x_ratio"] is not None, visibility
+        assert visibility["runtime_core_centroid_y_ratio"] is not None, visibility
+        assert visibility["runtime_zone_gap_ratio"] is not None, visibility
+        assert abs(
+            visibility["runtime_core_centroid_x_ratio"] - visibility["core_centroid_x_ratio"]
+        ) <= 0.08, visibility
+        assert abs(
+            visibility["runtime_core_centroid_y_ratio"] - visibility["core_centroid_y_ratio"]
+        ) <= 0.08, visibility
+        assert abs(visibility["runtime_zone_gap_ratio"] - visibility["zone_gap_ratio"]) <= 0.10, visibility
         if visibility["apply_tax_zone"] is not None:
             assert visibility["apply_tax_zone"] in {"core", "peripheral"}, visibility
         if visibility["edge_total"] > 0:

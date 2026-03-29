@@ -805,6 +805,7 @@
         graph.setEdgeAttribute(edge, "hidden", hiddenByType || hiddenByEmphasis || hiddenByTether);
       });
       renderer.refresh();
+      scheduleLayoutMetricsUpdate("filters", 0);
     }
 
     const colorByType = {
@@ -1811,6 +1812,199 @@
     let boundingBoxes = new Map();
     let coreZoneBounds = null;
     let zoneSeparatorY = null;
+    let layoutMetricsRafId = null;
+    let layoutMetricsTimerId = null;
+    globalThis.__remora_layout_metrics = {
+      ready: false,
+      reason: "boot",
+    };
+
+    function estimateNodeLabelDimensionsPx(attrs) {
+      if (!labelMeasureContext) {
+        return { width: 72, height: 20 };
+      }
+      const text = String(attrs?.label || attrs?.node_id || "");
+      const separatorIndex = text.indexOf("::");
+      const hasQualifier = separatorIndex > 0;
+      const primaryText = hasQualifier ? text.slice(separatorIndex + 2) : text;
+      const qualifierText = hasQualifier ? text.slice(0, separatorIndex) : "";
+      const isPeripheral = attrs?.layout_zone === "peripheral" && attrs?.node_id !== selectedNode;
+
+      const primaryFontSize = isPeripheral ? 11 : 14;
+      const qualifierFontSize = isPeripheral ? 9 : 10;
+      const padX = isPeripheral ? 8 : 10;
+      const padY = isPeripheral ? 4 : 5;
+      const lineGap = hasQualifier ? 2 : 0;
+      labelMeasureContext.font = "600 " + primaryFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+      const primaryWidth = labelMeasureContext.measureText(primaryText).width;
+      let qualifierWidth = 0;
+      if (hasQualifier) {
+        labelMeasureContext.font = "500 " + qualifierFontSize + 'px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+        qualifierWidth = labelMeasureContext.measureText(qualifierText).width;
+      }
+      const textWidth = Math.max(primaryWidth, qualifierWidth);
+      const contentHeight = hasQualifier
+        ? (primaryFontSize + qualifierFontSize + lineGap)
+        : primaryFontSize;
+      return {
+        width: textWidth + padX * 2,
+        height: contentHeight + padY * 2,
+      };
+    }
+
+    function computeNodeLabelViewportRect(nodeId, attrs, pixelRatio) {
+      const hitbox = nodeLabelHitboxes.get(nodeId);
+      if (hitbox) {
+        return {
+          left: hitbox.x / pixelRatio,
+          top: hitbox.y / pixelRatio,
+          right: (hitbox.x + hitbox.width) / pixelRatio,
+          bottom: (hitbox.y + hitbox.height) / pixelRatio,
+          width: hitbox.width / pixelRatio,
+          height: hitbox.height / pixelRatio,
+        };
+      }
+      if (!renderer || !graph.hasNode(nodeId)) return null;
+      const point = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
+      const size = estimateNodeLabelDimensionsPx(attrs);
+      const width = Math.max(8, size.width);
+      const height = Math.max(8, size.height);
+      return {
+        left: point.x - width / 2,
+        top: point.y - height / 2,
+        right: point.x + width / 2,
+        bottom: point.y + height / 2,
+        width,
+        height,
+      };
+    }
+
+    function updateLayoutMetrics(reason = "runtime") {
+      if (!renderer || typeof renderer.getDimensions !== "function") {
+        globalThis.__remora_layout_metrics = {
+          ready: false,
+          reason: "missing_renderer",
+          updated_at_ms: Date.now(),
+        };
+        return;
+      }
+
+      const dims = renderer.getDimensions();
+      const makeBox = () => ({
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+        count: 0,
+      });
+      const extendBox = (box, point) => {
+        box.minX = Math.min(box.minX, point.x);
+        box.minY = Math.min(box.minY, point.y);
+        box.maxX = Math.max(box.maxX, point.x);
+        box.maxY = Math.max(box.maxY, point.y);
+        box.count += 1;
+      };
+      const boxHeight = (box) => (box.count > 0 ? Math.max(1, box.maxY - box.minY) : 0);
+
+      const overallBox = makeBox();
+      const coreBox = makeBox();
+      const peripheralBox = makeBox();
+      const pixelRatio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
+      const filterRect = document.getElementById("filter-bar")?.getBoundingClientRect() || null;
+      let coreLabelCount = 0;
+      let coreClippedLabelCount = 0;
+      let coreOccludedByFilterCount = 0;
+      let applyTaxZone = null;
+
+      graph.forEachNode((nodeId, attrs) => {
+        if (attrs.hidden || attrs.node_type === "__label__") return;
+        const point = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
+        extendBox(overallBox, point);
+        const zone = attrs.layout_zone === "peripheral" ? "peripheral" : "core";
+        if (zone === "core") {
+          extendBox(coreBox, point);
+        } else if (zone === "peripheral") {
+          extendBox(peripheralBox, point);
+        }
+        if (String(nodeId).includes("apply_tax") && applyTaxZone === null) {
+          applyTaxZone = attrs.layout_zone || "core";
+        }
+        if (zone !== "core") return;
+        const rect = computeNodeLabelViewportRect(nodeId, attrs, pixelRatio);
+        if (!rect) return;
+        coreLabelCount += 1;
+        const clipped =
+          rect.left < 0 ||
+          rect.top < 0 ||
+          rect.right > dims.width ||
+          rect.bottom > dims.height;
+        if (clipped) coreClippedLabelCount += 1;
+        if (filterRect) {
+          const overlapW = Math.max(0, Math.min(rect.right, filterRect.right) - Math.max(rect.left, filterRect.left));
+          const overlapH = Math.max(0, Math.min(rect.bottom, filterRect.bottom) - Math.max(rect.top, filterRect.top));
+          if (overlapW > 0 && overlapH > 0) coreOccludedByFilterCount += 1;
+        }
+      });
+
+      const overallHeight = boxHeight(overallBox);
+      const coreCentroidX = coreBox.count > 0 ? (coreBox.minX + coreBox.maxX) / 2 : dims.width / 2;
+      const coreCentroidY = coreBox.count > 0 ? (coreBox.minY + coreBox.maxY) / 2 : dims.height / 2;
+      const zoneGapPx =
+        coreBox.count > 0 && peripheralBox.count > 0
+          ? peripheralBox.minY - coreBox.maxY
+          : 0;
+      const zoneGapRatio = overallHeight > 0 ? zoneGapPx / overallHeight : 0;
+      let separatorY = null;
+      let separatorVisible = false;
+      if (Number.isFinite(zoneSeparatorY)) {
+        const separatorPoint = renderer.graphToViewport({ x: 0, y: zoneSeparatorY });
+        separatorY = separatorPoint.y;
+        separatorVisible = separatorY >= -4 && separatorY <= dims.height + 4;
+      }
+      const sidebar = document.getElementById("sidebar");
+      const sidebarWidthRatio =
+        sidebar && window.innerWidth > 0
+          ? sidebar.getBoundingClientRect().width / window.innerWidth
+          : 0;
+
+      globalThis.__remora_layout_metrics = {
+        ready: true,
+        reason,
+        updated_at_ms: Date.now(),
+        dims: { width: dims.width, height: dims.height, pixel_ratio: pixelRatio },
+        core_zone_nodes: coreBox.count,
+        peripheral_zone_nodes: peripheralBox.count,
+        core_label_count: coreLabelCount,
+        core_label_clipped_count: coreClippedLabelCount,
+        core_occluded_by_filter_count: coreOccludedByFilterCount,
+        core_centroid_x_ratio: dims.width > 0 ? coreCentroidX / dims.width : 0.5,
+        core_centroid_y_ratio: dims.height > 0 ? coreCentroidY / dims.height : 0.5,
+        zone_gap_px: zoneGapPx,
+        zone_gap_ratio: zoneGapRatio,
+        separator_y_px: separatorY,
+        separator_visible: separatorVisible,
+        sidebar_width_ratio: sidebarWidthRatio,
+        apply_tax_zone: applyTaxZone,
+      };
+    }
+
+    function scheduleLayoutMetricsUpdate(reason = "scheduled", delayMs = 0) {
+      if (layoutMetricsTimerId) {
+        clearTimeout(layoutMetricsTimerId);
+        layoutMetricsTimerId = null;
+      }
+      if (layoutMetricsRafId) {
+        cancelAnimationFrame(layoutMetricsRafId);
+        layoutMetricsRafId = null;
+      }
+      layoutMetricsTimerId = setTimeout(() => {
+        layoutMetricsTimerId = null;
+        layoutMetricsRafId = requestAnimationFrame(() => {
+          layoutMetricsRafId = null;
+          updateLayoutMetrics(reason);
+        });
+      }, Math.max(0, delayMs));
+    }
 
     function computeOverlayFitSafeInsetsPx() {
       const graphEl = document.getElementById("graph");
@@ -1986,6 +2180,7 @@
       const resetDuration = Math.max(0, duration);
       camera.animatedReset({ duration: resetDuration });
       if (resetDuration === 0) renderer.refresh();
+      scheduleLayoutMetricsUpdate("fit", resetDuration + 20);
     }
 
     async function loadGraph() {
@@ -2630,6 +2825,7 @@ function addTimelineEvent(eventType, payload) {
         }
       }
       context.restore();
+      updateLayoutMetrics("before_render");
     });
 
     renderer.on("clickNode", ({ node }) => {
