@@ -187,6 +187,105 @@ export function createLayoutEngine() {
     }
   }
 
+  function expandDenseCells(
+    graph,
+    nodes,
+    {
+      cellSize = 180,
+      minNodesPerCell = 5,
+      maxPasses = 2,
+      maxPush = 26,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < minNodesPerCell) return;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+      const cells = new Map();
+      for (const nodeId of nodes) {
+        if (!graph.hasNode(nodeId)) continue;
+        const attrs = graph.getNodeAttributes(nodeId);
+        if (attrs.hidden || attrs.node_type === "__label__") continue;
+        const x = Number(attrs.x);
+        const y = Number(attrs.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const cx = Math.floor(x / cellSize);
+        const cy = Math.floor(y / cellSize);
+        const key = `${cx}:${cy}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(nodeId);
+      }
+
+      let moved = 0;
+      for (const group of cells.values()) {
+        if (!Array.isArray(group) || group.length < minNodesPerCell) continue;
+
+        let centroidX = 0;
+        let centroidY = 0;
+        let spacingSum = 0;
+        const snapshots = [];
+        for (const nodeId of group) {
+          const attrs = graph.getNodeAttributes(nodeId);
+          const x = Number(attrs.x);
+          const y = Number(attrs.y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          snapshots.push({ nodeId, x, y, attrs });
+          centroidX += x;
+          centroidY += y;
+          spacingSum += nodeSpacing(graph, nodeId, attrs);
+        }
+        if (snapshots.length < minNodesPerCell) continue;
+        centroidX /= snapshots.length;
+        centroidY /= snapshots.length;
+
+        let nearestSum = 0;
+        for (let i = 0; i < snapshots.length; i += 1) {
+          let nearest = Number.POSITIVE_INFINITY;
+          const a = snapshots[i];
+          for (let j = 0; j < snapshots.length; j += 1) {
+            if (i === j) continue;
+            const b = snapshots[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < nearest) nearest = d;
+          }
+          if (Number.isFinite(nearest)) nearestSum += nearest;
+        }
+        const avgNearest = nearestSum / snapshots.length;
+        const targetSpacing = spacingSum / snapshots.length;
+        if (!Number.isFinite(avgNearest) || !Number.isFinite(targetSpacing)) continue;
+        if (avgNearest >= targetSpacing * 0.78) continue;
+
+        for (const item of snapshots) {
+          if (pinnedNodeId && item.nodeId === pinnedNodeId) continue;
+          let dx = item.x - centroidX;
+          let dy = item.y - centroidY;
+          let d = Math.sqrt(dx * dx + dy * dy);
+          if (!Number.isFinite(d) || d < 0.0001) {
+            const jitter = (hashUnit(`${item.nodeId}:${pass}`) - 0.5) * 0.6;
+            dx = 0.2 + jitter;
+            dy = -0.2 + jitter;
+            d = Math.sqrt(dx * dx + dy * dy);
+          }
+          const deficit = Math.max(0, targetSpacing - avgNearest);
+          const crowdFactor = Math.max(1, snapshots.length - minNodesPerCell + 1);
+          const push = clamp(deficit * 0.24 + crowdFactor * 1.4, 2.5, maxPush);
+          const ux = dx / d;
+          const uy = dy / d;
+          graph.setNodeAttribute(item.nodeId, "x", item.x + ux * push);
+          graph.setNodeAttribute(item.nodeId, "y", item.y + uy * push);
+          moved += 1;
+        }
+      }
+
+      if (moved === 0) break;
+      relaxCollisions(graph, nodes, {
+        minRounds: 6,
+        maxRounds: 14,
+        targetAverageOverlap: 0.048,
+      });
+    }
+  }
+
   function runForce(graph, {
     iterations = 80,
     repulsion = 7000,
@@ -278,6 +377,17 @@ export function createLayoutEngine() {
       minRounds: 10,
       maxRounds: 26,
       targetAverageOverlap: 0.04,
+    });
+    expandDenseCells(graph, nodes, {
+      cellSize: 176,
+      minNodesPerCell: 5,
+      maxPasses: 2,
+      maxPush: 24,
+    });
+    relaxCollisions(graph, nodes, {
+      minRounds: 8,
+      maxRounds: 18,
+      targetAverageOverlap: 0.038,
     });
     normalizeViewportSpread(graph, nodes, {
       minFill: 0.72,
