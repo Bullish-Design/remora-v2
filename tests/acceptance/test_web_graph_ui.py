@@ -283,6 +283,11 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               const dims = renderer.getDimensions();
               let total = 0;
               let visible = 0;
+              let minVX = Number.POSITIVE_INFINITY;
+              let minVY = Number.POSITIVE_INFINITY;
+              let maxVX = Number.NEGATIVE_INFINITY;
+              let maxVY = Number.NEGATIVE_INFINITY;
+              const points = [];
               for (const nodeId of graph.nodes()) {
                 const attrs = graph.getNodeAttributes(nodeId);
                 if (attrs.hidden) continue;
@@ -290,11 +295,38 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 const p = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
                 if (p.x >= 0 && p.x <= dims.width && p.y >= 0 && p.y <= dims.height) {
                   visible += 1;
+                  minVX = Math.min(minVX, p.x);
+                  minVY = Math.min(minVY, p.y);
+                  maxVX = Math.max(maxVX, p.x);
+                  maxVY = Math.max(maxVY, p.y);
                 }
+                points.push({ x: p.x, y: p.y });
               }
+              let nearestSum = 0;
+              for (let i = 0; i < points.length; i += 1) {
+                let nearest = Number.POSITIVE_INFINITY;
+                for (let j = 0; j < points.length; j += 1) {
+                  if (i === j) continue;
+                  const dx = points[i].x - points[j].x;
+                  const dy = points[i].y - points[j].y;
+                  const d = Math.sqrt(dx * dx + dy * dy);
+                  if (d < nearest) nearest = d;
+                }
+                if (Number.isFinite(nearest)) nearestSum += nearest;
+              }
+              const spanW = Number.isFinite(minVX) && Number.isFinite(maxVX) ? Math.max(0, maxVX - minVX) : 0;
+              const spanH = Number.isFinite(minVY) && Number.isFinite(maxVY) ? Math.max(0, maxVY - minVY) : 0;
+              const spanXRatio = dims.width > 0 ? spanW / dims.width : 0;
+              const spanYRatio = dims.height > 0 ? spanH / dims.height : 0;
+              const spreadAreaRatio = dims.width > 0 && dims.height > 0 ? (spanW * spanH) / (dims.width * dims.height) : 0;
+              const avgNearest = points.length > 1 ? nearestSum / points.length : 0;
               return {
                 total,
                 visible,
+                spanXRatio,
+                spanYRatio,
+                spreadAreaRatio,
+                avgNearest,
                 mode: window.__remora_layout_metrics?.mode ?? null,
                 ready: window.__remora_layout_metrics?.ready === true,
                 fullReloadCount: Number(window.__remora_layout_metrics?.full_reload_count ?? -1),
@@ -319,6 +351,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert baseline["hasPinToggle"] is True, baseline
         assert baseline["hasSearch"] is True, baseline
         assert baseline["visible"] <= baseline["total"], baseline
+        assert baseline["spanXRatio"] >= 0.7, baseline
+        assert baseline["spanYRatio"] >= 0.6, baseline
+        assert baseline["spreadAreaRatio"] >= 0.45, baseline
+        assert baseline["avgNearest"] >= 42, baseline
 
         sidebar_before = await page.evaluate(
             """
@@ -370,7 +406,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
             """
         )
         assert overlap_stats["labels"] > 0, overlap_stats
-        assert overlap_stats["overlapRatio"] < 0.28, overlap_stats
+        assert overlap_stats["overlapRatio"] < 0.22, overlap_stats
 
         edge_label_full_mode = await page.evaluate(
             """
