@@ -476,6 +476,8 @@
       FIT_SAFE_TOP_PX: 72,
       FIT_SAFE_RIGHT_PX: 24,
       FIT_SAFE_BOTTOM_PX: 48,
+      FIT_CORE_TARGET_X_RATIO: 0.48,
+      FIT_CORE_TARGET_Y_RATIO: 0.30,
     });
     const LAYOUT_MODE = "v6_core_peripheral";
 
@@ -2089,6 +2091,43 @@
       };
     }
 
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function placeCoreWithinViewportBand(bbox, coreBounds, safeInsetsPx, dims) {
+      if (!bbox || !coreBounds || !safeInsetsPx || !dims) return bbox;
+      const width = Math.max(1e-6, bbox.x[1] - bbox.x[0]);
+      const height = Math.max(1e-6, bbox.y[1] - bbox.y[0]);
+      if (!Number.isFinite(coreBounds.centerX) || !Number.isFinite(coreBounds.centerY)) return bbox;
+
+      const safeLeftRatio = safeInsetsPx.left / Math.max(1, dims.width);
+      const safeRightRatio = safeInsetsPx.right / Math.max(1, dims.width);
+      const safeTopRatio = safeInsetsPx.top / Math.max(1, dims.height);
+      const safeBottomRatio = safeInsetsPx.bottom / Math.max(1, dims.height);
+      const availableXRatio = Math.max(0.08, 1 - safeLeftRatio - safeRightRatio);
+      const availableYRatio = Math.max(0.08, 1 - safeTopRatio - safeBottomRatio);
+      const targetXRatio = clamp(
+        safeLeftRatio + availableXRatio * LAYOUT.FIT_CORE_TARGET_X_RATIO,
+        safeLeftRatio + 0.08,
+        1 - safeRightRatio - 0.08,
+      );
+      const targetYRatio = clamp(
+        safeTopRatio + availableYRatio * LAYOUT.FIT_CORE_TARGET_Y_RATIO,
+        safeTopRatio + 0.08,
+        1 - safeBottomRatio - 0.08,
+      );
+
+      const minX = coreBounds.centerX - targetXRatio * width;
+      const maxX = minX + width;
+      const maxY = coreBounds.centerY + targetYRatio * height;
+      const minY = maxY - height;
+      return {
+        x: [minX, maxX],
+        y: [minY, maxY],
+      };
+    }
+
     function estimateNodeLabelSizeUnits(attrs) {
       const sizePx = estimateNodeLabelDimensionsPx(attrs);
       return {
@@ -2171,7 +2210,9 @@
           );
         }
         const safeInsetsPx = computeOverlayFitSafeInsetsPx();
-        return applyFitSafeInsets(coreBBox, renderer.getDimensions(), safeInsetsPx);
+        const dims = renderer.getDimensions();
+        const safeBBox = applyFitSafeInsets(coreBBox, dims, safeInsetsPx);
+        return placeCoreWithinViewportBand(safeBBox, coreLabelBounds, safeInsetsPx, dims);
       }
 
       let minX = Number.POSITIVE_INFINITY;
