@@ -277,326 +277,89 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
             "() => typeof window.__remora_layout_metrics === 'object' && !!window.__remora_layout_metrics && window.__remora_layout_metrics.ready === true",
             timeout=20000,
         )
-
-        visibility = await page.evaluate(
+        baseline = await page.evaluate(
             """
             () => {
-              if (typeof graph === "undefined" || typeof renderer === "undefined") {
-                return { total: 0, visible: 0, reason: "missing_runtime" };
-              }
               const dims = renderer.getDimensions();
-              const nodes = graph.nodes();
               let total = 0;
               let visible = 0;
-              let absoluteLabelCount = 0;
-              const labelCounts = new Map();
-              const zoneCounts = { core: 0, peripheral: 0, bridge: 0 };
-              const makeBox = () => ({
-                minX: Number.POSITIVE_INFINITY,
-                minY: Number.POSITIVE_INFINITY,
-                maxX: Number.NEGATIVE_INFINITY,
-                maxY: Number.NEGATIVE_INFINITY,
-                count: 0,
-              });
-              const extendBox = (box, point) => {
-                box.minX = Math.min(box.minX, point.x);
-                box.minY = Math.min(box.minY, point.y);
-                box.maxX = Math.max(box.maxX, point.x);
-                box.maxY = Math.max(box.maxY, point.y);
-                box.count += 1;
-              };
-              const boxArea = (box) => {
-                if (!box || box.count <= 0) return 0;
-                const w = Math.max(1, box.maxX - box.minX);
-                const h = Math.max(1, box.maxY - box.minY);
-                return w * h;
-              };
-              const overallBox = makeBox();
-              const zoneBoxes = {
-                core: makeBox(),
-                peripheral: makeBox(),
-              };
-              const absolutePathPattern = /^(\\/|[a-zA-Z]:[\\\\/])/;
-              for (const nodeId of nodes) {
+              for (const nodeId of graph.nodes()) {
                 const attrs = graph.getNodeAttributes(nodeId);
                 if (attrs.hidden) continue;
                 total += 1;
-                const label = String(attrs.label || "");
-                labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
-                if (absolutePathPattern.test(label)) absoluteLabelCount += 1;
                 const p = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
-                extendBox(overallBox, p);
-                const zone =
-                  attrs.layout_zone === "peripheral"
-                    ? "peripheral"
-                    : (attrs.layout_zone === "bridge" ? "bridge" : "core");
-                zoneCounts[zone] += 1;
-                if (zone === "core" || zone === "peripheral") {
-                  extendBox(zoneBoxes[zone], p);
-                }
                 if (p.x >= 0 && p.x <= dims.width && p.y >= 0 && p.y <= dims.height) {
                   visible += 1;
                 }
               }
-
-              const viewportArea = Math.max(1, dims.width * dims.height);
-              const duplicates = [...labelCounts.values()].filter((count) => count > 1).length;
-
-              const boxes =
-                typeof nodeLabelHitboxes !== "undefined"
-                  ? [...nodeLabelHitboxes.entries()]
-                      .filter(([nodeId]) => graph.hasNode(nodeId) && !graph.getNodeAttribute(nodeId, "hidden"))
-                      .map(([, box]) => box)
-                  : [];
-              let areaSum = 0;
-              let overlapArea = 0;
-              for (let i = 0; i < boxes.length; i++) {
-                const a = boxes[i];
-                const aArea = Math.max(0, a.width) * Math.max(0, a.height);
-                areaSum += aArea;
-                for (let j = i + 1; j < boxes.length; j++) {
-                  const b = boxes[j];
-                  const left = Math.max(a.x, b.x);
-                  const top = Math.max(a.y, b.y);
-                  const right = Math.min(a.x + a.width, b.x + b.width);
-                  const bottom = Math.min(a.y + a.height, b.y + b.height);
-                  const w = Math.max(0, right - left);
-                  const h = Math.max(0, bottom - top);
-                  overlapArea += w * h;
-                }
-              }
-              const overallZoneArea = boxArea(overallBox);
-              const coreZoneArea = boxArea(zoneBoxes.core);
-              const peripheralZoneArea = boxArea(zoneBoxes.peripheral);
-              const overlapRatio = areaSum > 0 ? overlapArea / areaSum : 0;
-              const occupancy =
-                areaSum > 0
-                  ? Math.min(1, areaSum / viewportArea)
-                  : (overallZoneArea > 0 ? Math.min(1, overallZoneArea / viewportArea) : 0);
-              const coreZoneOccupancy = overallZoneArea > 0 ? coreZoneArea / overallZoneArea : 0;
-              const peripheralZoneFootprint = overallZoneArea > 0 ? peripheralZoneArea / overallZoneArea : 0;
-              const overallZoneHeight = Math.max(1, overallBox.maxY - overallBox.minY);
-              const coreZoneHeight = zoneBoxes.core.count > 0 ? Math.max(1, zoneBoxes.core.maxY - zoneBoxes.core.minY) : 0;
-              const coreZoneVerticalShare = coreZoneHeight / overallZoneHeight;
-              const coreCentroidX =
-                zoneBoxes.core.count > 0
-                  ? (zoneBoxes.core.minX + zoneBoxes.core.maxX) / 2
-                  : dims.width / 2;
-              const coreCentroidY =
-                zoneBoxes.core.count > 0
-                  ? (zoneBoxes.core.minY + zoneBoxes.core.maxY) / 2
-                  : dims.height / 2;
-              const coreCentroidXRatio = dims.width > 0 ? coreCentroidX / dims.width : 0.5;
-              const coreCentroidYRatio = dims.height > 0 ? coreCentroidY / dims.height : 0.5;
-              const zoneGapPx =
-                zoneBoxes.core.count > 0 && zoneBoxes.peripheral.count > 0
-                  ? zoneBoxes.peripheral.minY - zoneBoxes.core.maxY
-                  : 0;
-              const zoneGapRatio = overallZoneHeight > 0 ? zoneGapPx / overallZoneHeight : 0;
-
-              const peripheralBoxes =
-                typeof nodeLabelHitboxes !== "undefined"
-                  ? [...nodeLabelHitboxes.entries()]
-                      .filter(([nodeId]) => {
-                        if (!graph.hasNode(nodeId)) return false;
-                        const attrs = graph.getNodeAttributes(nodeId);
-                        return !attrs.hidden && attrs.layout_zone === "peripheral";
-                      })
-                      .map(([, box]) => box)
-                  : [];
-              let peripheralAreaSum = 0;
-              let peripheralOverlapArea = 0;
-              for (let i = 0; i < peripheralBoxes.length; i++) {
-                const a = peripheralBoxes[i];
-                peripheralAreaSum += Math.max(0, a.width) * Math.max(0, a.height);
-                for (let j = i + 1; j < peripheralBoxes.length; j++) {
-                  const b = peripheralBoxes[j];
-                  const left = Math.max(a.x, b.x);
-                  const top = Math.max(a.y, b.y);
-                  const right = Math.min(a.x + a.width, b.x + b.width);
-                  const bottom = Math.min(a.y + a.height, b.y + b.height);
-                  peripheralOverlapArea += Math.max(0, right - left) * Math.max(0, bottom - top);
-                }
-              }
-              const peripheralLabelOverlapRatio =
-                peripheralAreaSum > 0 ? peripheralOverlapArea / peripheralAreaSum : 0;
-
-              const edges = graph.edges();
-              let edgeTotal = 0;
-              let edgeSpanVisible = 0;
-              let primaryChainEdgeCount = 0;
-              let emphasizedEdgeCount = 0;
-              for (const edgeId of edges) {
-                const attrs = graph.getEdgeAttributes(edgeId);
-                if (attrs.hidden) continue;
-                const [sourceId, targetId] = graph.extremities(edgeId);
-                if (!graph.hasNode(sourceId) || !graph.hasNode(targetId)) continue;
-                const source = graph.getNodeAttributes(sourceId);
-                const target = graph.getNodeAttributes(targetId);
-                if (source.hidden || target.hidden) continue;
-                edgeTotal += 1;
-                const p1 = renderer.graphToViewport({ x: source.x, y: source.y });
-                const p2 = renderer.graphToViewport({ x: target.x, y: target.y });
-                const span = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-                if (span > 4) edgeSpanVisible += 1;
-                if (attrs.is_primary_chain) primaryChainEdgeCount += 1;
-                const display = typeof renderer.getEdgeDisplayData === "function"
-                  ? renderer.getEdgeDisplayData(edgeId)
-                  : null;
-                const displaySize = Number(display?.size ?? attrs.size ?? 0);
-                if (displaySize > 2.6) emphasizedEdgeCount += 1;
-              }
-
-              const renderEdgeLabelsEnabled =
-                typeof renderer.getSetting === "function"
-                  ? renderer.getSetting("renderEdgeLabels")
-                  : null;
-              const enableEdgeEventsEnabled =
-                typeof renderer.getSetting === "function"
-                  ? renderer.getSetting("enableEdgeEvents")
-                  : null;
-              const pixelRatio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
-              const filterBar = document.getElementById("filter-bar");
-              const filterRect = filterBar ? filterBar.getBoundingClientRect() : null;
-              let coreClippedByViewportCount = 0;
-              let coreOccludedByFilterCount = 0;
-              if (typeof nodeLabelHitboxes !== "undefined") {
-                for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
-                  if (!graph.hasNode(nodeId)) continue;
-                  const attrs = graph.getNodeAttributes(nodeId);
-                  if (attrs.hidden || attrs.layout_zone === "peripheral") continue;
-                  const left = box.x / pixelRatio;
-                  const top = box.y / pixelRatio;
-                  const right = (box.x + box.width) / pixelRatio;
-                  const bottom = (box.y + box.height) / pixelRatio;
-                  const clipped =
-                    left < 0 || top < 0 || right > dims.width || bottom > dims.height;
-                  if (clipped) coreClippedByViewportCount += 1;
-                  if (filterRect) {
-                    const overlapW = Math.max(0, Math.min(right, filterRect.right) - Math.max(left, filterRect.left));
-                    const overlapH = Math.max(0, Math.min(bottom, filterRect.bottom) - Math.max(top, filterRect.top));
-                    if (overlapW > 0 && overlapH > 0) coreOccludedByFilterCount += 1;
-                  }
-                }
-              }
-              const sidebar = document.getElementById("sidebar");
-              const sidebarWidthRatio =
-                sidebar && window.innerWidth > 0
-                  ? sidebar.getBoundingClientRect().width / window.innerWidth
-                  : 0;
-              const runtimeMetrics =
-                typeof window.__remora_layout_metrics === "object" &&
-                window.__remora_layout_metrics !== null
-                  ? window.__remora_layout_metrics
-                  : {};
-              let applyTaxZone = null;
-              for (const nodeId of nodes) {
-                if (!String(nodeId).includes("apply_tax")) continue;
-                const attrs = graph.getNodeAttributes(nodeId);
-                applyTaxZone = attrs.layout_zone || null;
-                break;
-              }
-
               return {
                 total,
                 visible,
-                occupancy,
-                duplicate_labels: duplicates,
-                absolute_label_count: absoluteLabelCount,
-                core_zone_nodes: zoneCounts.core,
-                peripheral_zone_nodes: zoneCounts.peripheral,
-                bridge_zone_nodes: zoneCounts.bridge,
-                core_zone_occupancy: coreZoneOccupancy,
-                core_zone_vertical_share: coreZoneVerticalShare,
-                core_centroid_x_ratio: coreCentroidXRatio,
-                core_centroid_y_ratio: coreCentroidYRatio,
-                zone_gap_px: zoneGapPx,
-                zone_gap_ratio: zoneGapRatio,
-                peripheral_zone_footprint: peripheralZoneFootprint,
-                peripheral_label_overlap_ratio: peripheralLabelOverlapRatio,
-                overlap_ratio: overlapRatio,
-                edge_total: edgeTotal,
-                edge_span_visible: edgeSpanVisible,
-                primary_chain_edge_count: primaryChainEdgeCount,
-                emphasized_edge_count: emphasizedEdgeCount,
-                render_edge_labels_enabled: renderEdgeLabelsEnabled,
-                enable_edge_events_enabled: enableEdgeEventsEnabled,
-                core_clipped_label_count: coreClippedByViewportCount,
-                core_occluded_by_filter_count: coreOccludedByFilterCount,
-                sidebar_width_ratio: sidebarWidthRatio,
-                apply_tax_zone: applyTaxZone,
-                runtime_layout_metrics_ready: !!runtimeMetrics.ready,
-                runtime_core_label_clipped_count:
-                  Number.isFinite(runtimeMetrics.core_label_clipped_count)
-                    ? runtimeMetrics.core_label_clipped_count
-                    : null,
-                runtime_core_occluded_by_filter_count:
-                  Number.isFinite(runtimeMetrics.core_occluded_by_filter_count)
-                    ? runtimeMetrics.core_occluded_by_filter_count
-                    : null,
-                runtime_core_centroid_x_ratio:
-                  Number.isFinite(runtimeMetrics.core_centroid_x_ratio)
-                    ? runtimeMetrics.core_centroid_x_ratio
-                    : null,
-                runtime_core_centroid_y_ratio:
-                  Number.isFinite(runtimeMetrics.core_centroid_y_ratio)
-                    ? runtimeMetrics.core_centroid_y_ratio
-                    : null,
-                runtime_zone_gap_ratio:
-                  Number.isFinite(runtimeMetrics.zone_gap_ratio)
-                    ? runtimeMetrics.zone_gap_ratio
-                    : null,
-                runtime_separator_visible: runtimeMetrics.separator_visible === true,
+                mode: window.__remora_layout_metrics?.mode ?? null,
+                ready: window.__remora_layout_metrics?.ready === true,
+                fullReloadCount: Number(window.__remora_layout_metrics?.full_reload_count ?? -1),
+                hasFocusFull: !!document.querySelector('[data-focus-mode="full"]'),
+                hasFocusHop1: !!document.querySelector('[data-focus-mode="hop1"]'),
+                hasFocusHop2: !!document.querySelector('[data-focus-mode="hop2"]'),
+                hasPinToggle: !!document.querySelector('[data-pin-toggle="selected"]'),
+                hasSearch: !!document.getElementById("node-search"),
               };
             }
             """
         )
 
-        assert visibility["total"] > 0, visibility
-        assert visibility["visible"] > 0, visibility
-        assert visibility["occupancy"] >= 0.002, visibility
-        assert visibility["occupancy"] <= 0.92, visibility
-        assert visibility["duplicate_labels"] == 0, visibility
-        assert visibility["absolute_label_count"] == 0, visibility
-        assert visibility["overlap_ratio"] < 0.45, visibility
-        assert visibility["core_zone_nodes"] > 0, visibility
-        assert visibility["core_zone_vertical_share"] >= 0.55, visibility
-        assert 0.40 <= visibility["core_centroid_x_ratio"] <= 0.56, visibility
-        assert 0.20 <= visibility["core_centroid_y_ratio"] <= 0.37, visibility
-        assert visibility["zone_gap_px"] >= 16, visibility
-        assert visibility["zone_gap_ratio"] <= 0.22, visibility
-        assert visibility["peripheral_label_overlap_ratio"] < 0.015, visibility
-        if visibility["peripheral_zone_nodes"] > 0:
-            assert visibility["core_zone_occupancy"] >= 0.02, visibility
-            assert visibility["peripheral_zone_footprint"] <= 0.95, visibility
-        assert visibility["primary_chain_edge_count"] > 0, visibility
-        assert visibility["emphasized_edge_count"] > 0, visibility
-        assert visibility["render_edge_labels_enabled"] is True, visibility
-        assert visibility["enable_edge_events_enabled"] is True, visibility
-        assert visibility["core_clipped_label_count"] == 0, visibility
-        assert visibility["core_occluded_by_filter_count"] == 0, visibility
-        assert visibility["sidebar_width_ratio"] <= 0.315, visibility
-        assert visibility["runtime_layout_metrics_ready"] is True, visibility
-        assert visibility["runtime_core_label_clipped_count"] is not None, visibility
-        assert abs(
-            visibility["runtime_core_label_clipped_count"] - visibility["core_clipped_label_count"]
-        ) <= 1, visibility
-        assert visibility["runtime_core_occluded_by_filter_count"] == visibility["core_occluded_by_filter_count"], visibility
-        assert visibility["runtime_separator_visible"] is True, visibility
-        assert visibility["runtime_core_centroid_x_ratio"] is not None, visibility
-        assert visibility["runtime_core_centroid_y_ratio"] is not None, visibility
-        assert visibility["runtime_zone_gap_ratio"] is not None, visibility
-        assert abs(
-            visibility["runtime_core_centroid_x_ratio"] - visibility["core_centroid_x_ratio"]
-        ) <= 0.15, visibility
-        assert abs(
-            visibility["runtime_core_centroid_y_ratio"] - visibility["core_centroid_y_ratio"]
-        ) <= 0.15, visibility
-        assert abs(visibility["runtime_zone_gap_ratio"] - visibility["zone_gap_ratio"]) <= 0.10, visibility
-        if visibility["apply_tax_zone"] is not None:
-            assert visibility["apply_tax_zone"] in {"core", "peripheral", "bridge"}, visibility
-        if visibility["edge_total"] > 0:
-            assert visibility["edge_span_visible"] > 0, visibility
+        assert baseline["total"] > 0, baseline
+        assert baseline["visible"] > 0, baseline
+        assert baseline["mode"] == "graph", baseline
+        assert baseline["ready"] is True, baseline
+        assert baseline["fullReloadCount"] == 1, baseline
+        assert baseline["hasFocusFull"] is True, baseline
+        assert baseline["hasFocusHop1"] is True, baseline
+        assert baseline["hasFocusHop2"] is True, baseline
+        assert baseline["hasPinToggle"] is True, baseline
+        assert baseline["hasSearch"] is True, baseline
+
+        selection = await page.evaluate(
+            """
+            () => {
+              if (typeof nodeLabelHitboxes === "undefined" || typeof renderer === "undefined") {
+                return null;
+              }
+              const ratio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
+              for (const [nodeId, box] of nodeLabelHitboxes.entries()) {
+                if (!graph.hasNode(nodeId)) continue;
+                if (graph.getNodeAttribute(nodeId, "hidden")) continue;
+                return {
+                  x: (box.x + box.width / 2) / ratio,
+                  y: (box.y + box.height / 2) / ratio,
+                };
+              }
+              return null;
+            }
+            """
+        )
+        assert selection is not None
+
+        graph_box = await page.locator("#graph").bounding_box()
+        assert graph_box is not None
+        click_x = max(5.0, min(float(selection["x"]), graph_box["width"] - 5.0))
+        click_y = max(5.0, min(float(selection["y"]), graph_box["height"] - 5.0))
+        await page.locator("#graph").click(position={"x": click_x, "y": click_y})
+
+        await page.click('[data-focus-mode="hop1"]')
+        await page.wait_for_timeout(200)
+        hop1_count = await page.evaluate(
+            "() => graph.nodes().filter((id) => !graph.getNodeAttribute(id, 'hidden')).length"
+        )
+        assert hop1_count > 0
+        assert hop1_count <= baseline["total"]
+
+        await page.click('[data-focus-mode="full"]')
+        await page.wait_for_timeout(200)
+        full_count = await page.evaluate(
+            "() => graph.nodes().filter((id) => !graph.getNodeAttribute(id, 'hidden')).length"
+        )
+        assert full_count >= hop1_count
 
 
 @pytest.mark.asyncio
