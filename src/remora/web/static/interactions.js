@@ -15,6 +15,7 @@ function bfsNeighborhood(graph, rootId, maxDepth) {
 }
 
 export function createInteractions({ graph, renderer }) {
+  const HIGH_SIGNAL_EDGE_TYPES = new Set(["imports", "inherits", "calls", "references"]);
   const state = {
     selectedNodeId: null,
     focusMode: "full",
@@ -23,6 +24,14 @@ export function createInteractions({ graph, renderer }) {
     crossFileOnly: false,
     showContextTethers: true,
     pinSelected: false,
+    visibilityStats: {
+      totalNodes: 0,
+      visibleNodes: 0,
+      totalEdges: 0,
+      visibleEdges: 0,
+      hiddenByThinning: 0,
+      focusMode: "full",
+    },
   };
 
   function selectedFocusSet() {
@@ -40,11 +49,14 @@ export function createInteractions({ graph, renderer }) {
         : null;
     const selectedNeighbors = selectedId ? bfsNeighborhood(graph, selectedId, 1) : null;
 
+    let visibleNodeCount = 0;
     graph.forEachNode((nodeId, attrs) => {
       const hiddenByType = state.hiddenNodeTypes.has(String(attrs.node_type || ""));
       const hiddenByFocus = focusSet ? !focusSet.has(nodeId) : false;
-      graph.setNodeAttribute(nodeId, "hidden", hiddenByType || hiddenByFocus);
+      const hidden = hiddenByType || hiddenByFocus;
+      graph.setNodeAttribute(nodeId, "hidden", hidden);
       graph.removeNodeAttribute(nodeId, "dimmed");
+      if (!hidden) visibleNodeCount += 1;
       graph.setNodeAttribute(nodeId, "is_selected", selectedId ? nodeId === selectedId : false);
       graph.setNodeAttribute(
         nodeId,
@@ -58,23 +70,87 @@ export function createInteractions({ graph, renderer }) {
       );
     });
 
-    const visibleEdgeCountEstimate = graph.edges().length;
-    const thinLowSignal = visibleEdgeCountEstimate > 160;
+    const containsCandidates = [];
+    let eligibleEdgeCount = 0;
+    let containsBudget = Number.POSITIVE_INFINITY;
 
     graph.forEachEdge((edgeId, attrs, sourceId, targetId) => {
       const hiddenByType = state.hiddenEdgeTypes.has(String(attrs.label || ""));
       const hiddenByCrossFile = state.crossFileOnly && !attrs.is_cross_file;
       const hiddenByTether = !state.showContextTethers && !!attrs.is_context_tether;
-      const hiddenByThinning = thinLowSignal && String(attrs.label || "") === "contains";
       const hiddenByNode =
         (graph.hasNode(sourceId) && graph.getNodeAttribute(sourceId, "hidden")) ||
         (graph.hasNode(targetId) && graph.getNodeAttribute(targetId, "hidden"));
+      const baseHidden = hiddenByType || hiddenByCrossFile || hiddenByTether || hiddenByNode;
+      if (baseHidden) return;
+      eligibleEdgeCount += 1;
+      if (String(attrs.label || "") === "contains") {
+        containsCandidates.push(edgeId);
+      }
+    });
+
+    if (eligibleEdgeCount > 200) {
+      containsBudget = Math.max(12, Math.floor(eligibleEdgeCount * 0.12));
+    } else if (eligibleEdgeCount > 160) {
+      containsBudget = Math.max(16, Math.floor(eligibleEdgeCount * 0.18));
+    } else if (eligibleEdgeCount > 120) {
+      containsBudget = Math.max(22, Math.floor(eligibleEdgeCount * 0.26));
+    } else if (eligibleEdgeCount > 80) {
+      containsBudget = Math.max(28, Math.floor(eligibleEdgeCount * 0.4));
+    }
+
+    const containsKeep = new Set();
+    if (Number.isFinite(containsBudget) && containsCandidates.length > containsBudget) {
+      if (selectedNeighbors) {
+        for (const edgeId of containsCandidates) {
+          const sourceId = graph.source(edgeId);
+          const targetId = graph.target(edgeId);
+          if (selectedNeighbors.has(sourceId) && selectedNeighbors.has(targetId)) {
+            containsKeep.add(edgeId);
+          }
+        }
+      }
+      for (const edgeId of containsCandidates) {
+        if (containsKeep.size >= containsBudget) break;
+        containsKeep.add(edgeId);
+      }
+    } else {
+      for (const edgeId of containsCandidates) {
+        containsKeep.add(edgeId);
+      }
+    }
+
+    let hiddenByThinningCount = 0;
+    let visibleEdgeCount = 0;
+    graph.forEachEdge((edgeId, attrs, sourceId, targetId) => {
+      const label = String(attrs.label || "");
+      const highSignal = HIGH_SIGNAL_EDGE_TYPES.has(label) || !!attrs.is_cross_file;
+      const hiddenByType = state.hiddenEdgeTypes.has(String(attrs.label || ""));
+      const hiddenByCrossFile = state.crossFileOnly && !attrs.is_cross_file;
+      const hiddenByTether = !state.showContextTethers && !!attrs.is_context_tether;
+      const isContains = label === "contains";
+      const hiddenByThinning =
+        isContains && Number.isFinite(containsBudget) && !containsKeep.has(edgeId);
+      const hiddenByNode =
+        (graph.hasNode(sourceId) && graph.getNodeAttribute(sourceId, "hidden")) ||
+        (graph.hasNode(targetId) && graph.getNodeAttribute(targetId, "hidden"));
+      const hidden = hiddenByType || hiddenByCrossFile || hiddenByTether || hiddenByThinning || hiddenByNode;
       graph.setEdgeAttribute(
         edgeId,
         "hidden",
-        hiddenByType || hiddenByCrossFile || hiddenByTether || hiddenByThinning || hiddenByNode,
+        hidden,
       );
       graph.removeEdgeAttribute(edgeId, "dimmed");
+      graph.setEdgeAttribute(edgeId, "size", highSignal ? 2.2 : 1.0);
+      graph.setEdgeAttribute(
+        edgeId,
+        "color",
+        highSignal
+          ? (attrs.is_cross_file ? "#8fd1ff" : "#78b8ff")
+          : "#4f627d",
+      );
+      if (!hidden) visibleEdgeCount += 1;
+      if (hiddenByThinning) hiddenByThinningCount += 1;
     });
 
     if (state.selectedNodeId && graph.hasNode(state.selectedNodeId)) {
@@ -89,6 +165,15 @@ export function createInteractions({ graph, renderer }) {
         }
       });
     }
+
+    state.visibilityStats = {
+      totalNodes: graph.order,
+      visibleNodes: visibleNodeCount,
+      totalEdges: graph.size,
+      visibleEdges: visibleEdgeCount,
+      hiddenByThinning: hiddenByThinningCount,
+      focusMode: state.focusMode,
+    };
 
     renderer.refresh();
   }
@@ -160,6 +245,12 @@ export function createInteractions({ graph, renderer }) {
     };
   }
 
+  function getVisibilityStats() {
+    return {
+      ...state.visibilityStats,
+    };
+  }
+
   return {
     applyVisibility,
     selectNode,
@@ -172,5 +263,6 @@ export function createInteractions({ graph, renderer }) {
     togglePin,
     searchNode,
     getState,
+    getVisibilityStats,
   };
 }

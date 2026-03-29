@@ -29,6 +29,10 @@ const runtimeMetrics = {
   incremental_batch_count: 0,
   incremental_event_count: 0,
   last_batch_size: 0,
+  visible_nodes: 0,
+  visible_edges: 0,
+  hidden_by_thinning_count: 0,
+  focus_mode: "full",
 };
 
 globalThis.graph = graph;
@@ -120,6 +124,15 @@ function refreshFallbackHitboxes() {
   });
 }
 
+function syncVisibilityTelemetry() {
+  const stats = interactions.getVisibilityStats?.();
+  if (!stats) return;
+  runtimeMetrics.visible_nodes = Number(stats.visibleNodes || 0);
+  runtimeMetrics.visible_edges = Number(stats.visibleEdges || 0);
+  runtimeMetrics.hidden_by_thinning_count = Number(stats.hiddenByThinning || 0);
+  runtimeMetrics.focus_mode = String(stats.focusMode || "full");
+}
+
 function syncGraphFromState() {
   const desiredNodes = new Set(graphState.nodesById.keys());
   const desiredEdges = new Set(graphState.edgesByKey.keys());
@@ -201,6 +214,7 @@ function selectNode(nodeId, { center = true } = {}) {
   if (!nodeId || !graph.hasNode(nodeId)) return;
   const attrs = graph.getNodeAttributes(nodeId);
   interactions.selectNode(nodeId);
+  syncVisibilityTelemetry();
   layoutEngine.setPinnedNode(interactions.getState().pinSelected ? nodeId : null);
   panels.setNode({
     node_id: nodeId,
@@ -220,6 +234,7 @@ function selectNode(nodeId, { center = true } = {}) {
 
 function clearSelection() {
   interactions.clearSelection();
+  syncVisibilityTelemetry();
   layoutEngine.setPinnedNode(null);
   panels.clearNodeSelection();
 }
@@ -231,6 +246,7 @@ async function fullSnapshot({ fit = false } = {}) {
   layoutEngine.initializeLayout(graph, { seed: 42 });
   layoutEngine.runInitialLayout(graph, { iterations: 260 });
   interactions.applyVisibility();
+  syncVisibilityTelemetry();
   rendererApi.refresh();
   requestAnimationFrame(refreshFallbackHitboxes);
   if (fit) rendererApi.fitVisible({ animate: false });
@@ -318,6 +334,7 @@ async function applyIncrementalBatch(batch) {
   layoutEngine.initializeLayout(graph, { seed: 42 });
   layoutEngine.reheatLayout(graph, { iterations: 70 });
   interactions.applyVisibility();
+  syncVisibilityTelemetry();
   rendererApi.refresh();
   requestAnimationFrame(refreshFallbackHitboxes);
 
@@ -371,26 +388,31 @@ function wireUiControls() {
 
     if (nodeType) {
       interactions.toggleNodeType(nodeType);
+      syncVisibilityTelemetry();
       chip.classList.toggle("active");
       return;
     }
     if (edgeType) {
       interactions.toggleEdgeType(edgeType);
+      syncVisibilityTelemetry();
       chip.classList.toggle("active");
       return;
     }
     if (edgeEmphasis) {
       interactions.toggleCrossFileOnly();
+      syncVisibilityTelemetry();
       chip.classList.toggle("active", interactions.getState().crossFileOnly);
       return;
     }
     if (tetherToggle) {
       interactions.toggleContextTethers();
+      syncVisibilityTelemetry();
       chip.classList.toggle("active", interactions.getState().showContextTethers);
       return;
     }
     if (focusMode) {
       interactions.setFocusMode(focusMode);
+      syncVisibilityTelemetry();
       document
         .querySelectorAll("[data-focus-mode]")
         .forEach((el) => el.classList.toggle("active", el.dataset.focusMode === focusMode));
@@ -398,6 +420,7 @@ function wireUiControls() {
     }
     if (pinToggle) {
       const pinned = interactions.togglePin();
+      syncVisibilityTelemetry();
       chip.classList.toggle("active", pinned);
       layoutEngine.setPinnedNode(pinned ? interactions.getState().selectedNodeId : null);
     }
