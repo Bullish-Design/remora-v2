@@ -24,6 +24,19 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+function overlapArea(a, b) {
+  const overlapW = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+  const overlapH = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  return overlapW * overlapH;
+}
+
+function compactLabel(text, tier) {
+  const label = String(text || "");
+  if (tier <= 2) return label;
+  if (label.length <= 32) return label;
+  return `${label.slice(0, 29)}...`;
+}
+
 function buildBounds(graph) {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -55,6 +68,51 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     throw new Error("Sigma is not available from /static/vendor/sigma.min.js");
   }
 
+  const drawnLabelRects = [];
+  const tierLabelCounts = new Map([
+    [1, 0],
+    [2, 0],
+    [3, 0],
+    [4, 0],
+  ]);
+  let hoveredNodeId = null;
+
+  function nodeLabelTier(nodeId, data) {
+    if (data.is_selected || data.is_pinned || (hoveredNodeId && hoveredNodeId === nodeId)) return 1;
+    if (data.is_focus_neighbor) return 2;
+    const degree = Number(graph.degree?.(nodeId) || 0);
+    if (degree >= 5) return 3;
+    return 4;
+  }
+
+  function shouldSuppressLabel(rect, tier) {
+    const thresholdByTier = new Map([
+      [1, 0.44],
+      [2, 0.2],
+      [3, 0.09],
+      [4, 0.0],
+    ]);
+    const maxByTier = new Map([
+      [1, 10],
+      [2, 26],
+      [3, 34],
+      [4, 18],
+    ]);
+    const seen = Number(tierLabelCounts.get(tier) || 0);
+    const tierCap = Number(maxByTier.get(tier) || 0);
+    if (tierCap > 0 && seen >= tierCap && tier >= 3) return true;
+    const minArea = Math.max(1, rect.width * rect.height);
+    const threshold = Number(thresholdByTier.get(tier) || 0);
+    for (const existing of drawnLabelRects) {
+      if (existing.tier > tier) continue;
+      const area = overlapArea(existing, rect);
+      if (area <= 0) continue;
+      const ratio = area / Math.min(minArea, existing.area);
+      if (ratio > threshold) return true;
+    }
+    return false;
+  }
+
   const renderer = new SigmaCtor(graph, container, {
     renderEdgeLabels: true,
     enableEdgeEvents: true,
@@ -70,10 +128,12 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     stagePadding: 40,
     defaultDrawNodeLabel(context, data) {
       if (!data.label || data.hidden) return;
+      const tier = nodeLabelTier(data.key, data);
+      if (data.dimmed && tier >= 3) return;
       const ratio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
       const fontSize = data.size >= 7 ? 13 : 12;
       context.font = `${fontSize}px "IBM Plex Sans", sans-serif`;
-      const text = String(data.label);
+      const text = compactLabel(String(data.label), tier);
       const textWidth = context.measureText(text).width;
       const padX = 8;
       const padY = 4;
@@ -82,6 +142,11 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
       const x = data.x - width / 2;
       const y = data.y - data.size - height - 4;
       const dims = renderer.getDimensions();
+
+      if (x < 1 || y < 1 || x + width > dims.width - 1 || y + height > dims.height - 1) return;
+
+      const rect = { x, y, width, height, area: Math.max(1, width * height), tier };
+      if (shouldSuppressLabel(rect, tier)) return;
 
       roundRect(context, x, y, width, height, 5);
       context.fillStyle = colorWithAlpha(data.color || "#101826", 0.82);
@@ -94,30 +159,26 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
       context.textBaseline = "middle";
       context.fillText(text, x + padX, y + height / 2 + 0.5);
 
-      if (
-        x >= 1
-        && y >= 1
-        && x + width <= dims.width - 1
-        && y + height <= dims.height - 1
-      ) {
-        const graphRect = container.getBoundingClientRect();
-        const filterRect = document.getElementById("filter-bar")?.getBoundingClientRect() || null;
-        if (filterRect) {
-          const fx = filterRect.left - graphRect.left;
-          const fy = filterRect.top - graphRect.top;
-          const fw = filterRect.width;
-          const fh = filterRect.height;
-          const overlapW = Math.max(0, Math.min(x + width, fx + fw) - Math.max(x, fx));
-          const overlapH = Math.max(0, Math.min(y + height, fy + fh) - Math.max(y, fy));
-          if (overlapW > 0 && overlapH > 0) return;
-        }
-        nodeLabelHitboxes.set(data.key, {
-          x: x * ratio,
-          y: y * ratio,
-          width: width * ratio,
-          height: height * ratio,
-        });
+      const graphRect = container.getBoundingClientRect();
+      const filterRect = document.getElementById("filter-bar")?.getBoundingClientRect() || null;
+      if (filterRect) {
+        const fx = filterRect.left - graphRect.left;
+        const fy = filterRect.top - graphRect.top;
+        const fw = filterRect.width;
+        const fh = filterRect.height;
+        const overlapW = Math.max(0, Math.min(x + width, fx + fw) - Math.max(x, fx));
+        const overlapH = Math.max(0, Math.min(y + height, fy + fh) - Math.max(y, fy));
+        if (overlapW > 0 && overlapH > 0) return;
       }
+
+      drawnLabelRects.push(rect);
+      tierLabelCounts.set(tier, Number(tierLabelCounts.get(tier) || 0) + 1);
+      nodeLabelHitboxes.set(data.key, {
+        x: x * ratio,
+        y: y * ratio,
+        width: width * ratio,
+        height: height * ratio,
+      });
     },
     nodeReducer(nodeId, data) {
       const result = { ...data };
@@ -140,6 +201,19 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
 
   renderer.on("beforeRender", () => {
     nodeLabelHitboxes.clear();
+    drawnLabelRects.length = 0;
+    tierLabelCounts.set(1, 0);
+    tierLabelCounts.set(2, 0);
+    tierLabelCounts.set(3, 0);
+    tierLabelCounts.set(4, 0);
+  });
+
+  renderer.on("enterNode", ({ node }) => {
+    hoveredNodeId = String(node);
+  });
+
+  renderer.on("leaveNode", () => {
+    hoveredNodeId = null;
   });
 
   function refresh() {

@@ -34,12 +34,28 @@ export function createInteractions({ graph, renderer }) {
 
   function applyVisibility() {
     const focusSet = selectedFocusSet();
+    const selectedId =
+      state.selectedNodeId && graph.hasNode(state.selectedNodeId)
+        ? state.selectedNodeId
+        : null;
+    const selectedNeighbors = selectedId ? bfsNeighborhood(graph, selectedId, 1) : null;
 
     graph.forEachNode((nodeId, attrs) => {
       const hiddenByType = state.hiddenNodeTypes.has(String(attrs.node_type || ""));
       const hiddenByFocus = focusSet ? !focusSet.has(nodeId) : false;
       graph.setNodeAttribute(nodeId, "hidden", hiddenByType || hiddenByFocus);
       graph.removeNodeAttribute(nodeId, "dimmed");
+      graph.setNodeAttribute(nodeId, "is_selected", selectedId ? nodeId === selectedId : false);
+      graph.setNodeAttribute(
+        nodeId,
+        "is_pinned",
+        !!(state.pinSelected && selectedId && nodeId === selectedId),
+      );
+      graph.setNodeAttribute(
+        nodeId,
+        "is_focus_neighbor",
+        !!(selectedNeighbors && nodeId !== selectedId && selectedNeighbors.has(nodeId)),
+      );
     });
 
     const visibleEdgeCountEstimate = graph.edges().length;
@@ -62,7 +78,7 @@ export function createInteractions({ graph, renderer }) {
     });
 
     if (state.selectedNodeId && graph.hasNode(state.selectedNodeId)) {
-      const keep = bfsNeighborhood(graph, state.selectedNodeId, 1);
+      const keep = selectedNeighbors || bfsNeighborhood(graph, state.selectedNodeId, 1);
       graph.forEachNode((nodeId) => {
         graph.setNodeAttribute(nodeId, "dimmed", !keep.has(nodeId));
       });
@@ -117,6 +133,7 @@ export function createInteractions({ graph, renderer }) {
 
   function togglePin() {
     state.pinSelected = !state.pinSelected;
+    applyVisibility();
     return state.pinSelected;
   }
 
