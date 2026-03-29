@@ -88,16 +88,16 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
 
   function shouldSuppressLabel(rect, tier) {
     const thresholdByTier = new Map([
-      [1, 0.44],
-      [2, 0.2],
-      [3, 0.09],
+      [1, 0.34],
+      [2, 0.12],
+      [3, 0.05],
       [4, 0.0],
     ]);
     const maxByTier = new Map([
       [1, 10],
-      [2, 26],
-      [3, 34],
-      [4, 18],
+      [2, 22],
+      [3, 22],
+      [4, 10],
     ]);
     const seen = Number(tierLabelCounts.get(tier) || 0);
     const tierCap = Number(maxByTier.get(tier) || 0);
@@ -124,7 +124,8 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     minCameraRatio: 0.05,
     maxCameraRatio: 6,
     labelRenderedSizeThreshold: 0,
-    labelDensity: 0.85,
+    labelDensity: 0.62,
+    labelGridCellSize: 120,
     edgeLabelSize: "fixed",
     defaultEdgeLabelSize: 11,
     zIndex: true,
@@ -143,7 +144,11 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
       const width = textWidth + padX * 2;
       const height = fontSize + padY * 2;
       const x = data.x - width / 2;
-      const y = data.y - data.size - height - 4;
+      const degree = Number(graph.degree?.(data.key) || 0);
+      const degreeOffset = degree >= 7 ? 11 : (degree >= 4 ? 7 : (degree >= 2 ? 4 : 0));
+      const tierOffset = tier >= 3 ? 2 : 0;
+      const bandOffset = ((degree % 3) - 1) * 2;
+      const y = data.y - data.size - height - 4 - degreeOffset - tierOffset + bandOffset;
       const dims = renderer.getDimensions();
 
       if (x < 1 || y < 1 || x + width > dims.width - 1 || y + height > dims.height - 1) return;

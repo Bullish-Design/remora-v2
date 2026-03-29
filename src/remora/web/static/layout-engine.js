@@ -26,8 +26,8 @@ function estimateLabelHeight(attrs) {
 
 function labelCollisionExtents(attrs) {
   const size = Number(attrs?.size || 8);
-  const hx = Math.max(size * 1.25, estimateLabelWidth(attrs) * 0.17);
-  const hy = Math.max(size * 1.1, estimateLabelHeight(attrs) * 0.85);
+  const hx = Math.max(size * 1.4, estimateLabelWidth(attrs) * 0.22);
+  const hy = Math.max(size * 1.2, estimateLabelHeight(attrs) * 1.02);
   return { hx, hy };
 }
 
@@ -41,7 +41,7 @@ function nodeSpacing(graph, nodeId, attrs) {
       : (type === "method" ? 9 : (type === "function" ? 8 : (type === "virtual" ? 10 : 6)));
   const degree = Number(graph.degree?.(nodeId) || 0);
   const degreeBonus = Math.min(18, Math.sqrt(Math.max(0, degree)) * 5);
-  const labelBonus = Math.min(44, estimateLabelWidth(attrs) * 0.16) + Math.min(16, estimateLabelHeight(attrs) * 0.22);
+  const labelBonus = Math.min(56, estimateLabelWidth(attrs) * 0.22) + Math.min(24, estimateLabelHeight(attrs) * 0.35);
   return base + size * 1.4 + typeBonus + degreeBonus + labelBonus;
 }
 
