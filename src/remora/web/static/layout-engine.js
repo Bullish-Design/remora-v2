@@ -153,8 +153,8 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      minFill = 0.86,
-      maxFill = 0.94,
+      minFill = 0.92,
+      maxFill = 0.98,
     } = {},
   ) {
     if (!Array.isArray(nodes) || nodes.length < 2) return;
@@ -192,8 +192,8 @@ export function createLayoutEngine() {
     const centerY = sumY / count;
     const avgSpacing = spacingSum / count;
     const targetScale = Math.sqrt(count);
-    const targetWidth = Math.max(320, targetScale * avgSpacing * 2.15);
-    const targetHeight = Math.max(250, targetScale * avgSpacing * 1.85);
+    const targetWidth = Math.max(300, targetScale * avgSpacing * 1.9);
+    const targetHeight = Math.max(220, targetScale * avgSpacing * 1.65);
     const fillX = spanX / targetWidth;
     const fillY = spanY / targetHeight;
     let scale = 1;
@@ -751,8 +751,8 @@ export function createLayoutEngine() {
       targetAverageOverlap: 0.038,
     });
     normalizeViewportSpread(graph, nodes, {
-      minFill: 0.88,
-      maxFill: 0.94,
+      minFill: 0.92,
+      maxFill: 0.98,
     });
     shapeToCanvasBoundary(graph, nodes, {
       strength: 0.24,
@@ -762,6 +762,10 @@ export function createLayoutEngine() {
     applyExclusionZones(graph, nodes, {
       defaultPadding: 30,
       maxPasses: 3,
+    });
+    normalizeViewportSpread(graph, nodes, {
+      minFill: 0.93,
+      maxFill: 0.985,
     });
     relaxCollisions(graph, nodes, {
       minRounds: 5,
@@ -773,11 +777,11 @@ export function createLayoutEngine() {
   function runInitialLayout(graph, { iterations = 340 } = {}) {
     runForce(graph, {
       iterations,
-      maxStep: 12.4,
-      repulsion: 14200,
-      attraction: 0.0042,
-      gravity: 0.0019,
-      cooling: 0.993,
+      maxStep: 14.2,
+      repulsion: 16800,
+      attraction: 0.0039,
+      gravity: 0.0015,
+      cooling: 0.994,
     });
   }
 

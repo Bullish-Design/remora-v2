@@ -59,7 +59,7 @@ function buildBounds(graph) {
 }
 
 function defaultCameraState() {
-  return { x: 0.5, y: 0.5, ratio: 1, angle: 0 };
+  return { x: 0.5, y: 0.5, ratio: 1.34, angle: 0 };
 }
 
 export function createRenderer({ graph, container, nodeLabelHitboxes }) {
@@ -121,8 +121,8 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     hideLabelsOnMove: true,
     defaultNodeColor: "#9fb2c8",
     defaultEdgeColor: "#4f627d",
-    minCameraRatio: 0.05,
-    maxCameraRatio: 6,
+    minCameraRatio: 0.04,
+    maxCameraRatio: 8,
     labelRenderedSizeThreshold: 0,
     labelDensity: 0.62,
     labelGridCellSize: 120,
