@@ -23,6 +23,15 @@ export function createPanels(doc = document) {
   const eventsEl = doc.getElementById("events");
   const timelineEl = doc.getElementById("timeline-container");
   const statusEl = doc.getElementById("connection-status");
+  const selectionHelperEl = doc.getElementById("selection-helper");
+  const summaryVisibleNodesEl = doc.getElementById("summary-visible-nodes");
+  const summaryVisibleEdgesEl = doc.getElementById("summary-visible-edges");
+  const summaryHiddenThinningEl = doc.getElementById("summary-hidden-thinning");
+  const summaryFocusModeEl = doc.getElementById("summary-focus-mode");
+  const quickPinEl = doc.getElementById("quick-pin-toggle");
+  const quickFullEl = doc.getElementById("quick-focus-full");
+  const quickHop1El = doc.getElementById("quick-focus-hop1");
+  const quickHop2El = doc.getElementById("quick-focus-hop2");
 
   function showConnectionStatus(connected) {
     if (!statusEl) return;
@@ -36,9 +45,11 @@ export function createPanels(doc = document) {
     }
     if (!nodeDetailsEl) return;
     if (!node) {
+      if (selectionHelperEl) selectionHelperEl.style.display = "";
       nodeDetailsEl.innerHTML = "";
       return;
     }
+    if (selectionHelperEl) selectionHelperEl.style.display = "none";
     const summary = [
       `id: ${node.node_id}`,
       `type: ${node.node_type}`,
@@ -108,6 +119,33 @@ export function createPanels(doc = document) {
     setAgentHeader("(select a node)");
   }
 
+  function setGraphSummary(summary) {
+    if (summaryVisibleNodesEl) summaryVisibleNodesEl.textContent = String(summary?.visibleNodes ?? 0);
+    if (summaryVisibleEdgesEl) summaryVisibleEdgesEl.textContent = String(summary?.visibleEdges ?? 0);
+    if (summaryHiddenThinningEl) summaryHiddenThinningEl.textContent = String(summary?.hiddenByThinning ?? 0);
+    if (summaryFocusModeEl) summaryFocusModeEl.textContent = String(summary?.focusMode ?? "full");
+  }
+
+  function setQuickActionsState({ hasSelection = false, pinSelected = false, focusMode = "full" } = {}) {
+    if (quickPinEl) {
+      quickPinEl.disabled = !hasSelection;
+      quickPinEl.textContent = pinSelected ? "Unpin selected" : "Pin selected";
+      quickPinEl.classList.toggle("active", pinSelected);
+    }
+    if (quickHop1El) {
+      quickHop1El.disabled = !hasSelection;
+      quickHop1El.classList.toggle("active", focusMode === "hop1");
+    }
+    if (quickHop2El) {
+      quickHop2El.disabled = !hasSelection;
+      quickHop2El.classList.toggle("active", focusMode === "hop2");
+    }
+    if (quickFullEl) {
+      quickFullEl.disabled = false;
+      quickFullEl.classList.toggle("active", focusMode === "full");
+    }
+  }
+
   return {
     showConnectionStatus,
     setNode,
@@ -117,5 +155,7 @@ export function createPanels(doc = document) {
     appendEventLine,
     addTimelineEvent,
     clearNodeSelection,
+    setGraphSummary,
+    setQuickActionsState,
   };
 }

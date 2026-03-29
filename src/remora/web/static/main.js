@@ -134,12 +134,25 @@ function syncVisibilityTelemetry() {
   runtimeMetrics.visible_edges = Number(stats.visibleEdges || 0);
   runtimeMetrics.hidden_by_thinning_count = Number(stats.hiddenByThinning || 0);
   runtimeMetrics.focus_mode = String(stats.focusMode || "full");
+  panels.setGraphSummary(stats);
+  const ui = interactions.getState();
+  panels.setQuickActionsState({
+    hasSelection: !!(ui.selectedNodeId && graph.hasNode(ui.selectedNodeId)),
+    pinSelected: !!ui.pinSelected,
+    focusMode: ui.focusMode,
+  });
 }
 
 function setFocusChips(mode) {
   document
     .querySelectorAll("[data-focus-mode]")
     .forEach((el) => el.classList.toggle("active", el.dataset.focusMode === mode));
+}
+
+function setPinChipActive(active) {
+  document
+    .querySelectorAll("[data-pin-toggle]")
+    .forEach((el) => el.classList.toggle("active", !!active));
 }
 
 function syncGraphFromState() {
@@ -229,7 +242,9 @@ function selectNode(nodeId, { center = true } = {}) {
   const attrs = graph.getNodeAttributes(nodeId);
   interactions.selectNode(nodeId);
   syncVisibilityTelemetry();
-  layoutEngine.setPinnedNode(interactions.getState().pinSelected ? nodeId : null);
+  const currentState = interactions.getState();
+  setPinChipActive(currentState.pinSelected);
+  layoutEngine.setPinnedNode(currentState.pinSelected ? nodeId : null);
   panels.setNode({
     node_id: nodeId,
     name: attrs.node_name,
@@ -249,6 +264,7 @@ function selectNode(nodeId, { center = true } = {}) {
 function clearSelection() {
   interactions.clearSelection();
   syncVisibilityTelemetry();
+  setPinChipActive(false);
   layoutEngine.setPinnedNode(null);
   panels.clearNodeSelection();
 }
@@ -433,7 +449,7 @@ function wireUiControls() {
     if (pinToggle) {
       const pinned = interactions.togglePin();
       syncVisibilityTelemetry();
-      chip.classList.toggle("active", pinned);
+      setPinChipActive(pinned);
       layoutEngine.setPinnedNode(pinned ? interactions.getState().selectedNodeId : null);
     }
   });
@@ -474,6 +490,31 @@ function wireUiControls() {
       console.error("chat failed", err);
       panels.appendAgentItem("panel-error", "error", String(err));
     });
+  });
+
+  const setFocusMode = (mode) => {
+    const hasSelection = !!interactions.getState().selectedNodeId;
+    if ((mode === "hop1" || mode === "hop2") && !hasSelection) return;
+    interactions.setFocusMode(mode);
+    syncVisibilityTelemetry();
+    setFocusChips(mode);
+  };
+
+  document.getElementById("quick-focus-full")?.addEventListener("click", () => {
+    setFocusMode("full");
+  });
+  document.getElementById("quick-focus-hop1")?.addEventListener("click", () => {
+    setFocusMode("hop1");
+  });
+  document.getElementById("quick-focus-hop2")?.addEventListener("click", () => {
+    setFocusMode("hop2");
+  });
+  document.getElementById("quick-pin-toggle")?.addEventListener("click", () => {
+    if (!interactions.getState().selectedNodeId) return;
+    const pinned = interactions.togglePin();
+    syncVisibilityTelemetry();
+    setPinChipActive(pinned);
+    layoutEngine.setPinnedNode(pinned ? interactions.getState().selectedNodeId : null);
   });
 }
 
