@@ -648,7 +648,7 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      defaultPadding = 30,
+      defaultPadding = 20,
       maxPasses = 3,
     } = {},
   ) {
@@ -673,10 +673,10 @@ export function createLayoutEngine() {
             ? Number(zone.padding)
             : defaultPadding;
           const ext = labelCollisionExtents(attrs);
-          const minX = left - pad - ext.hx * 0.65;
-          const maxX = right + pad + ext.hx * 0.65;
-          const minY = top - pad - ext.hy * 0.65;
-          const maxY = bottom + pad + ext.hy * 0.65;
+          const minX = left - pad - ext.hx * 0.52;
+          const maxX = right + pad + ext.hx * 0.52;
+          const minY = top - pad - ext.hy * 0.52;
+          const maxY = bottom + pad + ext.hy * 0.52;
           if (x < minX || x > maxX || y < minY || y > maxY) continue;
           const toLeft = Math.abs(x - minX);
           const toRight = Math.abs(maxX - x);
@@ -708,7 +708,7 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      strength = 0.2,
+      strength = 0.26,
       minRadiusX = 220,
       minRadiusY = 180,
     } = {},
@@ -741,8 +741,8 @@ export function createLayoutEngine() {
     const centerY = sumY / count;
     const rx = Math.max(minRadiusX, (maxX - minX) / 2);
     const ry = Math.max(minRadiusY, (maxY - minY) / 2);
-    const targetRx = rx * 1.12;
-    const targetRy = ry * 1.12;
+    const targetRx = rx * 1.18;
+    const targetRy = ry * 1.18;
     const blend = clamp(strength, 0.05, 0.35);
     for (const nodeId of nodes) {
       if (!graph.hasNode(nodeId)) continue;
@@ -758,6 +758,86 @@ export function createLayoutEngine() {
       const ty = centerY + Math.sin(theta) * targetRy;
       graph.setNodeAttribute(nodeId, "x", x * (1 - blend) + tx * blend);
       graph.setNodeAttribute(nodeId, "y", y * (1 - blend) + ty * blend);
+    }
+  }
+
+  function rebalanceOccupancySectors(
+    graph,
+    nodes,
+    {
+      sectors = 8,
+      rounds = 2,
+      blend = 0.36,
+      sparseFactor = 0.78,
+      denseFactor = 1.22,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < sectors + 2) return;
+    for (let round = 0; round < rounds; round += 1) {
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      const entries = [];
+      for (const nodeId of nodes) {
+        if (!graph.hasNode(nodeId)) continue;
+        if (pinnedNodeId && nodeId === pinnedNodeId) continue;
+        const attrs = graph.getNodeAttributes(nodeId);
+        if (attrs.hidden || attrs.node_type === "__label__") continue;
+        const x = Number(attrs.x);
+        const y = Number(attrs.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        entries.push({ nodeId, x, y });
+        sumX += x;
+        sumY += y;
+        count += 1;
+      }
+      if (count < sectors + 2) return;
+      const centerX = sumX / count;
+      const centerY = sumY / count;
+      const sectorBuckets = Array.from({ length: sectors }, () => []);
+      for (const entry of entries) {
+        const angle = Math.atan2(entry.y - centerY, entry.x - centerX);
+        const norm = angle < 0 ? angle + Math.PI * 2 : angle;
+        const sector = Math.floor((norm / (Math.PI * 2)) * sectors) % sectors;
+        const radius = Math.sqrt((entry.x - centerX) ** 2 + (entry.y - centerY) ** 2);
+        sectorBuckets[sector].push({ ...entry, angle: norm, radius });
+      }
+      const target = count / sectors;
+      const sparse = [];
+      const dense = [];
+      for (let i = 0; i < sectors; i += 1) {
+        const size = sectorBuckets[i].length;
+        if (size < target * sparseFactor) sparse.push(i);
+        else if (size > target * denseFactor) dense.push(i);
+      }
+      if (sparse.length === 0 || dense.length === 0) break;
+      let moved = 0;
+      for (const denseSector of dense) {
+        const bucket = sectorBuckets[denseSector]
+          .slice()
+          .sort((a, b) => b.radius - a.radius);
+        const overflow = Math.max(0, Math.floor(bucket.length - target * denseFactor));
+        const moveCount = Math.max(1, Math.min(bucket.length, overflow + 1));
+        for (let i = 0; i < moveCount; i += 1) {
+          const item = bucket[i];
+          const targetSector = sparse[(i + denseSector) % sparse.length];
+          const targetAngle = ((targetSector + 0.5) / sectors) * Math.PI * 2;
+          const targetRadius = item.radius * 1.12;
+          const tx = centerX + Math.cos(targetAngle) * targetRadius;
+          const ty = centerY + Math.sin(targetAngle) * targetRadius;
+          const nx = item.x * (1 - blend) + tx * blend;
+          const ny = item.y * (1 - blend) + ty * blend;
+          graph.setNodeAttribute(item.nodeId, "x", nx);
+          graph.setNodeAttribute(item.nodeId, "y", ny);
+          moved += 1;
+        }
+      }
+      if (moved === 0) break;
+      relaxCollisions(graph, nodes, {
+        minRounds: 4,
+        maxRounds: 10,
+        targetAverageOverlap: 0.038,
+      });
     }
   }
 
@@ -889,12 +969,19 @@ export function createLayoutEngine() {
       maxFill: 0.98,
     });
     shapeToCanvasBoundary(graph, nodes, {
-      strength: 0.24,
-      minRadiusX: 240,
-      minRadiusY: 190,
+      strength: 0.28,
+      minRadiusX: 260,
+      minRadiusY: 210,
+    });
+    rebalanceOccupancySectors(graph, nodes, {
+      sectors: 8,
+      rounds: 2,
+      blend: 0.34,
+      sparseFactor: 0.76,
+      denseFactor: 1.2,
     });
     applyExclusionZones(graph, nodes, {
-      defaultPadding: 30,
+      defaultPadding: 20,
       maxPasses: 3,
     });
     normalizeViewportSpread(graph, nodes, {

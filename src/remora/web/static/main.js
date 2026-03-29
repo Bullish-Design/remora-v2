@@ -172,7 +172,7 @@ function syncLayoutExclusionZones() {
   }
   const graphRect = graphEl.getBoundingClientRect();
   const filterRect = filterEl.getBoundingClientRect();
-  const margin = 30;
+  const margin = 18;
   const left = clamp(filterRect.left - graphRect.left - margin, 0, graphRect.width);
   const top = clamp(filterRect.top - graphRect.top - margin, 0, graphRect.height);
   const right = clamp(filterRect.right - graphRect.left + margin, 0, graphRect.width);
@@ -192,7 +192,7 @@ function syncLayoutExclusionZones() {
     right: Math.max(p1.x, p2.x),
     top: Math.min(p1.y, p2.y),
     bottom: Math.max(p1.y, p2.y),
-    padding: 30,
+    padding: 18,
   }]);
 }
 
