@@ -393,8 +393,8 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      minHubDegree = 5,
-      blend = 0.34,
+      minHubDegree = 4,
+      blend = 0.42,
     } = {},
   ) {
     if (!Array.isArray(nodes) || nodes.length < 6) return;
@@ -432,15 +432,15 @@ export function createLayoutEngine() {
       arranged.sort((a, b) => a.angle - b.angle);
       const centerAngle = angleSum / arranged.length;
       const avgRadius = radiusSum / arranged.length;
-      const baseRadius = Math.max(58, avgRadius, nodeSpacing(graph, hubId, hubAttrs) * 1.25);
-      const arc = Math.min(Math.PI * 1.7, Math.PI * 0.92 + arranged.length * 0.19);
+      const baseRadius = Math.max(72, avgRadius, nodeSpacing(graph, hubId, hubAttrs) * 1.45);
+      const arc = Math.min(Math.PI * 1.95, Math.PI * 1.08 + arranged.length * 0.22);
       const start = centerAngle - arc / 2;
       const count = arranged.length;
       for (let i = 0; i < arranged.length; i += 1) {
         const item = arranged[i];
         const ratio = count > 1 ? i / (count - 1) : 0.5;
         const targetAngle = start + arc * ratio;
-        const ringOffset = (i % 3) * 13;
+        const ringOffset = (i % 4) * 18;
         const targetRadius = baseRadius + ringOffset;
         const tx = hx + Math.cos(targetAngle) * targetRadius;
         const ty = hy + Math.sin(targetAngle) * targetRadius;
@@ -449,6 +449,70 @@ export function createLayoutEngine() {
         graph.setNodeAttribute(item.neighborId, "x", nextX);
         graph.setNodeAttribute(item.neighborId, "y", nextY);
       }
+    }
+  }
+
+  function deconflictHubCorridors(
+    graph,
+    nodes,
+    {
+      minHubDegree = 4,
+      minAngleGap = 0.22,
+      maxRounds = 2,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 6) return;
+    const nodeSet = new Set(nodes);
+    for (let round = 0; round < maxRounds; round += 1) {
+      let adjusted = 0;
+      for (const hubId of nodes) {
+        if (!graph.hasNode(hubId)) continue;
+        if (graph.degree(hubId) < minHubDegree) continue;
+        const hub = graph.getNodeAttributes(hubId);
+        const hx = Number(hub.x);
+        const hy = Number(hub.y);
+        if (!Number.isFinite(hx) || !Number.isFinite(hy)) continue;
+        const neighbors = (graph.neighbors(hubId) || [])
+          .filter((id) => nodeSet.has(id) && graph.hasNode(id))
+          .filter((id) => !(pinnedNodeId && id === pinnedNodeId))
+          .map((id) => {
+            const attrs = graph.getNodeAttributes(id);
+            const nx = Number(attrs.x);
+            const ny = Number(attrs.y);
+            const dx = nx - hx;
+            const dy = ny - hy;
+            const angle = Math.atan2(dy, dx);
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            return { id, attrs, nx, ny, angle, radius };
+          })
+          .filter((item) => Number.isFinite(item.radius) && item.radius > 0.001)
+          .sort((a, b) => a.angle - b.angle);
+        if (neighbors.length < minHubDegree) continue;
+        for (let i = 0; i < neighbors.length - 1; i += 1) {
+          const a = neighbors[i];
+          const b = neighbors[i + 1];
+          const gap = b.angle - a.angle;
+          if (gap >= minAngleGap) continue;
+          const deficit = minAngleGap - gap;
+          const tangentAx = -Math.sin(a.angle);
+          const tangentAy = Math.cos(a.angle);
+          const tangentBx = Math.sin(b.angle);
+          const tangentBy = -Math.cos(b.angle);
+          const pushA = deficit * Math.max(10, a.radius * 0.16);
+          const pushB = deficit * Math.max(10, b.radius * 0.16);
+          graph.setNodeAttribute(a.id, "x", a.nx + tangentAx * pushA);
+          graph.setNodeAttribute(a.id, "y", a.ny + tangentAy * pushA);
+          graph.setNodeAttribute(b.id, "x", b.nx + tangentBx * pushB);
+          graph.setNodeAttribute(b.id, "y", b.ny + tangentBy * pushB);
+          adjusted += 1;
+        }
+      }
+      if (adjusted === 0) break;
+      relaxCollisions(graph, nodes, {
+        minRounds: 5,
+        maxRounds: 12,
+        targetAverageOverlap: 0.038,
+      });
     }
   }
 
@@ -616,8 +680,13 @@ export function createLayoutEngine() {
       maxRounds: 3,
     });
     spreadHubNeighbors(graph, nodes, {
-      minHubDegree: 5,
-      blend: 0.32,
+      minHubDegree: 4,
+      blend: 0.42,
+    });
+    deconflictHubCorridors(graph, nodes, {
+      minHubDegree: 4,
+      minAngleGap: 0.24,
+      maxRounds: 2,
     });
     relaxCollisions(graph, nodes, {
       minRounds: 8,

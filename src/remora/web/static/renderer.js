@@ -211,6 +211,9 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
       if (!showLabel) {
         result.label = "";
       }
+      if (!result.is_high_signal && !showLabel) {
+        result.color = colorWithAlpha(result.color || "#4f627d", 0.35);
+      }
       if (result.dimmed) {
         result.color = colorWithAlpha(result.color || "#4f627d", 0.18);
         result.zIndex = 0;
