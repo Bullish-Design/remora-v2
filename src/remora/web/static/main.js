@@ -325,6 +325,90 @@ async function fullSnapshot({ fit = false } = {}) {
   runtimeMetrics.full_reload_count += 1;
 }
 
+let _syncInFlight = false;
+async function periodicSync() {
+  if (_syncInFlight) return;
+  _syncInFlight = true;
+  try {
+    const [nodes, edges] = await Promise.all([getJson("/api/nodes"), getJson("/api/edges")]);
+
+    const serverNodeIds = new Set(nodes.map((n) => n.node_id));
+    const serverEdgeKeys = new Set(
+      edges.map((e) => graphState.edgeKey(e))
+    );
+
+    let mutated = false;
+
+    // Add/update nodes from server
+    for (const node of nodes) {
+      const existing = graphState.nodesById.get(node.node_id);
+      if (!existing || existing.status !== node.status || existing.source_hash !== node.source_hash) {
+        graphState.upsertNode(node);
+        mutated = true;
+      }
+    }
+
+    // Remove nodes that no longer exist on server
+    for (const nodeId of graphState.nodesById.keys()) {
+      if (!serverNodeIds.has(nodeId)) {
+        graphState.removeNode(nodeId);
+        mutated = true;
+      }
+    }
+
+    // Add/update edges from server
+    for (const edge of edges) {
+      const key = graphState.edgeKey(edge);
+      if (!graphState.edgesByKey.has(key)) {
+        graphState.upsertEdge(edge);
+        mutated = true;
+      }
+    }
+
+    // Remove stale edges
+    for (const key of graphState.edgesByKey.keys()) {
+      if (!serverEdgeKeys.has(key)) {
+        graphState.removeEdge(key);
+        mutated = true;
+      }
+    }
+
+    if (mutated) {
+      const selectedBefore = interactions.getState().selectedNodeId;
+      syncGraphFromState();
+      layoutEngine.initializeLayout(graph, { seed: 42 });
+      syncLayoutExclusionZones();
+      layoutEngine.reheatLayout(graph, { iterations: 120 });
+      interactions.applyVisibility();
+      syncVisibilityTelemetry();
+      rendererApi.refresh();
+      requestAnimationFrame(refreshFallbackHitboxes);
+      if (selectedBefore && graph.hasNode(selectedBefore)) {
+        rendererApi.ensureNodeVisible(selectedBefore);
+        // Refresh the node detail panel and conversation so status
+        // changes and new agent activity appear without manual reload.
+        const attrs = graph.getNodeAttributes(selectedBefore);
+        panels.setNode({
+          node_id: selectedBefore,
+          name: attrs.node_name,
+          full_name: attrs.full_name,
+          file_path: attrs.file_path,
+          node_type: attrs.node_type,
+          status: attrs.status,
+          start_line: attrs.start_line,
+          end_line: attrs.end_line,
+          text: attrs.text,
+        });
+        refreshConversation(selectedBefore);
+      }
+    }
+  } catch (_err) {
+    // Periodic sync failure is non-fatal; next tick will retry.
+  } finally {
+    _syncInFlight = false;
+  }
+}
+
 async function upsertNodeIncremental(nodeId, { withRelationships = true } = {}) {
   const node = await getJson(`/api/nodes/${encodeURIComponent(nodeId)}`);
   graphState.upsertNode(node);
@@ -374,15 +458,33 @@ async function applyIncrementalBatch(batch) {
     panels.appendEventLine(`${type}: ${JSON.stringify(payload)}`);
     panels.addTimelineEvent(type, payload);
 
-    if (type === "agent_message") {
-      const selected = interactions.getState().selectedNodeId;
-      const toAgent = String(payload.to_agent || "");
-      if (selected && toAgent === selected) {
-        panels.appendAgentItem(
-          String(payload.from_agent || "") === "user" ? "panel-user" : "panel-agent",
-          String(payload.from_agent || "agent"),
-          String(payload.content || ""),
-        );
+    // Refresh the agent panel when an event targets the selected node.
+    const selected = interactions.getState().selectedNodeId;
+    if (selected) {
+      const eventAgentId = String(payload.agent_id || payload.to_agent || payload.from_agent || "");
+      const isAgentEvent =
+        type === "agent_start" ||
+        type === "agent_complete" ||
+        type === "agent_error" ||
+        type === "agent_message" ||
+        type === "rewrite_proposal" ||
+        type === "rewrite_accepted" ||
+        type === "rewrite_rejected";
+
+      if (isAgentEvent && eventAgentId === selected) {
+        // Append agent_message inline for instant feedback.
+        if (type === "agent_message") {
+          panels.appendAgentItem(
+            String(payload.from_agent || "") === "user" ? "panel-user" : "panel-agent",
+            String(payload.from_agent || "agent"),
+            String(payload.content || ""),
+          );
+        }
+        // Re-fetch full conversation for non-message events so the panel
+        // stays current without manual refresh.
+        if (type !== "agent_message") {
+          refreshConversation(selected);
+        }
       }
     }
 
@@ -633,6 +735,10 @@ async function start() {
   }
 
   events.start("/sse");
+
+  // Periodic sync to catch edges/nodes that arrive after SSE events
+  // (e.g. relationships extracted after node_discovered fires).
+  setInterval(periodicSync, 3000);
 }
 
 start().catch((err) => {
