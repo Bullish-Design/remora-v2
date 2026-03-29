@@ -135,11 +135,18 @@ export function createInteractions({ graph, renderer }) {
         (graph.hasNode(sourceId) && graph.getNodeAttribute(sourceId, "hidden")) ||
         (graph.hasNode(targetId) && graph.getNodeAttribute(targetId, "hidden"));
       const hidden = hiddenByType || hiddenByCrossFile || hiddenByTether || hiddenByThinning || hiddenByNode;
+      const selectedIncident =
+        !!selectedId && (String(sourceId) === String(selectedId) || String(targetId) === String(selectedId));
+      const focusIncident =
+        !!selectedNeighbors && selectedNeighbors.has(sourceId) && selectedNeighbors.has(targetId);
+      const showLabel = !hidden && (selectedIncident || (focusIncident && highSignal));
       graph.setEdgeAttribute(
         edgeId,
         "hidden",
         hidden,
       );
+      graph.setEdgeAttribute(edgeId, "show_label", showLabel);
+      graph.setEdgeAttribute(edgeId, "is_high_signal", highSignal);
       graph.removeEdgeAttribute(edgeId, "dimmed");
       graph.setEdgeAttribute(edgeId, "size", highSignal ? 2.2 : 1.0);
       graph.setEdgeAttribute(

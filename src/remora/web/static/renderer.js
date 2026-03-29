@@ -76,6 +76,7 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     [4, 0],
   ]);
   let hoveredNodeId = null;
+  let hoveredEdgeId = null;
 
   function nodeLabelTier(nodeId, data) {
     if (data.is_selected || data.is_pinned || (hoveredNodeId && hoveredNodeId === nodeId)) return 1;
@@ -124,6 +125,8 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     maxCameraRatio: 6,
     labelRenderedSizeThreshold: 0,
     labelDensity: 0.85,
+    edgeLabelSize: "fixed",
+    defaultEdgeLabelSize: 11,
     zIndex: true,
     stagePadding: 40,
     defaultDrawNodeLabel(context, data) {
@@ -192,6 +195,17 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     edgeReducer(edgeId, data) {
       const result = { ...data };
       if (result.hidden) return { ...result, hidden: true };
+      const sourceId = graph.source(edgeId);
+      const targetId = graph.target(edgeId);
+      const isHoverIncident =
+        !!hoveredNodeId && (String(sourceId) === hoveredNodeId || String(targetId) === hoveredNodeId);
+      const showLabel =
+        result.show_label === true
+        || (hoveredEdgeId != null && String(edgeId) === hoveredEdgeId)
+        || isHoverIncident;
+      if (!showLabel) {
+        result.label = "";
+      }
       if (result.dimmed) {
         result.color = colorWithAlpha(result.color || "#4f627d", 0.18);
       }
@@ -214,6 +228,14 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
 
   renderer.on("leaveNode", () => {
     hoveredNodeId = null;
+  });
+
+  renderer.on("enterEdge", ({ edge }) => {
+    hoveredEdgeId = String(edge);
+  });
+
+  renderer.on("leaveEdge", () => {
+    hoveredEdgeId = null;
   });
 
   function refresh() {
