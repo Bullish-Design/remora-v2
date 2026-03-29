@@ -13,12 +13,24 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function nodeSpacing(attrs) {
-  const base = 16;
+function estimateLabelWidth(attrs) {
+  const text = String(attrs?.label || attrs?.node_name || attrs?.full_name || "");
+  if (!text) return 56;
+  return Math.max(56, Math.min(300, text.length * 7 + 18));
+}
+
+function nodeSpacing(graph, nodeId, attrs) {
+  const base = 20;
   const size = Number(attrs?.size || 8);
   const type = String(attrs?.node_type || "");
-  const typeBonus = type === "class" ? 5 : (type === "virtual" ? 3 : 0);
-  return base + size * 1.2 + typeBonus;
+  const typeBonus =
+    type === "class"
+      ? 13
+      : (type === "method" ? 9 : (type === "function" ? 8 : (type === "virtual" ? 10 : 6)));
+  const degree = Number(graph.degree?.(nodeId) || 0);
+  const degreeBonus = Math.min(18, Math.sqrt(Math.max(0, degree)) * 5);
+  const labelBonus = Math.min(44, estimateLabelWidth(attrs) * 0.16);
+  return base + size * 1.4 + typeBonus + degreeBonus + labelBonus;
 }
 
 export function createLayoutEngine() {
@@ -41,37 +53,64 @@ export function createLayoutEngine() {
     });
   }
 
-  function relaxCollisions(graph, nodes, { rounds = 4 } = {}) {
-    for (let round = 0; round < rounds; round += 1) {
+  function relaxCollisions(
+    graph,
+    nodes,
+    {
+      minRounds = 8,
+      maxRounds = 22,
+      targetAverageOverlap = 0.045,
+    } = {},
+  ) {
+    let previousAverage = Number.POSITIVE_INFINITY;
+    for (let round = 0; round < maxRounds; round += 1) {
+      let collisions = 0;
+      let overlapBudget = 0;
       for (let i = 0; i < nodes.length; i += 1) {
         const aId = nodes[i];
         const a = graph.getNodeAttributes(aId);
         for (let j = i + 1; j < nodes.length; j += 1) {
           const bId = nodes[j];
           const b = graph.getNodeAttributes(bId);
-          const minDist = Math.max(nodeSpacing(a), nodeSpacing(b));
+          const minDist = Math.max(
+            nodeSpacing(graph, aId, a),
+            nodeSpacing(graph, bId, b),
+          );
           let dx = Number(b.x) - Number(a.x);
           let dy = Number(b.y) - Number(a.y);
           let d = Math.sqrt(dx * dx + dy * dy);
           if (!Number.isFinite(d) || d < 0.0001) {
-            dx = 0.01;
-            dy = 0.01;
-            d = 0.01;
+            const jitter = (hashUnit(`${aId}:${bId}:${round}`) - 0.5) * 0.5;
+            dx = 0.02 + jitter;
+            dy = 0.02 - jitter;
+            d = Math.sqrt(dx * dx + dy * dy);
           }
           if (d >= minDist) continue;
-          const overlap = (minDist - d) / 2;
+          collisions += 1;
+          const overlap = minDist - d;
+          overlapBudget += overlap / minDist;
+          const push = overlap * 0.52;
           const ux = dx / d;
           const uy = dy / d;
           if (!(pinnedNodeId && aId === pinnedNodeId)) {
-            graph.setNodeAttribute(aId, "x", Number(a.x) - ux * overlap);
-            graph.setNodeAttribute(aId, "y", Number(a.y) - uy * overlap);
+            graph.setNodeAttribute(aId, "x", Number(a.x) - ux * push);
+            graph.setNodeAttribute(aId, "y", Number(a.y) - uy * push);
           }
           if (!(pinnedNodeId && bId === pinnedNodeId)) {
-            graph.setNodeAttribute(bId, "x", Number(b.x) + ux * overlap);
-            graph.setNodeAttribute(bId, "y", Number(b.y) + uy * overlap);
+            graph.setNodeAttribute(bId, "x", Number(b.x) + ux * push);
+            graph.setNodeAttribute(bId, "y", Number(b.y) + uy * push);
           }
         }
       }
+      const averageOverlap = collisions > 0 ? overlapBudget / collisions : 0;
+      const roundsMet = round + 1 >= minRounds;
+      if (!roundsMet) {
+        previousAverage = averageOverlap;
+        continue;
+      }
+      if (averageOverlap <= targetAverageOverlap) break;
+      if (averageOverlap >= previousAverage - 0.0015) break;
+      previousAverage = averageOverlap;
     }
   }
 
@@ -162,7 +201,11 @@ export function createLayoutEngine() {
       temperature *= cooling;
     }
 
-    relaxCollisions(graph, nodes, { rounds: 6 });
+    relaxCollisions(graph, nodes, {
+      minRounds: 10,
+      maxRounds: 26,
+      targetAverageOverlap: 0.04,
+    });
   }
 
   function runInitialLayout(graph, { iterations = 340 } = {}) {
