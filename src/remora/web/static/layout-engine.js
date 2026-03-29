@@ -226,10 +226,10 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      cellSize = 180,
-      minNodesPerCell = 5,
-      maxPasses = 2,
-      maxPush = 26,
+      cellSize = 170,
+      minNodesPerCell = 4,
+      maxPasses = 3,
+      maxPush = 36,
     } = {},
   ) {
     if (!Array.isArray(nodes) || nodes.length < minNodesPerCell) return;
@@ -303,7 +303,7 @@ export function createLayoutEngine() {
           }
           const deficit = Math.max(0, targetSpacing - avgNearest);
           const crowdFactor = Math.max(1, snapshots.length - minNodesPerCell + 1);
-          const push = clamp(deficit * 0.24 + crowdFactor * 1.4, 2.5, maxPush);
+          const push = clamp(deficit * 0.34 + crowdFactor * 1.9, 4.0, maxPush);
           const ux = dx / d;
           const uy = dy / d;
           graph.setNodeAttribute(item.nodeId, "x", item.x + ux * push);
@@ -318,6 +318,74 @@ export function createLayoutEngine() {
         maxRounds: 14,
         targetAverageOverlap: 0.048,
       });
+    }
+  }
+
+  function enforceLocalSpacingFloor(
+    graph,
+    nodes,
+    {
+      cellSize = 200,
+      minBaseFloor = 64,
+      maxRounds = 3,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 2) return;
+    for (let round = 0; round < maxRounds; round += 1) {
+      const cells = new Map();
+      for (const nodeId of nodes) {
+        if (!graph.hasNode(nodeId)) continue;
+        const attrs = graph.getNodeAttributes(nodeId);
+        if (attrs.hidden || attrs.node_type === "__label__") continue;
+        const x = Number(attrs.x);
+        const y = Number(attrs.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const cx = Math.floor(x / cellSize);
+        const cy = Math.floor(y / cellSize);
+        const key = `${cx}:${cy}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(nodeId);
+      }
+
+      let adjusted = 0;
+      for (const group of cells.values()) {
+        if (!Array.isArray(group) || group.length < 2) continue;
+        const denseBoost = group.length >= 5 ? 20 : (group.length >= 4 ? 14 : 8);
+        for (let i = 0; i < group.length; i += 1) {
+          const aId = group[i];
+          const a = graph.getNodeAttributes(aId);
+          for (let j = i + 1; j < group.length; j += 1) {
+            const bId = group[j];
+            const b = graph.getNodeAttributes(bId);
+            let dx = Number(b.x) - Number(a.x);
+            let dy = Number(b.y) - Number(a.y);
+            let d = Math.sqrt(dx * dx + dy * dy);
+            if (!Number.isFinite(d) || d < 0.001) {
+              dx = 0.02;
+              dy = 0.02;
+              d = Math.sqrt(dx * dx + dy * dy);
+            }
+            const floorA = minBaseFloor + Math.min(28, Math.sqrt(Math.max(0, graph.degree(aId))) * 6);
+            const floorB = minBaseFloor + Math.min(28, Math.sqrt(Math.max(0, graph.degree(bId))) * 6);
+            const floor = Math.max(floorA, floorB) + denseBoost;
+            if (d >= floor) continue;
+            const overlap = floor - d;
+            const ux = dx / d;
+            const uy = dy / d;
+            const push = overlap * 0.58;
+            if (!(pinnedNodeId && aId === pinnedNodeId)) {
+              graph.setNodeAttribute(aId, "x", Number(a.x) - ux * push);
+              graph.setNodeAttribute(aId, "y", Number(a.y) - uy * push);
+            }
+            if (!(pinnedNodeId && bId === pinnedNodeId)) {
+              graph.setNodeAttribute(bId, "x", Number(b.x) + ux * push);
+              graph.setNodeAttribute(bId, "y", Number(b.y) + uy * push);
+            }
+            adjusted += 1;
+          }
+        }
+      }
+      if (adjusted === 0) break;
     }
   }
 
@@ -537,10 +605,15 @@ export function createLayoutEngine() {
       targetAverageOverlap: 0.04,
     });
     expandDenseCells(graph, nodes, {
-      cellSize: 176,
-      minNodesPerCell: 5,
-      maxPasses: 2,
-      maxPush: 24,
+      cellSize: 168,
+      minNodesPerCell: 4,
+      maxPasses: 4,
+      maxPush: 38,
+    });
+    enforceLocalSpacingFloor(graph, nodes, {
+      cellSize: 205,
+      minBaseFloor: 66,
+      maxRounds: 3,
     });
     spreadHubNeighbors(graph, nodes, {
       minHubDegree: 5,
