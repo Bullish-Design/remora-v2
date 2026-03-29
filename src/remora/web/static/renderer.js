@@ -37,6 +37,15 @@ function compactLabel(text, tier) {
   return `${label.slice(0, 29)}...`;
 }
 
+function smallHash(input) {
+  const text = String(input || "");
+  let h = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    h = (h * 31 + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
 function buildBounds(graph) {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -75,6 +84,12 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     [3, 0],
     [4, 0],
   ]);
+  const quadrantLabelCounts = new Map([
+    ["nw", 0],
+    ["ne", 0],
+    ["sw", 0],
+    ["se", 0],
+  ]);
   let hoveredNodeId = null;
   let hoveredEdgeId = null;
 
@@ -86,24 +101,45 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     return 4;
   }
 
-  function shouldSuppressLabel(rect, tier) {
+  function quadrantForRect(rect, dims) {
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    const east = cx >= dims.width / 2;
+    const south = cy >= dims.height / 2;
+    if (!east && !south) return "nw";
+    if (east && !south) return "ne";
+    if (!east && south) return "sw";
+    return "se";
+  }
+
+  function shouldSuppressLabel(rect, tier, { isPeripheral = false, quadrant = "nw" } = {}) {
     const thresholdByTier = new Map([
-      [1, 0.34],
-      [2, 0.12],
-      [3, 0.05],
+      [1, 0.3],
+      [2, 0.1],
+      [3, 0.04],
       [4, 0.0],
     ]);
     const maxByTier = new Map([
       [1, 10],
-      [2, 22],
-      [3, 22],
-      [4, 10],
+      [2, 20],
+      [3, 18],
+      [4, 8],
     ]);
+    const minQuadrantBudget = 3;
+    const currentQuadrantCount = Number(quadrantLabelCounts.get(quadrant) || 0);
     const seen = Number(tierLabelCounts.get(tier) || 0);
     const tierCap = Number(maxByTier.get(tier) || 0);
-    if (tierCap > 0 && seen >= tierCap && tier >= 3) return true;
+    const relaxedCap = isPeripheral && tier >= 3 ? tierCap + 8 : tierCap;
+    if (relaxedCap > 0 && seen >= relaxedCap && tier >= 3 && currentQuadrantCount >= minQuadrantBudget) return true;
     const minArea = Math.max(1, rect.width * rect.height);
-    const threshold = Number(thresholdByTier.get(tier) || 0);
+    let threshold = Number(thresholdByTier.get(tier) || 0);
+    if (isPeripheral && tier >= 3 && currentQuadrantCount < minQuadrantBudget) {
+      threshold += 0.07;
+    } else if (isPeripheral && tier >= 3) {
+      threshold += 0.04;
+    } else if (!isPeripheral && tier >= 3) {
+      threshold = Math.max(0.0, threshold - 0.01);
+    }
     for (const existing of drawnLabelRects) {
       if (existing.tier > tier) continue;
       const area = overlapArea(existing, rect);
@@ -148,13 +184,22 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
       const degreeOffset = degree >= 7 ? 11 : (degree >= 4 ? 7 : (degree >= 2 ? 4 : 0));
       const tierOffset = tier >= 3 ? 2 : 0;
       const bandOffset = ((degree % 3) - 1) * 2;
-      const y = data.y - data.size - height - 4 - degreeOffset - tierOffset + bandOffset;
+      const orderLike = /^order/i.test(text);
+      const orderOffset = orderLike ? ((smallHash(data.key) % 5) - 2) * 5 : 0;
+      const y = data.y - data.size - height - 4 - degreeOffset - tierOffset + bandOffset + orderOffset;
       const dims = renderer.getDimensions();
 
       if (x < 1 || y < 1 || x + width > dims.width - 1 || y + height > dims.height - 1) return;
 
       const rect = { x, y, width, height, area: Math.max(1, width * height), tier };
-      if (shouldSuppressLabel(rect, tier)) return;
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      const dx = cx - dims.width / 2;
+      const dy = cy - dims.height / 2;
+      const distNorm = Math.sqrt(dx * dx + dy * dy) / Math.max(1, Math.sqrt(dims.width * dims.width + dims.height * dims.height) * 0.5);
+      const isPeripheral = distNorm >= 0.57;
+      const quadrant = quadrantForRect(rect, dims);
+      if (shouldSuppressLabel(rect, tier, { isPeripheral, quadrant })) return;
 
       roundRect(context, x, y, width, height, 5);
       context.fillStyle = colorWithAlpha(data.color || "#101826", 0.82);
@@ -181,6 +226,7 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
 
       drawnLabelRects.push(rect);
       tierLabelCounts.set(tier, Number(tierLabelCounts.get(tier) || 0) + 1);
+      quadrantLabelCounts.set(quadrant, Number(quadrantLabelCounts.get(quadrant) || 0) + 1);
       nodeLabelHitboxes.set(data.key, {
         x: x * ratio,
         y: y * ratio,
@@ -233,6 +279,10 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
     tierLabelCounts.set(2, 0);
     tierLabelCounts.set(3, 0);
     tierLabelCounts.set(4, 0);
+    quadrantLabelCounts.set("nw", 0);
+    quadrantLabelCounts.set("ne", 0);
+    quadrantLabelCounts.set("sw", 0);
+    quadrantLabelCounts.set("se", 0);
   });
 
   renderer.on("enterNode", ({ node }) => {
