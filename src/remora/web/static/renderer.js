@@ -208,6 +208,11 @@ export function createRenderer({ graph, container, nodeLabelHitboxes }) {
       }
       if (result.dimmed) {
         result.color = colorWithAlpha(result.color || "#4f627d", 0.18);
+        result.zIndex = 0;
+      } else if (result.is_high_signal) {
+        result.zIndex = 2;
+      } else {
+        result.zIndex = 1;
       }
       return result;
     },

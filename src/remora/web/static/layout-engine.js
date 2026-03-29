@@ -320,6 +320,69 @@ export function createLayoutEngine() {
     }
   }
 
+  function spreadHubNeighbors(
+    graph,
+    nodes,
+    {
+      minHubDegree = 5,
+      blend = 0.34,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 6) return;
+    const nodeSet = new Set(nodes);
+    for (const hubId of nodes) {
+      if (!graph.hasNode(hubId)) continue;
+      if (graph.degree(hubId) < minHubDegree) continue;
+      const hubAttrs = graph.getNodeAttributes(hubId);
+      const hx = Number(hubAttrs.x);
+      const hy = Number(hubAttrs.y);
+      if (!Number.isFinite(hx) || !Number.isFinite(hy)) continue;
+      const neighbors = (graph.neighbors(hubId) || [])
+        .filter((neighborId) => nodeSet.has(neighborId) && graph.hasNode(neighborId))
+        .filter((neighborId) => !graph.getNodeAttribute(neighborId, "hidden"))
+        .filter((neighborId) => !(pinnedNodeId && neighborId === pinnedNodeId));
+      if (neighbors.length < minHubDegree) continue;
+
+      const arranged = [];
+      let angleSum = 0;
+      let radiusSum = 0;
+      for (const neighborId of neighbors) {
+        const attrs = graph.getNodeAttributes(neighborId);
+        const nx = Number(attrs.x);
+        const ny = Number(attrs.y);
+        if (!Number.isFinite(nx) || !Number.isFinite(ny)) continue;
+        const dx = nx - hx;
+        const dy = ny - hy;
+        const angle = Math.atan2(dy, dx);
+        const radius = Math.sqrt(dx * dx + dy * dy);
+        arranged.push({ neighborId, nx, ny, angle, radius });
+        angleSum += angle;
+        radiusSum += radius;
+      }
+      if (arranged.length < minHubDegree) continue;
+      arranged.sort((a, b) => a.angle - b.angle);
+      const centerAngle = angleSum / arranged.length;
+      const avgRadius = radiusSum / arranged.length;
+      const baseRadius = Math.max(58, avgRadius, nodeSpacing(graph, hubId, hubAttrs) * 1.25);
+      const arc = Math.min(Math.PI * 1.7, Math.PI * 0.92 + arranged.length * 0.19);
+      const start = centerAngle - arc / 2;
+      const count = arranged.length;
+      for (let i = 0; i < arranged.length; i += 1) {
+        const item = arranged[i];
+        const ratio = count > 1 ? i / (count - 1) : 0.5;
+        const targetAngle = start + arc * ratio;
+        const ringOffset = (i % 3) * 13;
+        const targetRadius = baseRadius + ringOffset;
+        const tx = hx + Math.cos(targetAngle) * targetRadius;
+        const ty = hy + Math.sin(targetAngle) * targetRadius;
+        const nextX = item.nx * (1 - blend) + tx * blend;
+        const nextY = item.ny * (1 - blend) + ty * blend;
+        graph.setNodeAttribute(item.neighborId, "x", nextX);
+        graph.setNodeAttribute(item.neighborId, "y", nextY);
+      }
+    }
+  }
+
   function runForce(graph, {
     iterations = 80,
     repulsion = 7000,
@@ -417,6 +480,10 @@ export function createLayoutEngine() {
       minNodesPerCell: 5,
       maxPasses: 2,
       maxPush: 24,
+    });
+    spreadHubNeighbors(graph, nodes, {
+      minHubDegree: 5,
+      blend: 0.32,
     });
     relaxCollisions(graph, nodes, {
       minRounds: 8,
