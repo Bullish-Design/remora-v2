@@ -461,7 +461,7 @@
       CORE_ASPECT_COMPRESS_X: 0.88,
       CORE_ASPECT_EXPAND_Y: 1.12,
       PERIPHERAL_NODE_ALPHA: 0.62,
-      PERIPHERAL_EDGE_ALPHA_SCALE: 0.58,
+      PERIPHERAL_EDGE_ALPHA_SCALE: 0.48,
       BRIDGE_EDGE_ALPHA_SCALE: 0.78,
       BRIDGE_NODE_SIZE: 2.12,
       BRIDGE_LANE_SPACING: 6.8,
@@ -735,13 +735,13 @@
           const inHoverFocus =
             !!hoveredNode &&
             (sourceId === hoveredNode || targetId === hoveredNode || (sourceDimmed === false && targetDimmed === false));
-          const baseAlpha = bothPeripheral ? 0.16 : 0.32;
-          const focusAlpha = bothPeripheral ? 0.5 : 0.7;
+          const baseAlpha = bothPeripheral ? 0.11 : 0.30;
+          const focusAlpha = bothPeripheral ? 0.34 : 0.66;
           const alpha = touchesSelected || inHoverFocus ? focusAlpha : baseAlpha;
-          const edgeAlpha = isSelectedEdge || isHoveredEdge ? (bothPeripheral ? 0.62 : 0.82) : alpha;
-          const baseSize = bothPeripheral ? 0.72 : 0.86;
-          const focusSize = bothPeripheral ? 0.94 : 1.2;
-          const selectedSize = bothPeripheral ? 1.06 : 1.35;
+          const edgeAlpha = isSelectedEdge || isHoveredEdge ? (bothPeripheral ? 0.48 : 0.82) : alpha;
+          const baseSize = bothPeripheral ? 0.58 : 0.84;
+          const focusSize = bothPeripheral ? 0.76 : 1.12;
+          const selectedSize = bothPeripheral ? 0.92 : 1.28;
           return {
             ...data,
             color: colorWithAlpha("#94a3b8", edgeAlpha),
@@ -2942,44 +2942,53 @@ function addTimelineEvent(eventType, payload) {
       return winner;
     }
 
+    function drawZoneSeparatorOverlay(context) {
+      if (!context || !Number.isFinite(zoneSeparatorY)) return;
+      const dims = renderer.getDimensions();
+      const leftPoint = renderer.graphToViewport({ x: -1000, y: zoneSeparatorY });
+      const rightPoint = renderer.graphToViewport({ x: 1000, y: zoneSeparatorY });
+      const y = (leftPoint.y + rightPoint.y) / 2;
+      if (!Number.isFinite(y)) return;
+
+      context.save();
+      context.strokeStyle = "rgba(169, 189, 214, 0.48)";
+      context.lineWidth = 1.6;
+      context.shadowColor = "rgba(125, 170, 219, 0.28)";
+      context.shadowBlur = 6;
+      context.beginPath();
+      context.moveTo(12, y);
+      context.lineTo(Math.max(14, dims.width - 12), y);
+      context.stroke();
+      context.shadowBlur = 0;
+
+      const chipText = "supporting nodes";
+      context.font = '600 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+      const chipTextWidth = context.measureText(chipText).width;
+      const chipX = 16;
+      const chipY = y - 18;
+      const chipW = chipTextWidth + 14;
+      const chipH = 15;
+      drawRoundedRect(context, chipX, chipY, chipW, chipH, 6);
+      context.fillStyle = "rgba(16, 24, 38, 0.96)";
+      context.fill();
+      context.strokeStyle = "rgba(173, 196, 224, 0.72)";
+      context.lineWidth = 1.1;
+      context.stroke();
+
+      context.fillStyle = "rgba(226, 232, 240, 0.96)";
+      context.font = '600 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
+      context.textAlign = "left";
+      context.textBaseline = "middle";
+      context.fillText(chipText, chipX + 7, chipY + chipH / 2 + 0.2);
+      context.restore();
+    }
+
     renderer.on("beforeRender", () => {
       nodeLabelHitboxes.clear();
 
       const context = renderer.getCanvases()?.edges?.getContext("2d");
       if (!context) return;
       context.save();
-      if (Number.isFinite(zoneSeparatorY)) {
-        const dims = renderer.getDimensions();
-        const leftPoint = renderer.graphToViewport({ x: -1000, y: zoneSeparatorY });
-        const rightPoint = renderer.graphToViewport({ x: 1000, y: zoneSeparatorY });
-        const y = (leftPoint.y + rightPoint.y) / 2;
-        context.strokeStyle = "rgba(159, 178, 200, 0.34)";
-        context.lineWidth = 1.25;
-        context.beginPath();
-        context.moveTo(12, y);
-        context.lineTo(Math.max(14, dims.width - 12), y);
-        context.stroke();
-
-        const chipText = "supporting nodes";
-        context.font = '500 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
-        const chipTextWidth = context.measureText(chipText).width;
-        const chipX = 16;
-        const chipY = y - 17;
-        const chipW = chipTextWidth + 12;
-        const chipH = 14;
-        drawRoundedRect(context, chipX, chipY, chipW, chipH, 6);
-        context.fillStyle = "rgba(16, 24, 38, 0.92)";
-        context.fill();
-        context.strokeStyle = "rgba(159, 178, 200, 0.46)";
-        context.lineWidth = 1;
-        context.stroke();
-
-        context.fillStyle = "rgba(203, 213, 225, 0.90)";
-        context.font = '500 10px "IBM Plex Mono", "IBM Plex Sans", sans-serif';
-        context.textAlign = "left";
-        context.textBaseline = "middle";
-        context.fillText(chipText, chipX + 6, chipY + chipH / 2 + 0.2);
-      }
 
       if (!filterState.showBoundingBoxes) {
         context.restore();
@@ -3031,6 +3040,16 @@ function addTimelineEvent(eventType, payload) {
       }
       context.restore();
       updateLayoutMetrics("before_render");
+    });
+
+    renderer.on("afterRender", () => {
+      const canvases = renderer.getCanvases?.();
+      const context =
+        canvases?.hover?.getContext("2d") ||
+        canvases?.labels?.getContext("2d") ||
+        canvases?.edges?.getContext("2d");
+      if (!context) return;
+      drawZoneSeparatorOverlay(context);
     });
 
     renderer.on("clickNode", ({ node }) => {
