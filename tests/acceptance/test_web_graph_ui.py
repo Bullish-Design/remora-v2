@@ -290,7 +290,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
               let visible = 0;
               let absoluteLabelCount = 0;
               const labelCounts = new Map();
-              const zoneCounts = { core: 0, peripheral: 0 };
+              const zoneCounts = { core: 0, peripheral: 0, bridge: 0 };
               const makeBox = () => ({
                 minX: Number.POSITIVE_INFINITY,
                 minY: Number.POSITIVE_INFINITY,
@@ -326,9 +326,14 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 if (absolutePathPattern.test(label)) absoluteLabelCount += 1;
                 const p = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
                 extendBox(overallBox, p);
-                const zone = attrs.layout_zone === "peripheral" ? "peripheral" : "core";
+                const zone =
+                  attrs.layout_zone === "peripheral"
+                    ? "peripheral"
+                    : (attrs.layout_zone === "bridge" ? "bridge" : "core");
                 zoneCounts[zone] += 1;
-                extendBox(zoneBoxes[zone], p);
+                if (zone === "core" || zone === "peripheral") {
+                  extendBox(zoneBoxes[zone], p);
+                }
                 if (p.x >= 0 && p.x <= dims.width && p.y >= 0 && p.y <= dims.height) {
                   visible += 1;
                 }
@@ -500,6 +505,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
                 absolute_label_count: absoluteLabelCount,
                 core_zone_nodes: zoneCounts.core,
                 peripheral_zone_nodes: zoneCounts.peripheral,
+                bridge_zone_nodes: zoneCounts.bridge,
                 core_zone_occupancy: coreZoneOccupancy,
                 core_zone_vertical_share: coreZoneVerticalShare,
                 core_centroid_x_ratio: coreCentroidXRatio,
@@ -588,7 +594,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         ) <= 0.08, visibility
         assert abs(visibility["runtime_zone_gap_ratio"] - visibility["zone_gap_ratio"]) <= 0.10, visibility
         if visibility["apply_tax_zone"] is not None:
-            assert visibility["apply_tax_zone"] in {"core", "peripheral"}, visibility
+            assert visibility["apply_tax_zone"] in {"core", "peripheral", "bridge"}, visibility
         if visibility["edge_total"] > 0:
             assert visibility["edge_span_visible"] > 0, visibility
 

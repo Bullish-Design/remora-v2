@@ -71,6 +71,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "CORE_ZONE_MIN_VERTICAL_RATIO" in html
     assert "function computeZoneBounds(positions, zoneByNode, zone, nodeById)" in html
     assert "function computePrimaryCoreEdgeKeys(edgeRecords, degreeByNode, zoneByNode)" in html
+    assert "function classifyAndPlaceBridgeNodes(positions, zoneByNode, nodeById, edges)" in html
+    assert "layout_zone === \"bridge\"" in html
     assert "is_primary_chain" in html
     assert "coreZoneBounds = layout.coreBounds || null;" in html
     assert "zoneSeparatorY = Number.isFinite(layout.separatorY) ? layout.separatorY : null;" in html
@@ -84,7 +86,8 @@ def test_graph_html_uses_box_labels_and_structured_layout() -> None:
     assert "Math.max(0.40, 0.56 - depthFade * 0.12)" in html
     assert "\"116, 132, 168\"" in html
     assert "const primaryFontSize = isPeripheral ? 11 : 14;" in html
-    assert "layoutZone === \"peripheral\" ? 1.92 : 2.4" in html
+    assert "layoutZone === \"peripheral\"" in html
+    assert "LAYOUT.BRIDGE_NODE_SIZE" in html
     assert "const sigmaAnimateNodes = sigmaUtils.animateNodes;" in html
     assert "sigmaAnimateNodes(graph, animationTargets" in html
     assert "easing: \"cubicInOut\"" in html

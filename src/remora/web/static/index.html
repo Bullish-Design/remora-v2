@@ -462,6 +462,9 @@
       CORE_ASPECT_EXPAND_Y: 1.12,
       PERIPHERAL_NODE_ALPHA: 0.62,
       PERIPHERAL_EDGE_ALPHA_SCALE: 0.58,
+      BRIDGE_EDGE_ALPHA_SCALE: 0.78,
+      BRIDGE_NODE_SIZE: 2.12,
+      BRIDGE_LANE_SPACING: 6.8,
       OCCUPANCY_TARGET_MIN: 0.35,
       OCCUPANCY_TARGET_MAX: 0.82,
       OCCUPANCY_SCALE_MIN: 0.88,
@@ -754,7 +757,10 @@
         const inFocus = touchesSelected || touchesHoverFocus;
         const lengthNorm = Math.max(0, Math.min(1, Number(data.length_norm) || 0));
         const edgeZone = data.layout_zone || "core";
-        const zoneAlphaScale = edgeZone === "peripheral" ? LAYOUT.PERIPHERAL_EDGE_ALPHA_SCALE : 1;
+        const zoneAlphaScale =
+          edgeZone === "peripheral"
+            ? LAYOUT.PERIPHERAL_EDGE_ALPHA_SCALE
+            : (edgeZone === "bridge" ? LAYOUT.BRIDGE_EDGE_ALPHA_SCALE : 1);
         const baseAlpha = (data.is_cross_file ? 0.82 : 0.34) * zoneAlphaScale;
         const fadedAlpha = baseAlpha * (1 - lengthNorm * 0.35);
         const alpha = Math.max(
@@ -764,7 +770,7 @@
         const relatedToHoveredEdge =
           hoveredEdgeNodes.size === 0 ||
           (hoveredEdgeNodes.has(sourceId) && hoveredEdgeNodes.has(targetId));
-        const zoneSizePenalty = edgeZone === "peripheral" ? 0.22 : 0;
+        const zoneSizePenalty = edgeZone === "peripheral" ? 0.22 : (edgeZone === "bridge" ? 0.08 : 0);
         const sizeBoost = data.is_cross_file ? 0.95 : 0.15;
         const selectedBoost = inFocus ? 0.45 : 0;
         const lengthPenalty = lengthNorm * 0.2;
@@ -1267,6 +1273,73 @@
       }
     }
 
+    function classifyAndPlaceBridgeNodes(positions, zoneByNode, nodeById, edges) {
+      if (!positions || positions.size === 0) return new Set();
+      const adjacency = new Map();
+      for (const edge of edges || []) {
+        if (edge.edge_type === "contains") continue;
+        if (!positions.has(edge.from_id) || !positions.has(edge.to_id)) continue;
+        if (!adjacency.has(edge.from_id)) adjacency.set(edge.from_id, new Set());
+        if (!adjacency.has(edge.to_id)) adjacency.set(edge.to_id, new Set());
+        adjacency.get(edge.from_id).add(edge.to_id);
+        adjacency.get(edge.to_id).add(edge.from_id);
+      }
+
+      const bridgeCandidates = [];
+      for (const [nodeId] of positions) {
+        const zone = zoneByNode.get(nodeId) || "core";
+        if (zone !== "core" && zone !== "peripheral") continue;
+        const neighbors = adjacency.get(nodeId);
+        if (!neighbors || neighbors.size === 0) continue;
+        let hasCoreNeighbor = false;
+        let hasPeripheralNeighbor = false;
+        for (const neighborId of neighbors) {
+          const neighborZone = zoneByNode.get(neighborId) || "core";
+          if (neighborZone === "core") hasCoreNeighbor = true;
+          if (neighborZone === "peripheral") hasPeripheralNeighbor = true;
+          if (neighborZone === "bridge") {
+            hasCoreNeighbor = true;
+            hasPeripheralNeighbor = true;
+          }
+        }
+        const degree = neighbors.size;
+        const shouldBridge =
+          (hasCoreNeighbor && hasPeripheralNeighbor) ||
+          (zone === "peripheral" && hasCoreNeighbor && degree >= 2);
+        if (shouldBridge) {
+          bridgeCandidates.push({ nodeId, degree });
+        }
+      }
+
+      if (bridgeCandidates.length === 0) return new Set();
+
+      bridgeCandidates.sort((a, b) => (b.degree - a.degree) || a.nodeId.localeCompare(b.nodeId));
+      const coreBounds = computeZoneBounds(positions, zoneByNode, "core", nodeById);
+      const peripheralBounds = computeZoneBounds(positions, zoneByNode, "peripheral", nodeById);
+      const allBounds = computePositionBounds(positions, nodeById);
+      const laneCenterX =
+        coreBounds && coreBounds.width > 0
+          ? coreBounds.centerX
+          : allBounds.centerX;
+      const laneY =
+        coreBounds && coreBounds.height > 0 && peripheralBounds && peripheralBounds.height > 0
+          ? (coreBounds.minY + peripheralBounds.maxY) / 2
+          : (coreBounds && coreBounds.height > 0
+            ? coreBounds.minY - LAYOUT.ZONE_GAP_TARGET_UNITS * 0.65
+            : allBounds.centerY);
+
+      const spacing = Math.max(4.2, LAYOUT.BRIDGE_LANE_SPACING);
+      const startX = laneCenterX - ((bridgeCandidates.length - 1) * spacing) / 2;
+      bridgeCandidates.forEach((item, index) => {
+        const pos = positions.get(item.nodeId);
+        if (!pos) return;
+        pos.x = startX + index * spacing;
+        pos.y = laneY;
+        zoneByNode.set(item.nodeId, "bridge");
+      });
+      return new Set(bridgeCandidates.map((item) => item.nodeId));
+    }
+
     function nodePathRoot(node) {
       const parts = (node?.file_path || "")
         .replace(/\\/g, "/")
@@ -1689,6 +1762,7 @@
           zoneByNode.set(nodeId, placement.zone);
         }
       }
+      const bridgeNodeIds = classifyAndPlaceBridgeNodes(positions, zoneByNode, nodeById, edges);
 
       const coreBoundsBeforeScale = computeZoneBounds(positions, zoneByNode, "core", nodeById);
       const allBoundsBeforeScale = computePositionBounds(positions, nodeById);
@@ -1720,7 +1794,16 @@
         peripheralBounds.height > 0 && coreZoneBounds.height > 0
           ? (coreZoneBounds.minY + peripheralBounds.maxY) / 2
           : null;
-      return { positions, boxes, directories, zoneByNode, coreBounds: coreZoneBounds, peripheralBounds, separatorY };
+      return {
+        positions,
+        boxes,
+        directories,
+        zoneByNode,
+        bridgeNodeIds,
+        coreBounds: coreZoneBounds,
+        peripheralBounds,
+        separatorY,
+      };
     }
 
     function layoutNodes(nodes, nodeById, edges) {
@@ -1911,6 +1994,7 @@
       const overallBox = makeBox();
       const coreBox = makeBox();
       const peripheralBox = makeBox();
+      const bridgeBox = makeBox();
       const pixelRatio = renderer.getRenderParams().pixelRatio || window.devicePixelRatio || 1;
       const filterRect = document.getElementById("filter-bar")?.getBoundingClientRect() || null;
       let coreLabelCount = 0;
@@ -1922,11 +2006,16 @@
         if (attrs.hidden || attrs.node_type === "__label__") return;
         const point = renderer.graphToViewport({ x: attrs.x, y: attrs.y });
         extendBox(overallBox, point);
-        const zone = attrs.layout_zone === "peripheral" ? "peripheral" : "core";
+        const zone =
+          attrs.layout_zone === "peripheral"
+            ? "peripheral"
+            : (attrs.layout_zone === "bridge" ? "bridge" : "core");
         if (zone === "core") {
           extendBox(coreBox, point);
         } else if (zone === "peripheral") {
           extendBox(peripheralBox, point);
+        } else if (zone === "bridge") {
+          extendBox(bridgeBox, point);
         }
         if (String(nodeId).includes("apply_tax") && applyTaxZone === null) {
           applyTaxZone = attrs.layout_zone || "core";
@@ -1976,6 +2065,7 @@
         dims: { width: dims.width, height: dims.height, pixel_ratio: pixelRatio },
         core_zone_nodes: coreBox.count,
         peripheral_zone_nodes: peripheralBox.count,
+        bridge_zone_nodes: bridgeBox.count,
         core_label_count: coreLabelCount,
         core_label_clipped_count: coreClippedLabelCount,
         core_occluded_by_filter_count: coreOccludedByFilterCount,
@@ -2348,7 +2438,10 @@
         const pos = layout.positions.get(node.node_id);
         if (!pos) continue;
         const layoutZone = layout.zoneByNode.get(node.node_id) || "core";
-        const baseNodeSize = layoutZone === "peripheral" ? 1.92 : 2.4;
+        const baseNodeSize =
+          layoutZone === "peripheral"
+            ? 1.92
+            : (layoutZone === "bridge" ? LAYOUT.BRIDGE_NODE_SIZE : 2.4);
         const previousPos = previousNodePositions.get(node.node_id);
         const startX = previousPos ? previousPos.x : pos.x;
         const startY = previousPos ? previousPos.y : pos.y;
@@ -2399,9 +2492,13 @@
         const sourceZone = layout.zoneByNode.get(edge.from_id) || "core";
         const targetZone = layout.zoneByNode.get(edge.to_id) || "core";
         const layoutZone =
-          sourceZone === "peripheral" && targetZone === "peripheral"
-            ? "peripheral"
-            : (sourceZone === targetZone ? sourceZone : "cross-zone");
+          sourceZone === targetZone
+            ? sourceZone
+            : (sourceZone === "bridge" || targetZone === "bridge"
+              ? "bridge"
+              : (sourceZone === "peripheral" && targetZone === "peripheral"
+                ? "peripheral"
+                : "cross-zone"));
         graph.addEdgeWithKey(key, edge.from_id, edge.to_id, {
           label: edge.edge_type,
           size: 1,
@@ -2477,9 +2574,13 @@
         const sourceZone = graph.getNodeAttribute(anchorId, "layout_zone") || "core";
         const targetZone = graph.getNodeAttribute(nodeId, "layout_zone") || "core";
         const layoutZone =
-          sourceZone === "peripheral" && targetZone === "peripheral"
-            ? "peripheral"
-            : (sourceZone === targetZone ? sourceZone : "cross-zone");
+          sourceZone === targetZone
+            ? sourceZone
+            : (sourceZone === "bridge" || targetZone === "bridge"
+              ? "bridge"
+              : (sourceZone === "peripheral" && targetZone === "peripheral"
+                ? "peripheral"
+                : "cross-zone"));
         graph.addEdgeWithKey(key, anchorId, nodeId, {
           label: "context_tether",
           size: 1,
