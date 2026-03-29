@@ -114,6 +114,79 @@ export function createLayoutEngine() {
     }
   }
 
+  function normalizeViewportSpread(
+    graph,
+    nodes,
+    {
+      minFill = 0.7,
+      maxFill = 0.85,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 2) return;
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let sumX = 0;
+    let sumY = 0;
+    let spacingSum = 0;
+    let count = 0;
+
+    for (const nodeId of nodes) {
+      if (!graph.hasNode(nodeId)) continue;
+      const attrs = graph.getNodeAttributes(nodeId);
+      const x = Number(attrs.x);
+      const y = Number(attrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      sumX += x;
+      sumY += y;
+      spacingSum += nodeSpacing(graph, nodeId, attrs);
+      count += 1;
+    }
+
+    if (count < 2) return;
+
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const centerX = sumX / count;
+    const centerY = sumY / count;
+    const avgSpacing = spacingSum / count;
+    const targetScale = Math.sqrt(count);
+    const targetWidth = Math.max(340, targetScale * avgSpacing * 2.65);
+    const targetHeight = Math.max(280, targetScale * avgSpacing * 2.15);
+    const fillX = spanX / targetWidth;
+    const fillY = spanY / targetHeight;
+    let scale = 1;
+
+    if (fillX < minFill || fillY < minFill) {
+      const needX = fillX < minFill ? minFill / Math.max(0.0001, fillX) : 1;
+      const needY = fillY < minFill ? minFill / Math.max(0.0001, fillY) : 1;
+      scale = Math.max(needX, needY);
+    } else if (fillX > maxFill || fillY > maxFill) {
+      const trimX = fillX > maxFill ? maxFill / fillX : 1;
+      const trimY = fillY > maxFill ? maxFill / fillY : 1;
+      scale = Math.min(trimX, trimY);
+    }
+
+    if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.01) return;
+
+    for (const nodeId of nodes) {
+      if (!graph.hasNode(nodeId)) continue;
+      if (pinnedNodeId && nodeId === pinnedNodeId) continue;
+      const attrs = graph.getNodeAttributes(nodeId);
+      const x = Number(attrs.x);
+      const y = Number(attrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      graph.setNodeAttribute(nodeId, "x", centerX + (x - centerX) * scale);
+      graph.setNodeAttribute(nodeId, "y", centerY + (y - centerY) * scale);
+    }
+  }
+
   function runForce(graph, {
     iterations = 80,
     repulsion = 7000,
@@ -205,6 +278,10 @@ export function createLayoutEngine() {
       minRounds: 10,
       maxRounds: 26,
       targetAverageOverlap: 0.04,
+    });
+    normalizeViewportSpread(graph, nodes, {
+      minFill: 0.72,
+      maxFill: 0.84,
     });
   }
 
