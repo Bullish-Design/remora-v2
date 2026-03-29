@@ -153,8 +153,8 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      minFill = 0.7,
-      maxFill = 0.85,
+      minFill = 0.86,
+      maxFill = 0.94,
     } = {},
   ) {
     if (!Array.isArray(nodes) || nodes.length < 2) return;
@@ -192,8 +192,8 @@ export function createLayoutEngine() {
     const centerY = sumY / count;
     const avgSpacing = spacingSum / count;
     const targetScale = Math.sqrt(count);
-    const targetWidth = Math.max(340, targetScale * avgSpacing * 2.65);
-    const targetHeight = Math.max(280, targetScale * avgSpacing * 2.15);
+    const targetWidth = Math.max(320, targetScale * avgSpacing * 2.15);
+    const targetHeight = Math.max(250, targetScale * avgSpacing * 1.85);
     const fillX = spanX / targetWidth;
     const fillY = spanY / targetHeight;
     let scale = 1;
@@ -552,8 +552,8 @@ export function createLayoutEngine() {
       targetAverageOverlap: 0.038,
     });
     normalizeViewportSpread(graph, nodes, {
-      minFill: 0.72,
-      maxFill: 0.84,
+      minFill: 0.88,
+      maxFill: 0.94,
     });
     applyExclusionZones(graph, nodes, {
       defaultPadding: 18,
@@ -569,11 +569,11 @@ export function createLayoutEngine() {
   function runInitialLayout(graph, { iterations = 340 } = {}) {
     runForce(graph, {
       iterations,
-      maxStep: 9.0,
-      repulsion: 9000,
-      attraction: 0.0048,
-      gravity: 0.0025,
-      cooling: 0.992,
+      maxStep: 12.4,
+      repulsion: 14200,
+      attraction: 0.0042,
+      gravity: 0.0019,
+      cooling: 0.993,
     });
   }
 

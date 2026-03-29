@@ -316,7 +316,7 @@ async function fullSnapshot({ fit = false } = {}) {
   syncGraphFromState();
   layoutEngine.initializeLayout(graph, { seed: 42 });
   syncLayoutExclusionZones();
-  layoutEngine.runInitialLayout(graph, { iterations: 260 });
+  layoutEngine.runInitialLayout(graph, { iterations: 320 });
   interactions.applyVisibility();
   syncVisibilityTelemetry();
   rendererApi.refresh();
@@ -405,7 +405,7 @@ async function applyIncrementalBatch(batch) {
   syncGraphFromState();
   layoutEngine.initializeLayout(graph, { seed: 42 });
   syncLayoutExclusionZones();
-  layoutEngine.reheatLayout(graph, { iterations: 70 });
+  layoutEngine.reheatLayout(graph, { iterations: 90 });
   interactions.applyVisibility();
   syncVisibilityTelemetry();
   rendererApi.refresh();
