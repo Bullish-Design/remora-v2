@@ -325,9 +325,9 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      cellSize = 200,
-      minBaseFloor = 64,
-      maxRounds = 3,
+      cellSize = 190,
+      minBaseFloor = 72,
+      maxRounds = 4,
     } = {},
   ) {
     if (!Array.isArray(nodes) || nodes.length < 2) return;
@@ -350,7 +350,7 @@ export function createLayoutEngine() {
       let adjusted = 0;
       for (const group of cells.values()) {
         if (!Array.isArray(group) || group.length < 2) continue;
-        const denseBoost = group.length >= 5 ? 20 : (group.length >= 4 ? 14 : 8);
+        const denseBoost = group.length >= 6 ? 30 : (group.length >= 5 ? 24 : (group.length >= 4 ? 16 : 10));
         for (let i = 0; i < group.length; i += 1) {
           const aId = group[i];
           const a = graph.getNodeAttributes(aId);
@@ -365,14 +365,14 @@ export function createLayoutEngine() {
               dy = 0.02;
               d = Math.sqrt(dx * dx + dy * dy);
             }
-            const floorA = minBaseFloor + Math.min(28, Math.sqrt(Math.max(0, graph.degree(aId))) * 6);
-            const floorB = minBaseFloor + Math.min(28, Math.sqrt(Math.max(0, graph.degree(bId))) * 6);
+            const floorA = minBaseFloor + Math.min(34, Math.sqrt(Math.max(0, graph.degree(aId))) * 7.5);
+            const floorB = minBaseFloor + Math.min(34, Math.sqrt(Math.max(0, graph.degree(bId))) * 7.5);
             const floor = Math.max(floorA, floorB) + denseBoost;
             if (d >= floor) continue;
             const overlap = floor - d;
             const ux = dx / d;
             const uy = dy / d;
-            const push = overlap * 0.58;
+            const push = overlap * 0.64;
             if (!(pinnedNodeId && aId === pinnedNodeId)) {
               graph.setNodeAttribute(aId, "x", Number(a.x) - ux * push);
               graph.setNodeAttribute(aId, "y", Number(a.y) - uy * push);
@@ -386,6 +386,68 @@ export function createLayoutEngine() {
         }
       }
       if (adjusted === 0) break;
+    }
+  }
+
+  function enforceNearZeroOverlap(
+    graph,
+    nodes,
+    {
+      maxRounds = 18,
+      targetNormalizedOverlap = 0.012,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 2) return;
+    for (let round = 0; round < maxRounds; round += 1) {
+      let collisions = 0;
+      let overlapScore = 0;
+      for (let i = 0; i < nodes.length; i += 1) {
+        const aId = nodes[i];
+        if (!graph.hasNode(aId)) continue;
+        const a = graph.getNodeAttributes(aId);
+        for (let j = i + 1; j < nodes.length; j += 1) {
+          const bId = nodes[j];
+          if (!graph.hasNode(bId)) continue;
+          const b = graph.getNodeAttributes(bId);
+          const ax = Number(a.x);
+          const ay = Number(a.y);
+          const bx = Number(b.x);
+          const by = Number(b.y);
+          if (![ax, ay, bx, by].every(Number.isFinite)) continue;
+          let dx = bx - ax;
+          let dy = by - ay;
+          let d = Math.sqrt(dx * dx + dy * dy);
+          if (!Number.isFinite(d) || d < 0.001) {
+            dx = 0.03;
+            dy = 0.03;
+            d = Math.sqrt(dx * dx + dy * dy);
+          }
+          const aBox = labelCollisionExtents(a);
+          const bBox = labelCollisionExtents(b);
+          const overlapX = aBox.hx + bBox.hx - Math.abs(dx);
+          const overlapY = aBox.hy + bBox.hy - Math.abs(dy);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+          collisions += 1;
+          const normX = overlapX / Math.max(1, aBox.hx + bBox.hx);
+          const normY = overlapY / Math.max(1, aBox.hy + bBox.hy);
+          overlapScore += Math.max(normX, normY);
+          const pushX = overlapX * 0.56;
+          const pushY = overlapY * 0.56;
+          const sx = dx >= 0 ? 1 : -1;
+          const sy = dy >= 0 ? 1 : -1;
+          if (!(pinnedNodeId && aId === pinnedNodeId)) {
+            graph.setNodeAttribute(aId, "x", ax - sx * pushX * 0.5);
+            graph.setNodeAttribute(aId, "y", ay - sy * pushY * 0.5);
+          }
+          if (!(pinnedNodeId && bId === pinnedNodeId)) {
+            graph.setNodeAttribute(bId, "x", bx + sx * pushX * 0.5);
+            graph.setNodeAttribute(bId, "y", by + sy * pushY * 0.5);
+          }
+        }
+      }
+      if (collisions === 0) break;
+      const normalized = overlapScore / collisions;
+      if (normalized <= targetNormalizedOverlap) break;
     }
   }
 
@@ -732,9 +794,9 @@ export function createLayoutEngine() {
       maxPush: 38,
     });
     enforceLocalSpacingFloor(graph, nodes, {
-      cellSize: 205,
-      minBaseFloor: 66,
-      maxRounds: 3,
+      cellSize: 192,
+      minBaseFloor: 74,
+      maxRounds: 4,
     });
     spreadHubNeighbors(graph, nodes, {
       minHubDegree: 4,
@@ -771,6 +833,10 @@ export function createLayoutEngine() {
       minRounds: 5,
       maxRounds: 12,
       targetAverageOverlap: 0.038,
+    });
+    enforceNearZeroOverlap(graph, nodes, {
+      maxRounds: 20,
+      targetNormalizedOverlap: 0.01,
     });
   }
 
