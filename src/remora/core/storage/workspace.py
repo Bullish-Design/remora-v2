@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import hashlib
 import logging
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -120,13 +122,15 @@ class AgentWorkspace:
 class CairnWorkspaceService:
     """Manages per-agent Cairn workspaces."""
 
+    _MAX_OPEN_WORKSPACES = 128
+
     def __init__(self, config: Config, project_root: Path, metrics: Metrics | None = None):
         self._config = config
         self._project_root = project_root.resolve()
         self._workspace_root = self._project_root / config.infra.workspace_root
         self._manager = cairn_wm.WorkspaceManager()
-        self._agent_workspaces: dict[str, AgentWorkspace] = {}
-        self._raw_agent_workspaces: dict[str, Workspace] = {}
+        self._agent_workspaces: OrderedDict[str, AgentWorkspace] = OrderedDict()
+        self._raw_agent_workspaces: OrderedDict[str, Workspace] = OrderedDict()
         self._metrics = metrics
         self._lock = asyncio.Lock()
 
@@ -147,6 +151,9 @@ class CairnWorkspaceService:
         async with self._lock:
             cached = self._agent_workspaces.get(node_id)
             if cached is not None:
+                self._agent_workspaces.move_to_end(node_id)
+                if node_id in self._raw_agent_workspaces:
+                    self._raw_agent_workspaces.move_to_end(node_id)
                 if self._metrics is not None:
                     self._metrics.workspace_cache_hits += 1
                 return cached
@@ -160,7 +167,22 @@ class CairnWorkspaceService:
             agent_workspace = AgentWorkspace(raw_workspace, node_id)
             self._raw_agent_workspaces[node_id] = raw_workspace
             self._agent_workspaces[node_id] = agent_workspace
+            await self._evict_lru()
             return agent_workspace
+
+    async def _evict_lru(self) -> None:
+        while len(self._agent_workspaces) > self._MAX_OPEN_WORKSPACES:
+            lru_node_id, _workspace = self._agent_workspaces.popitem(last=False)
+            raw_workspace = self._raw_agent_workspaces.pop(lru_node_id, None)
+            if raw_workspace is None:
+                continue
+            try:
+                await raw_workspace.close()
+            except Exception:
+                logger.warning("Failed to close evicted workspace for %s", lru_node_id, exc_info=True)
+            finally:
+                self._manager.untrack_workspace(raw_workspace)
+            gc.collect()
 
     async def read_bundle_config(self, node_id: str) -> BundleConfig:
         """Read and parse the bundle config for an agent."""
