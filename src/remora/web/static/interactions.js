@@ -14,6 +14,13 @@ function bfsNeighborhood(graph, rootId, maxDepth) {
   return visited;
 }
 
+function edgeBaseColor(label, isCrossFile) {
+  if (label === "imports") return isCrossFile ? "#8fd1ff" : "#6cc6ff";
+  if (label === "inherits") return isCrossFile ? "#c4b5ff" : "#ad97ff";
+  if (label === "contains") return "#596d88";
+  return isCrossFile ? "#8fd1ff" : "#78b8ff";
+}
+
 export function createInteractions({ graph, renderer }) {
   const HIGH_SIGNAL_EDGE_TYPES = new Set(["imports", "inherits", "calls", "references"]);
   const state = {
@@ -155,7 +162,7 @@ export function createInteractions({ graph, renderer }) {
         edgeId,
         "color",
         highSignal
-          ? (attrs.is_cross_file ? "#8fd1ff" : "#78b8ff")
+          ? edgeBaseColor(label, !!attrs.is_cross_file)
           : (denseCrossingScene ? "#42556e" : "#4f627d"),
       );
       if (!hidden) visibleEdgeCount += 1;
