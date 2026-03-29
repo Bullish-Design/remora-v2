@@ -4,8 +4,11 @@ from pathlib import Path
 
 
 def _index_html() -> str:
-    html_path = Path("src/remora/web/static/index.html")
-    return html_path.read_text(encoding="utf-8")
+    return Path("src/remora/web/static/index.html").read_text(encoding="utf-8")
+
+
+def _main_js() -> str:
+    return Path("src/remora/web/static/main.js").read_text(encoding="utf-8")
 
 
 def test_graph_html_renders() -> None:
@@ -16,20 +19,9 @@ def test_graph_html_renders() -> None:
     assert "Remora" in html
 
 
-def test_graph_html_has_sse_client() -> None:
+def test_graph_html_uses_module_bootstrap() -> None:
     html = _index_html()
-    assert "EventSource('/sse')" in html or 'EventSource("/sse' in html
-
-
-def test_graph_html_escapes_source_rendering() -> None:
-    html = _index_html()
-    assert "<pre>${node.text}</pre>" not in html
-    assert "pre.textContent = node.text" in html
-
-
-def test_graph_html_uses_batch_edge_endpoint() -> None:
-    html = _index_html()
-    assert '/api/edges' in html
+    assert '<script type="module" src="/static/main.js"></script>' in html
 
 
 def test_graph_html_uses_vendored_script_paths() -> None:
@@ -39,84 +31,39 @@ def test_graph_html_uses_vendored_script_paths() -> None:
     assert "unpkg.com" not in html
 
 
-def test_graph_html_uses_box_labels_and_structured_layout() -> None:
+def test_graph_html_includes_focus_pin_search_controls() -> None:
     html = _index_html()
-    assert "function drawNodeBoxLabel(" in html
-    assert "defaultDrawNodeLabel: drawNodeBoxLabel" in html
-    assert "const LAYOUT = Object.freeze({" in html
-    assert "WRAP_TARGET_WIDTH" in html
-    assert "ROW_BAND_GAP" in html
-    assert "OCCUPANCY_TARGET_MIN" in html
-    assert "OCCUPANCY_TARGET_MAX" in html
-    assert "FIT_MIN_MEDIAN_LABEL_PX" in html
-    assert "FIT_MARGIN_LEFT_UNITS" in html
-    assert "FIT_SAFE_LEFT_PX" in html
-    assert "FIT_SAFE_TOP_PX" in html
-    assert 'const LAYOUT_MODE = "v6_core_peripheral";' in html
-    assert "function layoutNodes(nodes, nodeById, edges)" in html
-    assert "if (LAYOUT_MODE === \"v4_file_wrap\") {" in html
-    assert "function computeConnectedComponents(nodes, edges)" in html
-    assert "function componentScore(component, componentStats)" in html
-    assert "function normalizeLayoutOccupancy(positions, nodeById)" in html
-    assert "function normalizeCoreAspect(positions, zoneByNode, nodeById)" in html
-    assert "function enforceZoneGap(positions, zoneByNode, nodeById)" in html
-    assert "function layoutNodesV5Component(nodes, nodeById, edges)" in html
-    assert "const coreComponents = [];" in html
-    assert "function ensureUniqueDisplayLabels(nodes, nodeById)" in html
-    assert "function commonWorkspacePathPrefix(paths)" in html
-    assert "function workspaceRelativePath(path, workspacePrefix)" in html
-    assert "function compressPathSegments(path, maxSegments = 4)" in html
-    assert "PERIPHERAL_GRID_MIN_CELL_WIDTH" in html
-    assert "function peripheralComponentCellWidth(component, nodeById)" in html
-    assert "CORE_ZONE_MIN_VERTICAL_RATIO" in html
-    assert "function computeZoneBounds(positions, zoneByNode, zone, nodeById)" in html
-    assert "function computePrimaryCoreEdgeKeys(edgeRecords, degreeByNode, zoneByNode)" in html
-    assert "function classifyAndPlaceBridgeNodes(positions, zoneByNode, nodeById, edges)" in html
-    assert "layout_zone === \"bridge\"" in html
-    assert "is_primary_chain" in html
-    assert "coreZoneBounds = layout.coreBounds || null;" in html
-    assert "zoneSeparatorY = Number.isFinite(layout.separatorY) ? layout.separatorY : null;" in html
-    assert "globalThis.__remora_layout_metrics" in html
-    assert "function updateLayoutMetrics(reason = \"runtime\")" in html
-    assert "function scheduleLayoutMetricsUpdate(reason = \"scheduled\", delayMs = 0)" in html
-    assert "core_label_clipped_count" in html
-    assert "separator_visible" in html
-    assert "\"supporting nodes\"" in html
-    assert "Math.max(0.12, 0.18 - depthFade * 0.08)" in html
-    assert "Math.max(0.40, 0.56 - depthFade * 0.12)" in html
-    assert "\"116, 132, 168\"" in html
-    assert "const primaryFontSize = isPeripheral ? 11 : 14;" in html
-    assert "layoutZone === \"peripheral\"" in html
-    assert "LAYOUT.BRIDGE_NODE_SIZE" in html
-    assert "const sigmaAnimateNodes = sigmaUtils.animateNodes;" in html
-    assert "sigmaAnimateNodes(graph, animationTargets" in html
-    assert "easing: \"cubicInOut\"" in html
-    assert "fallback to deterministic hash suffix" in html
-    assert "function colorWithAlpha(hex, alpha)" in html
-    assert "length_norm" in html
-    assert "function buildDirectorySet(nodes, nodeById)" in html
-    assert "__synthetic_dir__:" in html
-    assert "renderEdgeLabels: true" in html
-    assert "enableEdgeEvents: true" in html
-    assert "hideEdgesOnMove: true" in html
-    assert "hideLabelsOnMove: true" in html
-    assert "cameraPanBoundaries: true" in html
-    assert "defaultDrawNodeHover: drawDiscNodeHover || undefined" in html
-    assert 'renderer.on("enterEdge"' in html
-    assert 'renderer.on("leaveEdge"' in html
-    assert 'renderer.on("clickEdge"' in html
-    assert "function showEdge(edgeId)" in html
-    assert "layout_zone" in html
-    assert "peripheral_color" in html
-    assert "context_tether" in html
-    assert "showContextTethers" in html
-    assert 'data-filter-tethers="context"' in html
-    assert "const rows = [];" in html
-    assert 'data-filter-edge-emphasis="cross-file"' in html
-    assert "edgeEmphasisCrossFileOnly" in html
-    assert "renderer.setCustomBBox(bbox || null);" in html
-    assert "width: clamp(320px, 30vw, 400px);" in html
-    assert "camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });" not in html
-    assert "const nodeLabelHitboxes = new Map();" in html
-    assert 'renderer.on("clickStage"' in html
-    assert "event.x * pixelRatio" in html
+    assert 'data-focus-mode="full"' in html
+    assert 'data-focus-mode="hop1"' in html
+    assert 'data-focus-mode="hop2"' in html
+    assert 'data-pin-toggle="selected"' in html
+    assert 'id="node-search"' in html
+    assert 'id="search-go"' in html
+
+
+def test_main_js_bootstraps_sse_and_runtime_globals() -> None:
+    js = _main_js()
+    assert 'events.start("/sse")' in js
+    assert "globalThis.graph = graph;" in js
+    assert "globalThis.renderer = rendererApi.renderer;" in js
+    assert "globalThis.nodeLabelHitboxes = nodeLabelHitboxes;" in js
+    assert "globalThis.__remora_layout_metrics = runtimeMetrics;" in js
+
+
+def test_main_js_uses_incremental_update_path_for_discovery() -> None:
+    js = _main_js()
+    assert "async function upsertNodeIncremental(" in js
+    assert 'if (type === "node_discovered") {' in js
+    assert "await upsertNodeIncremental(payload.node_id" in js
+    assert "graphState.applySnapshot(nodes, edges);" in js
+    assert "graph.clear()" not in js
+
+
+def test_main_js_uses_graph_state_layout_and_interaction_modules() -> None:
+    js = _main_js()
+    assert 'import { createGraphState } from "./graph-state.js";' in js
+    assert 'import { createLayoutEngine } from "./layout-engine.js";' in js
+    assert 'import { createInteractions } from "./interactions.js";' in js
+    assert 'import { createEventStream } from "./events.js";' in js
+    assert "layoutEngine.runInitialLayout(" in js
+    assert "layoutEngine.reheatLayout(" in js

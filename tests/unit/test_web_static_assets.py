@@ -35,19 +35,30 @@ async def static_client(tmp_path: Path):
 def test_vendored_javascript_files_exist() -> None:
     assert (_STATIC_DIR / "vendor" / "graphology.umd.min.js").is_file()
     assert (_STATIC_DIR / "vendor" / "sigma.min.js").is_file()
+    assert (_STATIC_DIR / "main.js").is_file()
+    assert (_STATIC_DIR / "graph-state.js").is_file()
+    assert (_STATIC_DIR / "layout-engine.js").is_file()
+    assert (_STATIC_DIR / "renderer.js").is_file()
+    assert (_STATIC_DIR / "interactions.js").is_file()
+    assert (_STATIC_DIR / "events.js").is_file()
+    assert (_STATIC_DIR / "panels.js").is_file()
 
 
 @pytest.mark.asyncio
 async def test_vendored_javascript_files_are_served(static_client: httpx.AsyncClient) -> None:
     graphology = await static_client.get("/static/vendor/graphology.umd.min.js")
     sigma = await static_client.get("/static/vendor/sigma.min.js")
+    main_js = await static_client.get("/static/main.js")
 
     assert graphology.status_code == 200
     assert sigma.status_code == 200
+    assert main_js.status_code == 200
     assert "javascript" in graphology.headers["content-type"]
     assert "javascript" in sigma.headers["content-type"]
+    assert "javascript" in main_js.headers["content-type"]
     assert "graphology" in graphology.text.lower()
     assert "sigma" in sigma.text.lower()
+    assert "createGraphState" in main_js.text
 
 
 def test_hatch_wheel_includes_static_assets() -> None:
