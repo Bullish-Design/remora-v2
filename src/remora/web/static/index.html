@@ -2089,24 +2089,87 @@
       };
     }
 
+    function estimateNodeLabelSizeUnits(attrs) {
+      const sizePx = estimateNodeLabelDimensionsPx(attrs);
+      return {
+        width: Math.max(8, sizePx.width) / LAYOUT.PX_PER_UNIT,
+        height: Math.max(8, sizePx.height) / LAYOUT.PX_PER_UNIT,
+      };
+    }
+
+    function computeGraphLabelBoundsByZone(zone = null) {
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+
+      graph.forEachNode((nodeId, attrs) => {
+        if (attrs.hidden || attrs.node_type === "__label__") return;
+        const nodeZone = attrs.layout_zone === "peripheral" ? "peripheral" : "core";
+        if (zone && nodeZone !== zone) return;
+        const size = estimateNodeLabelSizeUnits(attrs);
+        const halfW = Math.max(2.6, size.width / 2);
+        const halfH = Math.max(1.2, size.height / 2);
+        minX = Math.min(minX, attrs.x - halfW);
+        maxX = Math.max(maxX, attrs.x + halfW);
+        minY = Math.min(minY, attrs.y - halfH);
+        maxY = Math.max(maxY, attrs.y + halfH);
+      });
+
+      if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+        return null;
+      }
+      return {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        width: Math.max(1e-6, maxX - minX),
+        height: Math.max(1e-6, maxY - minY),
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2,
+      };
+    }
+
     function computeFitBBox() {
-      if (
-        coreZoneBounds &&
-        Number.isFinite(coreZoneBounds.minX) &&
-        Number.isFinite(coreZoneBounds.maxX) &&
-        Number.isFinite(coreZoneBounds.minY) &&
-        Number.isFinite(coreZoneBounds.maxY)
-      ) {
+      const coreLabelBounds = computeGraphLabelBoundsByZone("core");
+      const peripheralLabelBounds = computeGraphLabelBoundsByZone("peripheral");
+      if (coreLabelBounds) {
         const coreBBox = {
           x: [
-            coreZoneBounds.minX - LAYOUT.FIT_MARGIN_LEFT_UNITS,
-            coreZoneBounds.maxX + LAYOUT.FIT_MARGIN_RIGHT_UNITS,
+            coreLabelBounds.minX - LAYOUT.FIT_MARGIN_LEFT_UNITS,
+            coreLabelBounds.maxX + LAYOUT.FIT_MARGIN_RIGHT_UNITS,
           ],
           y: [
-            coreZoneBounds.minY - LAYOUT.FIT_MARGIN_BOTTOM_UNITS,
-            coreZoneBounds.maxY + LAYOUT.FIT_MARGIN_TOP_UNITS,
+            coreLabelBounds.minY - LAYOUT.FIT_MARGIN_BOTTOM_UNITS,
+            coreLabelBounds.maxY + LAYOUT.FIT_MARGIN_TOP_UNITS,
           ],
         };
+        if (peripheralLabelBounds) {
+          const maxPeripheralXContribution = Math.max(8, coreLabelBounds.width * 0.52);
+          const maxPeripheralYContribution = Math.max(7, coreLabelBounds.height * 0.72);
+          coreBBox.x[0] = Math.min(
+            coreBBox.x[0],
+            Math.max(
+              peripheralLabelBounds.minX - LAYOUT.FIT_MARGIN_LEFT_UNITS * 0.45,
+              coreLabelBounds.centerX - maxPeripheralXContribution,
+            ),
+          );
+          coreBBox.x[1] = Math.max(
+            coreBBox.x[1],
+            Math.min(
+              peripheralLabelBounds.maxX + LAYOUT.FIT_MARGIN_RIGHT_UNITS * 0.45,
+              coreLabelBounds.centerX + maxPeripheralXContribution,
+            ),
+          );
+          coreBBox.y[0] = Math.min(
+            coreBBox.y[0],
+            Math.max(
+              peripheralLabelBounds.minY - LAYOUT.FIT_MARGIN_BOTTOM_UNITS * 0.35,
+              coreLabelBounds.minY - maxPeripheralYContribution,
+            ),
+          );
+        }
         const safeInsetsPx = computeOverlayFitSafeInsetsPx();
         return applyFitSafeInsets(coreBBox, renderer.getDimensions(), safeInsetsPx);
       }

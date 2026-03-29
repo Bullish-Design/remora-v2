@@ -273,6 +273,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
             "() => typeof graph !== 'undefined' && graph.order >= 2",
             timeout=20000,
         )
+        await page.wait_for_function(
+            "() => typeof window.__remora_layout_metrics === 'object' && !!window.__remora_layout_metrics && window.__remora_layout_metrics.ready === true",
+            timeout=20000,
+        )
 
         visibility = await page.evaluate(
             """
