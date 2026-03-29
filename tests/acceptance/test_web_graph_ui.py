@@ -370,7 +370,25 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
             """
         )
         assert overlap_stats["labels"] > 0, overlap_stats
-        assert overlap_stats["overlapRatio"] < 0.35, overlap_stats
+        assert overlap_stats["overlapRatio"] < 0.28, overlap_stats
+
+        edge_label_full_mode = await page.evaluate(
+            """
+            () => {
+              let visibleEdges = 0;
+              let visibleLabeledEdges = 0;
+              for (const edgeId of graph.edges()) {
+                const attrs = graph.getEdgeAttributes(edgeId);
+                if (attrs.hidden) continue;
+                visibleEdges += 1;
+                if (attrs.show_label === true) visibleLabeledEdges += 1;
+              }
+              return { visibleEdges, visibleLabeledEdges };
+            }
+            """
+        )
+        assert edge_label_full_mode["visibleEdges"] >= edge_label_full_mode["visibleLabeledEdges"], edge_label_full_mode
+        assert edge_label_full_mode["visibleLabeledEdges"] == 0, edge_label_full_mode
 
         selection = await page.evaluate(
             """
@@ -416,6 +434,23 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert first_selection_state["fullActive"] is False, first_selection_state
         assert first_selection_state["summaryFocus"] == "hop1", first_selection_state
         assert first_selection_state["quickPinDisabled"] is False, first_selection_state
+
+        edge_label_focus_mode = await page.evaluate(
+            """
+            () => {
+              let visibleEdges = 0;
+              let visibleLabeledEdges = 0;
+              for (const edgeId of graph.edges()) {
+                const attrs = graph.getEdgeAttributes(edgeId);
+                if (attrs.hidden) continue;
+                visibleEdges += 1;
+                if (attrs.show_label === true) visibleLabeledEdges += 1;
+              }
+              return { visibleEdges, visibleLabeledEdges };
+            }
+            """
+        )
+        assert edge_label_focus_mode["visibleEdges"] >= edge_label_focus_mode["visibleLabeledEdges"], edge_label_focus_mode
 
         await page.click("#quick-focus-full")
         await page.wait_for_timeout(200)
