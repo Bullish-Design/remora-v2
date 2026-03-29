@@ -13,6 +13,14 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function nodeSpacing(attrs) {
+  const base = 16;
+  const size = Number(attrs?.size || 8);
+  const type = String(attrs?.node_type || "");
+  const typeBonus = type === "class" ? 5 : (type === "virtual" ? 3 : 0);
+  return base + size * 1.2 + typeBonus;
+}
+
 export function createLayoutEngine() {
   let pinnedNodeId = null;
 
@@ -26,20 +34,54 @@ export function createLayoutEngine() {
       const ux = hashUnit(`${seed}:${nodeId}:x:${index}`);
       const uy = hashUnit(`${seed}:${nodeId}:y:${index}`);
       const angle = ux * Math.PI * 2;
-      const radius = 20 + uy * 80;
+      const radius = 80 + uy * 260;
       graph.setNodeAttribute(nodeId, "x", Math.cos(angle) * radius);
       graph.setNodeAttribute(nodeId, "y", Math.sin(angle) * radius);
       index += 1;
     });
   }
 
+  function relaxCollisions(graph, nodes, { rounds = 4 } = {}) {
+    for (let round = 0; round < rounds; round += 1) {
+      for (let i = 0; i < nodes.length; i += 1) {
+        const aId = nodes[i];
+        const a = graph.getNodeAttributes(aId);
+        for (let j = i + 1; j < nodes.length; j += 1) {
+          const bId = nodes[j];
+          const b = graph.getNodeAttributes(bId);
+          const minDist = Math.max(nodeSpacing(a), nodeSpacing(b));
+          let dx = Number(b.x) - Number(a.x);
+          let dy = Number(b.y) - Number(a.y);
+          let d = Math.sqrt(dx * dx + dy * dy);
+          if (!Number.isFinite(d) || d < 0.0001) {
+            dx = 0.01;
+            dy = 0.01;
+            d = 0.01;
+          }
+          if (d >= minDist) continue;
+          const overlap = (minDist - d) / 2;
+          const ux = dx / d;
+          const uy = dy / d;
+          if (!(pinnedNodeId && aId === pinnedNodeId)) {
+            graph.setNodeAttribute(aId, "x", Number(a.x) - ux * overlap);
+            graph.setNodeAttribute(aId, "y", Number(a.y) - uy * overlap);
+          }
+          if (!(pinnedNodeId && bId === pinnedNodeId)) {
+            graph.setNodeAttribute(bId, "x", Number(b.x) + ux * overlap);
+            graph.setNodeAttribute(bId, "y", Number(b.y) + uy * overlap);
+          }
+        }
+      }
+    }
+  }
+
   function runForce(graph, {
     iterations = 80,
-    repulsion = 1800,
-    attraction = 0.008,
-    gravity = 0.015,
-    maxStep = 2.2,
-    cooling = 0.985,
+    repulsion = 7000,
+    attraction = 0.005,
+    gravity = 0.003,
+    maxStep = 8.0,
+    cooling = 0.99,
   } = {}) {
     const nodes = graph.nodes().filter((id) => {
       const attrs = graph.getNodeAttributes(id);
@@ -70,7 +112,7 @@ export function createLayoutEngine() {
             d2 = 0.0002;
           }
           const d = Math.sqrt(d2);
-          const force = repulsion / d2;
+          const force = repulsion / Math.max(10, d2);
           const fx = (dx / d) * force;
           const fy = (dy / d) * force;
 
@@ -119,20 +161,29 @@ export function createLayoutEngine() {
 
       temperature *= cooling;
     }
+
+    relaxCollisions(graph, nodes, { rounds: 6 });
   }
 
-  function runInitialLayout(graph, { iterations = 280 } = {}) {
-    runForce(graph, { iterations, maxStep: 3.0, repulsion: 2400, attraction: 0.009 });
-  }
-
-  function reheatLayout(graph, { iterations = 70 } = {}) {
+  function runInitialLayout(graph, { iterations = 340 } = {}) {
     runForce(graph, {
       iterations,
-      maxStep: 1.6,
-      repulsion: 1700,
-      attraction: 0.008,
-      gravity: 0.012,
-      cooling: 0.98,
+      maxStep: 9.0,
+      repulsion: 9000,
+      attraction: 0.0048,
+      gravity: 0.0025,
+      cooling: 0.992,
+    });
+  }
+
+  function reheatLayout(graph, { iterations = 110 } = {}) {
+    runForce(graph, {
+      iterations,
+      maxStep: 4.6,
+      repulsion: 6200,
+      attraction: 0.0052,
+      gravity: 0.0028,
+      cooling: 0.989,
     });
   }
 
