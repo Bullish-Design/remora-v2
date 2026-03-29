@@ -480,7 +480,7 @@
       FIT_SAFE_RIGHT_PX: 24,
       FIT_SAFE_BOTTOM_PX: 48,
       FIT_CORE_TARGET_X_RATIO: 0.48,
-      FIT_CORE_TARGET_Y_RATIO: 0.30,
+      FIT_CORE_TARGET_Y_RATIO: 0.19,
     });
     const LAYOUT_MODE = "v6_core_peripheral";
 
@@ -2195,15 +2195,13 @@
       const safeRightRatio = safeInsetsPx.right / Math.max(1, dims.width);
       const safeTopRatio = safeInsetsPx.top / Math.max(1, dims.height);
       const safeBottomRatio = safeInsetsPx.bottom / Math.max(1, dims.height);
-      const availableXRatio = Math.max(0.08, 1 - safeLeftRatio - safeRightRatio);
-      const availableYRatio = Math.max(0.08, 1 - safeTopRatio - safeBottomRatio);
       const targetXRatio = clamp(
-        safeLeftRatio + availableXRatio * LAYOUT.FIT_CORE_TARGET_X_RATIO,
+        LAYOUT.FIT_CORE_TARGET_X_RATIO,
         safeLeftRatio + 0.08,
         1 - safeRightRatio - 0.08,
       );
       const targetYRatio = clamp(
-        safeTopRatio + availableYRatio * LAYOUT.FIT_CORE_TARGET_Y_RATIO,
+        LAYOUT.FIT_CORE_TARGET_Y_RATIO,
         safeTopRatio + 0.08,
         1 - safeBottomRatio - 0.08,
       );

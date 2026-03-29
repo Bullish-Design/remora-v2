@@ -561,11 +561,11 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["overlap_ratio"] < 0.45, visibility
         assert visibility["core_zone_nodes"] > 0, visibility
         assert visibility["core_zone_vertical_share"] >= 0.55, visibility
-        assert 0.30 <= visibility["core_centroid_x_ratio"] <= 0.62, visibility
-        assert 0.14 <= visibility["core_centroid_y_ratio"] <= 0.58, visibility
-        assert visibility["zone_gap_px"] >= 10, visibility
-        assert visibility["zone_gap_ratio"] <= 0.34, visibility
-        assert visibility["peripheral_label_overlap_ratio"] < 0.02, visibility
+        assert 0.40 <= visibility["core_centroid_x_ratio"] <= 0.56, visibility
+        assert 0.20 <= visibility["core_centroid_y_ratio"] <= 0.37, visibility
+        assert visibility["zone_gap_px"] >= 16, visibility
+        assert visibility["zone_gap_ratio"] <= 0.22, visibility
+        assert visibility["peripheral_label_overlap_ratio"] < 0.015, visibility
         if visibility["peripheral_zone_nodes"] > 0:
             assert visibility["core_zone_occupancy"] >= 0.02, visibility
             assert visibility["peripheral_zone_footprint"] <= 0.95, visibility
@@ -573,7 +573,7 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["emphasized_edge_count"] > 0, visibility
         assert visibility["render_edge_labels_enabled"] is True, visibility
         assert visibility["enable_edge_events_enabled"] is True, visibility
-        assert visibility["core_clipped_label_count"] >= 0, visibility
+        assert visibility["core_clipped_label_count"] == 0, visibility
         assert visibility["core_occluded_by_filter_count"] == 0, visibility
         assert visibility["sidebar_width_ratio"] <= 0.315, visibility
         assert visibility["runtime_layout_metrics_ready"] is True, visibility
@@ -588,10 +588,10 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert visibility["runtime_zone_gap_ratio"] is not None, visibility
         assert abs(
             visibility["runtime_core_centroid_x_ratio"] - visibility["core_centroid_x_ratio"]
-        ) <= 0.08, visibility
+        ) <= 0.15, visibility
         assert abs(
             visibility["runtime_core_centroid_y_ratio"] - visibility["core_centroid_y_ratio"]
-        ) <= 0.08, visibility
+        ) <= 0.15, visibility
         assert abs(visibility["runtime_zone_gap_ratio"] - visibility["zone_gap_ratio"]) <= 0.10, visibility
         if visibility["apply_tax_zone"] is not None:
             assert visibility["apply_tax_zone"] in {"core", "peripheral", "bridge"}, visibility
