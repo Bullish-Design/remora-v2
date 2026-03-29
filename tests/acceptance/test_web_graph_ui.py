@@ -318,6 +318,59 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         assert baseline["hasFocusHop2"] is True, baseline
         assert baseline["hasPinToggle"] is True, baseline
         assert baseline["hasSearch"] is True, baseline
+        assert baseline["visible"] <= baseline["total"], baseline
+
+        sidebar_before = await page.evaluate(
+            """
+            () => ({
+              hasSummaryNodes: !!document.getElementById("summary-visible-nodes"),
+              hasSummaryEdges: !!document.getElementById("summary-visible-edges"),
+              hasSummaryThinning: !!document.getElementById("summary-hidden-thinning"),
+              hasSummaryFocus: !!document.getElementById("summary-focus-mode"),
+              hasQuickPin: !!document.getElementById("quick-pin-toggle"),
+              hasQuickFull: !!document.getElementById("quick-focus-full"),
+              hasQuickHop1: !!document.getElementById("quick-focus-hop1"),
+              hasQuickHop2: !!document.getElementById("quick-focus-hop2"),
+              quickPinDisabled: !!document.getElementById("quick-pin-toggle")?.disabled,
+            })
+            """
+        )
+        assert sidebar_before["hasSummaryNodes"] is True, sidebar_before
+        assert sidebar_before["hasSummaryEdges"] is True, sidebar_before
+        assert sidebar_before["hasSummaryThinning"] is True, sidebar_before
+        assert sidebar_before["hasSummaryFocus"] is True, sidebar_before
+        assert sidebar_before["hasQuickPin"] is True, sidebar_before
+        assert sidebar_before["hasQuickFull"] is True, sidebar_before
+        assert sidebar_before["hasQuickHop1"] is True, sidebar_before
+        assert sidebar_before["hasQuickHop2"] is True, sidebar_before
+        assert sidebar_before["quickPinDisabled"] is True, sidebar_before
+
+        overlap_stats = await page.evaluate(
+            """
+            () => {
+              if (typeof nodeLabelHitboxes === "undefined") return { labels: 0, overlapRatio: 0 };
+              const boxes = Array.from(nodeLabelHitboxes.values());
+              let overlaps = 0;
+              let pairs = 0;
+              for (let i = 0; i < boxes.length; i += 1) {
+                const a = boxes[i];
+                for (let j = i + 1; j < boxes.length; j += 1) {
+                  const b = boxes[j];
+                  pairs += 1;
+                  const w = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+                  const h = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+                  if (w > 0 && h > 0) overlaps += 1;
+                }
+              }
+              return {
+                labels: boxes.length,
+                overlapRatio: pairs > 0 ? overlaps / pairs : 0,
+              };
+            }
+            """
+        )
+        assert overlap_stats["labels"] > 0, overlap_stats
+        assert overlap_stats["overlapRatio"] < 0.35, overlap_stats
 
         selection = await page.evaluate(
             """
@@ -345,21 +398,41 @@ async def test_web_graph_has_visible_nodes_in_viewport_after_initial_load(
         click_x = max(5.0, min(float(selection["x"]), graph_box["width"] - 5.0))
         click_y = max(5.0, min(float(selection["y"]), graph_box["height"] - 5.0))
         await page.locator("#graph").click(position={"x": click_x, "y": click_y})
+        await page.wait_for_timeout(250)
 
-        await page.click('[data-focus-mode="hop1"]')
-        await page.wait_for_timeout(200)
-        hop1_count = await page.evaluate(
-            "() => graph.nodes().filter((id) => !graph.getNodeAttribute(id, 'hidden')).length"
+        first_selection_state = await page.evaluate(
+            """
+            () => ({
+              focusModeMetric: window.__remora_layout_metrics?.focus_mode ?? null,
+              hop1Active: document.querySelector('[data-focus-mode="hop1"]')?.classList.contains("active") === true,
+              fullActive: document.querySelector('[data-focus-mode="full"]')?.classList.contains("active") === true,
+              summaryFocus: String(document.getElementById("summary-focus-mode")?.textContent || "").trim(),
+              quickPinDisabled: !!document.getElementById("quick-pin-toggle")?.disabled,
+            })
+            """
         )
-        assert hop1_count > 0
-        assert hop1_count <= baseline["total"]
+        assert first_selection_state["focusModeMetric"] == "hop1", first_selection_state
+        assert first_selection_state["hop1Active"] is True, first_selection_state
+        assert first_selection_state["fullActive"] is False, first_selection_state
+        assert first_selection_state["summaryFocus"] == "hop1", first_selection_state
+        assert first_selection_state["quickPinDisabled"] is False, first_selection_state
 
-        await page.click('[data-focus-mode="full"]')
+        await page.click("#quick-focus-full")
         await page.wait_for_timeout(200)
-        full_count = await page.evaluate(
-            "() => graph.nodes().filter((id) => !graph.getNodeAttribute(id, 'hidden')).length"
+        restored = await page.evaluate(
+            """
+            () => ({
+              focusModeMetric: window.__remora_layout_metrics?.focus_mode ?? null,
+              fullActive: document.querySelector('[data-focus-mode="full"]')?.classList.contains("active") === true,
+              summaryFocus: String(document.getElementById("summary-focus-mode")?.textContent || "").trim(),
+              visibleCount: graph.nodes().filter((id) => !graph.getNodeAttribute(id, "hidden")).length,
+            })
+            """
         )
-        assert full_count >= hop1_count
+        assert restored["focusModeMetric"] == "full", restored
+        assert restored["fullActive"] is True, restored
+        assert restored["summaryFocus"] == "full", restored
+        assert restored["visibleCount"] >= 1, restored
 
 
 @pytest.mark.asyncio
