@@ -34,6 +34,9 @@ const runtimeMetrics = {
   hidden_by_thinning_count: 0,
   focus_mode: "full",
 };
+const uiState = {
+  hasAutoFocusedAfterFirstSelection: false,
+};
 
 globalThis.graph = graph;
 globalThis.renderer = rendererApi.renderer;
@@ -133,6 +136,12 @@ function syncVisibilityTelemetry() {
   runtimeMetrics.focus_mode = String(stats.focusMode || "full");
 }
 
+function setFocusChips(mode) {
+  document
+    .querySelectorAll("[data-focus-mode]")
+    .forEach((el) => el.classList.toggle("active", el.dataset.focusMode === mode));
+}
+
 function syncGraphFromState() {
   const desiredNodes = new Set(graphState.nodesById.keys());
   const desiredEdges = new Set(graphState.edgesByKey.keys());
@@ -212,6 +221,11 @@ async function refreshConversation(nodeId) {
 
 function selectNode(nodeId, { center = true } = {}) {
   if (!nodeId || !graph.hasNode(nodeId)) return;
+  if (!uiState.hasAutoFocusedAfterFirstSelection && interactions.getState().focusMode === "full") {
+    interactions.setFocusMode("hop1");
+    setFocusChips("hop1");
+    uiState.hasAutoFocusedAfterFirstSelection = true;
+  }
   const attrs = graph.getNodeAttributes(nodeId);
   interactions.selectNode(nodeId);
   syncVisibilityTelemetry();
@@ -413,9 +427,7 @@ function wireUiControls() {
     if (focusMode) {
       interactions.setFocusMode(focusMode);
       syncVisibilityTelemetry();
-      document
-        .querySelectorAll("[data-focus-mode]")
-        .forEach((el) => el.classList.toggle("active", el.dataset.focusMode === focusMode));
+      setFocusChips(focusMode);
       return;
     }
     if (pinToggle) {
