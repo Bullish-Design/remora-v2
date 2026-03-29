@@ -19,6 +19,18 @@ function estimateLabelWidth(attrs) {
   return Math.max(56, Math.min(300, text.length * 7 + 18));
 }
 
+function estimateLabelHeight(attrs) {
+  const size = Number(attrs?.size || 8);
+  return Math.max(18, 13 + size * 0.9);
+}
+
+function labelCollisionExtents(attrs) {
+  const size = Number(attrs?.size || 8);
+  const hx = Math.max(size * 1.25, estimateLabelWidth(attrs) * 0.17);
+  const hy = Math.max(size * 1.1, estimateLabelHeight(attrs) * 0.85);
+  return { hx, hy };
+}
+
 function nodeSpacing(graph, nodeId, attrs) {
   const base = 20;
   const size = Number(attrs?.size || 8);
@@ -29,7 +41,7 @@ function nodeSpacing(graph, nodeId, attrs) {
       : (type === "method" ? 9 : (type === "function" ? 8 : (type === "virtual" ? 10 : 6)));
   const degree = Number(graph.degree?.(nodeId) || 0);
   const degreeBonus = Math.min(18, Math.sqrt(Math.max(0, degree)) * 5);
-  const labelBonus = Math.min(44, estimateLabelWidth(attrs) * 0.16);
+  const labelBonus = Math.min(44, estimateLabelWidth(attrs) * 0.16) + Math.min(16, estimateLabelHeight(attrs) * 0.22);
   return base + size * 1.4 + typeBonus + degreeBonus + labelBonus;
 }
 
@@ -72,6 +84,8 @@ export function createLayoutEngine() {
         for (let j = i + 1; j < nodes.length; j += 1) {
           const bId = nodes[j];
           const b = graph.getNodeAttributes(bId);
+          const aBox = labelCollisionExtents(a);
+          const bBox = labelCollisionExtents(b);
           const minDist = Math.max(
             nodeSpacing(graph, aId, a),
             nodeSpacing(graph, bId, b),
@@ -85,11 +99,31 @@ export function createLayoutEngine() {
             dy = 0.02 - jitter;
             d = Math.sqrt(dx * dx + dy * dy);
           }
+          const overlapX = aBox.hx + bBox.hx - Math.abs(dx);
+          const overlapY = aBox.hy + bBox.hy - Math.abs(dy);
+          if (overlapX > 0 && overlapY > 0) {
+            collisions += 1;
+            const normX = overlapX / Math.max(1, aBox.hx + bBox.hx);
+            const normY = overlapY / Math.max(1, aBox.hy + bBox.hy);
+            overlapBudget += Math.max(normX, normY);
+            const sx = dx >= 0 ? 1 : -1;
+            const sy = dy >= 0 ? 1 : -1;
+            const pushX = overlapX * 0.5;
+            const pushY = overlapY * 0.5;
+            if (!(pinnedNodeId && aId === pinnedNodeId)) {
+              graph.setNodeAttribute(aId, "x", Number(a.x) - sx * (pushX * 0.5));
+              graph.setNodeAttribute(aId, "y", Number(a.y) - sy * (pushY * 0.5));
+            }
+            if (!(pinnedNodeId && bId === pinnedNodeId)) {
+              graph.setNodeAttribute(bId, "x", Number(b.x) + sx * (pushX * 0.5));
+              graph.setNodeAttribute(bId, "y", Number(b.y) + sy * (pushY * 0.5));
+            }
+          }
           if (d >= minDist) continue;
           collisions += 1;
           const overlap = minDist - d;
           overlapBudget += overlap / minDist;
-          const push = overlap * 0.52;
+          const push = overlap * (overlapX > 0 && overlapY > 0 ? 0.34 : 0.52);
           const ux = dx / d;
           const uy = dy / d;
           if (!(pinnedNodeId && aId === pinnedNodeId)) {
