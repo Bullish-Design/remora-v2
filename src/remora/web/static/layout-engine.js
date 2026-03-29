@@ -520,8 +520,8 @@ export function createLayoutEngine() {
     graph,
     nodes,
     {
-      defaultPadding = 20,
-      maxPasses = 2,
+      defaultPadding = 30,
+      maxPasses = 3,
     } = {},
   ) {
     if (!Array.isArray(exclusionZones) || exclusionZones.length === 0) return;
@@ -573,6 +573,63 @@ export function createLayoutEngine() {
         maxRounds: 10,
         targetAverageOverlap: 0.05,
       });
+    }
+  }
+
+  function shapeToCanvasBoundary(
+    graph,
+    nodes,
+    {
+      strength = 0.2,
+      minRadiusX = 220,
+      minRadiusY = 180,
+    } = {},
+  ) {
+    if (!Array.isArray(nodes) || nodes.length < 4) return;
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    for (const nodeId of nodes) {
+      if (!graph.hasNode(nodeId)) continue;
+      const attrs = graph.getNodeAttributes(nodeId);
+      if (attrs.hidden || attrs.node_type === "__label__") continue;
+      const x = Number(attrs.x);
+      const y = Number(attrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      sumX += x;
+      sumY += y;
+      count += 1;
+    }
+    if (count < 4) return;
+    const centerX = sumX / count;
+    const centerY = sumY / count;
+    const rx = Math.max(minRadiusX, (maxX - minX) / 2);
+    const ry = Math.max(minRadiusY, (maxY - minY) / 2);
+    const targetRx = rx * 1.12;
+    const targetRy = ry * 1.12;
+    const blend = clamp(strength, 0.05, 0.35);
+    for (const nodeId of nodes) {
+      if (!graph.hasNode(nodeId)) continue;
+      if (pinnedNodeId && nodeId === pinnedNodeId) continue;
+      const attrs = graph.getNodeAttributes(nodeId);
+      const x = Number(attrs.x);
+      const y = Number(attrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const theta = Math.atan2(dy, dx);
+      const tx = centerX + Math.cos(theta) * targetRx;
+      const ty = centerY + Math.sin(theta) * targetRy;
+      graph.setNodeAttribute(nodeId, "x", x * (1 - blend) + tx * blend);
+      graph.setNodeAttribute(nodeId, "y", y * (1 - blend) + ty * blend);
     }
   }
 
@@ -697,9 +754,14 @@ export function createLayoutEngine() {
       minFill: 0.88,
       maxFill: 0.94,
     });
+    shapeToCanvasBoundary(graph, nodes, {
+      strength: 0.24,
+      minRadiusX: 240,
+      minRadiusY: 190,
+    });
     applyExclusionZones(graph, nodes, {
-      defaultPadding: 18,
-      maxPasses: 2,
+      defaultPadding: 30,
+      maxPasses: 3,
     });
     relaxCollisions(graph, nodes, {
       minRounds: 5,
