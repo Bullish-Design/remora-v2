@@ -769,10 +769,146 @@ function wireSidebarResize() {
   });
 }
 
+function wireWorkspaceInspector() {
+  const modal = document.getElementById("workspace-modal");
+  const titleEl = document.getElementById("ws-modal-title");
+  const closeBtn = document.getElementById("ws-modal-close");
+  const fileListEl = document.getElementById("ws-file-list");
+  const fileContentEl = document.getElementById("ws-file-content");
+  const kvListEl = document.getElementById("ws-kv-list");
+  const tabFilesEl = document.getElementById("ws-tab-files");
+  const tabKvEl = document.getElementById("ws-tab-kv");
+  const inspectBtn = document.getElementById("btn-inspect-workspace");
+  if (!modal) return;
+
+  let activeNodeId = null;
+  let kvLoaded = false;
+
+  function show(nodeId) {
+    activeNodeId = nodeId;
+    kvLoaded = false;
+    const attrs = graph.hasNode(nodeId) ? graph.getNodeAttributes(nodeId) : {};
+    if (titleEl) titleEl.textContent = attrs.full_name || attrs.node_name || nodeId;
+    fileListEl.innerHTML = "";
+    fileContentEl.textContent = "(select a file)";
+    kvListEl.innerHTML = "";
+    setActiveTab("files");
+    modal.hidden = false;
+    loadFileList(nodeId);
+  }
+
+  function hide() {
+    modal.hidden = true;
+    activeNodeId = null;
+  }
+
+  function setActiveTab(tab) {
+    modal.querySelectorAll(".ws-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.wsTab === tab);
+    });
+    if (tabFilesEl) tabFilesEl.hidden = tab !== "files";
+    if (tabKvEl) tabKvEl.hidden = tab !== "kv";
+    if (tab === "kv" && !kvLoaded && activeNodeId) {
+      kvLoaded = true;
+      loadKv(activeNodeId);
+    }
+  }
+
+  async function loadFileList(nodeId) {
+    fileListEl.innerHTML = '<div class="ws-empty">Loading...</div>';
+    try {
+      const data = await getJson(`/api/nodes/${encodeURIComponent(nodeId)}/workspace/files`);
+      const files = data.files || [];
+      fileListEl.innerHTML = "";
+      if (files.length === 0) {
+        fileListEl.innerHTML = '<div class="ws-empty">(empty workspace)</div>';
+        return;
+      }
+      for (const path of files) {
+        const row = document.createElement("div");
+        row.className = "ws-file-entry";
+        row.textContent = path;
+        row.addEventListener("click", () => {
+          fileListEl.querySelectorAll(".ws-file-entry").forEach((el) => el.classList.remove("active"));
+          row.classList.add("active");
+          loadFileContent(nodeId, path);
+        });
+        fileListEl.appendChild(row);
+      }
+    } catch (err) {
+      fileListEl.innerHTML = `<div class="ws-error">${String(err.message || err)}</div>`;
+    }
+  }
+
+  async function loadFileContent(nodeId, path) {
+    fileContentEl.textContent = "Loading...";
+    try {
+      const data = await getJson(`/api/nodes/${encodeURIComponent(nodeId)}/workspace/files/${encodeURIComponent(path)}`);
+      fileContentEl.textContent = data.content ?? "(empty)";
+    } catch (err) {
+      fileContentEl.textContent = `Error: ${String(err.message || err)}`;
+    }
+  }
+
+  async function loadKv(nodeId) {
+    kvListEl.innerHTML = '<div class="ws-empty">Loading...</div>';
+    try {
+      const data = await getJson(`/api/nodes/${encodeURIComponent(nodeId)}/workspace/kv`);
+      const entries = data.entries || {};
+      const keys = Object.keys(entries);
+      kvListEl.innerHTML = "";
+      if (keys.length === 0) {
+        kvListEl.innerHTML = '<div class="ws-empty">(no KV entries)</div>';
+        return;
+      }
+      for (const key of keys.sort()) {
+        const entry = document.createElement("div");
+        entry.className = "ws-kv-entry";
+        const keyEl = document.createElement("div");
+        keyEl.className = "ws-kv-key";
+        keyEl.textContent = key;
+        const valEl = document.createElement("div");
+        valEl.className = "ws-kv-value";
+        try {
+          valEl.textContent = JSON.stringify(entries[key], null, 2);
+        } catch (_e) {
+          valEl.textContent = String(entries[key]);
+        }
+        entry.appendChild(keyEl);
+        entry.appendChild(valEl);
+        kvListEl.appendChild(entry);
+      }
+    } catch (err) {
+      kvListEl.innerHTML = `<div class="ws-error">${String(err.message || err)}</div>`;
+    }
+  }
+
+  inspectBtn?.addEventListener("click", () => {
+    const selected = interactions.getState().selectedNodeId;
+    if (selected) show(selected);
+  });
+
+  closeBtn?.addEventListener("click", hide);
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) hide();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hidden) hide();
+  });
+
+  modal.querySelector(".ws-tab-bar")?.addEventListener("click", (e) => {
+    const tab = e.target.closest(".ws-tab")?.dataset?.wsTab;
+    if (tab) setActiveTab(tab);
+  });
+}
+
 async function start() {
   wireUiControls();
   wireRendererInteractions();
   wireSidebarResize();
+  wireWorkspaceInspector();
 
   await fullSnapshot({ fit: true });
   runtimeMetrics.ready = true;
