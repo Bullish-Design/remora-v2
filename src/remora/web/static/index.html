@@ -571,6 +571,9 @@
     </section>
     <section>
       <h2 id="node-name">Select a node</h2>
+      <div id="node-inspect-bar" style="display: none; margin-bottom: 8px;">
+        <button id="btn-inspect-workspace" type="button">Inspect workspace</button>
+      </div>
       <div id="node-details"></div>
     </section>
     <section id="agent-panel">
@@ -589,6 +592,28 @@
       <div id="timeline-container"></div>
     </section>
   </aside>
+
+  <div id="workspace-modal" class="ws-modal-backdrop" hidden>
+    <div class="ws-modal">
+      <div class="ws-modal-header">
+        <span id="ws-modal-title">Workspace</span>
+        <button id="ws-modal-close" type="button">&times;</button>
+      </div>
+      <div class="ws-tab-bar">
+        <button class="ws-tab active" data-ws-tab="files">Files</button>
+        <button class="ws-tab" data-ws-tab="kv">KV Store</button>
+      </div>
+      <div id="ws-tab-files" class="ws-tab-panel">
+        <div class="ws-files-split">
+          <div id="ws-file-list" class="ws-file-list"></div>
+          <pre id="ws-file-content" class="ws-file-content">(select a file)</pre>
+        </div>
+      </div>
+      <div id="ws-tab-kv" class="ws-tab-panel" hidden>
+        <div id="ws-kv-list" class="ws-kv-list"></div>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="/static/main.js"></script>
 </body>
