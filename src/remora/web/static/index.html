@@ -26,18 +26,24 @@
       --virtual: #f472b6;
     }
     * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+    }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--ink);
       font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
       display: flex;
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
     }
     #graph-container {
       position: relative;
       flex: 1;
-      min-height: 100vh;
+      min-width: 0;
+      height: 100vh;
+      overflow: hidden;
       background: radial-gradient(circle at 10% 10%, #132036 0%, #0a1018 48%, #08101a 100%);
     }
     #graph {
@@ -51,10 +57,12 @@
       min-width: 280px;
       max-width: 60vw;
       flex-shrink: 0;
+      height: 100vh;
       border-left: 1px solid var(--line);
       background: var(--panel);
       padding: 18px;
       overflow-y: auto;
+      overscroll-behavior: contain;
     }
     #sidebar-resize-handle {
       width: 5px;
