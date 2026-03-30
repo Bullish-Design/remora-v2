@@ -32,6 +32,7 @@ export function createPanels(doc = document) {
   const quickFullEl = doc.getElementById("quick-focus-full");
   const quickHop1El = doc.getElementById("quick-focus-hop1");
   const quickHop2El = doc.getElementById("quick-focus-hop2");
+  const inspectBarEl = doc.getElementById("node-inspect-bar");
 
   function showConnectionStatus(connected) {
     if (!statusEl) return;
@@ -46,10 +47,12 @@ export function createPanels(doc = document) {
     if (!nodeDetailsEl) return;
     if (!node) {
       if (selectionHelperEl) selectionHelperEl.style.display = "";
+      if (inspectBarEl) inspectBarEl.style.display = "none";
       nodeDetailsEl.innerHTML = "";
       return;
     }
     if (selectionHelperEl) selectionHelperEl.style.display = "none";
+    if (inspectBarEl) inspectBarEl.style.display = "";
     const summary = [
       `id: ${node.node_id}`,
       `type: ${node.node_type}`,
