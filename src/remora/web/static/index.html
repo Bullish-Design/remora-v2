@@ -416,11 +416,16 @@
       flex: 1;
       overflow: hidden;
       display: flex;
+      min-height: 0;
+    }
+    .ws-tab-panel[hidden] {
+      display: none !important;
     }
     .ws-files-split {
       display: flex;
       flex: 1;
       overflow: hidden;
+      min-height: 0;
     }
     .ws-file-list {
       width: 240px;
@@ -453,6 +458,7 @@
       flex: 1;
       overflow-y: auto;
       padding: 10px 14px;
+      min-height: 0;
     }
     .ws-kv-entry {
       margin-bottom: 10px;
