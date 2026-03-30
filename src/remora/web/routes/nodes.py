@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from remora.web.deps import _deps_from_request
+from fsdantic import FileNotFoundError as FsdFileNotFoundError
 
 
 async def api_nodes(request: Request) -> JSONResponse:
@@ -112,6 +113,50 @@ async def api_conversation(request: Request) -> JSONResponse:
     )
 
 
+async def api_workspace_files(request: Request) -> JSONResponse:
+    """List all file paths in a node's Cairn workspace."""
+    deps = _deps_from_request(request)
+    if deps.workspace_service is None:
+        return JSONResponse({"error": "No workspace service"}, status_code=503)
+    node_id = request.path_params["node_id"]
+    if not deps.workspace_service.has_workspace(node_id):
+        return JSONResponse({"error": "No workspace for this node"}, status_code=404)
+    workspace = await deps.workspace_service.get_agent_workspace(node_id)
+    paths = await workspace.list_all_paths()
+    return JSONResponse({"node_id": node_id, "files": paths})
+
+
+async def api_workspace_file_content(request: Request) -> JSONResponse:
+    """Read a single file from a node's Cairn workspace."""
+    deps = _deps_from_request(request)
+    if deps.workspace_service is None:
+        return JSONResponse({"error": "No workspace service"}, status_code=503)
+    node_id = request.path_params["node_id"]
+    file_path = request.path_params["file_path"]
+    workspace = await deps.workspace_service.get_agent_workspace(node_id)
+    try:
+        content = await workspace.read(file_path)
+    except (FileNotFoundError, FsdFileNotFoundError):
+        return JSONResponse({"error": f"File not found: {file_path}"}, status_code=404)
+    return JSONResponse({"path": file_path, "content": content})
+
+
+async def api_workspace_kv(request: Request) -> JSONResponse:
+    """Dump all KV entries from a node's Cairn workspace."""
+    deps = _deps_from_request(request)
+    if deps.workspace_service is None:
+        return JSONResponse({"error": "No workspace service"}, status_code=503)
+    node_id = request.path_params["node_id"]
+    if not deps.workspace_service.has_workspace(node_id):
+        return JSONResponse({"error": "No workspace for this node"}, status_code=404)
+    workspace = await deps.workspace_service.get_agent_workspace(node_id)
+    keys = await workspace.kv_list()
+    entries: dict[str, Any] = {}
+    for key in keys:
+        entries[key] = await workspace.kv_get(key)
+    return JSONResponse({"node_id": node_id, "entries": entries})
+
+
 def routes() -> list[Route]:
     return [
         Route("/api/nodes", endpoint=api_nodes),
@@ -120,6 +165,9 @@ def routes() -> list[Route]:
         Route("/api/nodes/{node_id:path}/relationships", endpoint=api_node_relationships),
         Route("/api/nodes/{node_id:path}/conversation", endpoint=api_conversation),
         Route("/api/nodes/{node_id:path}/companion", endpoint=api_node_companion),
+        Route("/api/nodes/{node_id:path}/workspace/files/{file_path:path}", endpoint=api_workspace_file_content),
+        Route("/api/nodes/{node_id:path}/workspace/files", endpoint=api_workspace_files),
+        Route("/api/nodes/{node_id:path}/workspace/kv", endpoint=api_workspace_kv),
         Route("/api/nodes/{node_id:path}", endpoint=api_node),
     ]
 
@@ -132,5 +180,8 @@ __all__ = [
     "api_node_companion",
     "api_node_relationships",
     "api_nodes",
+    "api_workspace_file_content",
+    "api_workspace_files",
+    "api_workspace_kv",
     "routes",
 ]
